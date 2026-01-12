@@ -225,6 +225,86 @@ def _plot_distribution(df: pd.DataFrame, title_prefix: str, output_name: str):
     print(f"Saved '{output_path}'")
 
 
+def prepare_training_dataset(session_paths=None, window_size=4, test_size=0.2, random_seed=42):
+    """
+    Complete dataset preparation pipeline for training.
+    
+    Loads sessions, applies filters, builds lag features, splits into train/test,
+    and scales the features.
+    
+    Args:
+        session_paths: Optional list of specific session CSV paths to use.
+                      If None, loads all sessions from server/logs/.
+        window_size: Number of lag steps for time series features.
+        test_size: Fraction of data to use for testing.
+        random_seed: Random seed for reproducibility.
+    
+    Returns:
+        Tuple of (X_train, X_test, y_train, y_test, scaler, meta_mappings)
+        or None if insufficient data.
+    """
+    from sklearn.model_selection import train_test_split
+    from sklearn.preprocessing import StandardScaler
+    
+    # Load and process data
+    if session_paths:
+        # Load only specified sessions
+        print(f"Loading {len(session_paths)} specified session(s)...")
+        dfs = []
+        for csv_path in session_paths:
+            if Path(csv_path).exists():
+                df_sess = pd.read_csv(csv_path)
+                df_sess["session_id"] = Path(csv_path).parent.name
+                dfs.append(df_sess)
+        if not dfs:
+            print("No valid session files found.")
+            return None
+        raw_df = pd.concat(dfs, ignore_index=True)
+        df = process_walking_data(raw_df)
+    else:
+        # Load all sessions from default directory
+        logs_dir = BASE_DIR / "server" / "logs"
+        raw_df, df = get_raw_and_processed_sessions(logs_dir)
+    
+    if raw_df.empty:
+        print("No data found. Run some sessions first.")
+        return None
+
+    if df.empty:
+        print("No valid walking_bpm values after filtering.")
+        return None
+
+    print(f"Training on {len(df)} data points from {df['session_id'].nunique()} session(s).")
+
+    # Build lag features
+    X_lag, y, meta, meta_mappings = build_lag_features(df, window_size=window_size)
+    if len(X_lag) < 20:
+        print(f"Not enough sequences to train (found {len(X_lag)}).")
+        return None
+
+    # Combine lag and metadata features
+    X = np.concatenate([X_lag, meta], axis=1) if len(meta) > 0 else X_lag
+    
+    # Remove non-finite values
+    finite_mask = np.isfinite(X).all(axis=1)
+    if finite_mask.sum() < len(finite_mask):
+        X = X[finite_mask]
+        y = y[finite_mask]
+        print(f"Dropped {len(finite_mask) - len(X)} rows with non-finite features.")
+
+    # Train/test split
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_seed
+    )
+
+    # Feature scaling
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    return X_train, X_test, y_train, y_test, scaler, meta_mappings
+
+
 def analyze_bpm_distribution(logs_dir=None, session_paths=None):
     """
     Load sessions, apply the LightGBM preprocessing pipeline, and produce
@@ -251,7 +331,7 @@ def analyze_bpm_distribution(logs_dir=None, session_paths=None):
         processed_df = process_walking_data(raw_df)
     else:
         # Load all sessions from directory
-    raw_df, processed_df = get_raw_and_processed_sessions(logs_dir)
+        raw_df, processed_df = get_raw_and_processed_sessions(logs_dir)
 
     if raw_df.empty:
         print("No data found.")

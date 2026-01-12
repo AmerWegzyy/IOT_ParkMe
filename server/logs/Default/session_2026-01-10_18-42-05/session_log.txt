@@ -1,0 +1,74 @@
+Session log started at 2026-01-10_18-42-05 (t=0.000)
+[00:00:00.000] DEBUG: Attempting to initialize MidiBeatSync...
+[00:00:00.000] DEBUG: MidiBeatSync initialized successfully.
+[00:00:00.000] Starting in DYNAMIC MODE
+[00:00:00.000] Run type: hybrid
+[00:00:00.000] Prediction model enabled: lgbm_model.joblib
+[00:00:00.000] HYBRID: Lock steps set to 5
+[00:00:00.000] HYBRID: Unlock time set to 1.5s
+[00:00:00.000] HYBRID: Stability threshold set to 3.0 BPM
+[00:00:00.000] HYBRID: Unlock threshold set to 5.0 BPM
+[00:00:00.000] Mode Activated: HybridMode
+[00:00:00.000] Session started
+[00:00:00.000] DEBUG: Attempting to open serial port COM3...
+[00:00:00.000] DEBUG: Serial port COM3 opened successfully.
+[00:00:00.000] Setting update stride to 1
+[00:00:00.000] Update stride set response: ACK,STRIDE,1
+[00:00:00.000] ACK,RESET received
+[00:00:00.000] ACK,START received
+[00:00:00.000] Session handshake completed
+[00:00:00.000] Running main loop...
+[00:00:00.000] Session timer started - music is now playing
+[00:00:01.097] Processed: BPM=80.0
+[00:00:01.872] Processed: BPM=76.92
+[00:00:02.669] Processed: BPM=76.09
+[00:00:03.479] Processed: BPM=75.63
+[00:00:04.259] Processed: BPM=75.95
+[00:00:05.031] Processed: BPM=76.02
+[00:00:05.772] Processed: BPM=77.47
+[00:00:06.632] Processed: BPM=76.02
+[00:00:07.366] HYBRID: Locked at 76.6 BPM (stability range: 2.1 BPM)
+[00:00:07.368] Processed: BPM=77.07
+[00:00:08.297] Processed: BPM=73.6
+[00:00:08.993] Processed: BPM=74.44
+[00:00:09.723] Processed: BPM=77.59
+[00:00:10.504] Processed: BPM=76.58
+[00:00:11.269] Processed: BPM=80.62
+[00:00:11.984] Processed: BPM=80.29
+[00:00:12.776] Processed: BPM=78.64
+[00:00:13.570] Processed: BPM=78.41
+[00:00:14.352] Processed: BPM=77.82
+[00:00:15.122] Processed: BPM=76.43
+[00:00:15.860] Processed: BPM=77.82
+[00:00:16.602] Processed: BPM=79.16
+[00:00:17.407] Processed: BPM=78.59
+[00:00:18.226] Processed: BPM=77.49
+[00:00:19.017] Processed: BPM=76.02
+[00:00:19.816] Processed: BPM=74.65
+[00:00:20.589] Processed: BPM=75.42
+[00:00:21.408] Processed: BPM=75.31
+[00:00:21.762] HYBRID: Unlocking! Walker 91.4 vs Locked 76.6 (deviation: 14.7 > threshold: 5.0)
+[00:00:21.762] Processed: BPM=87.62
+[00:00:22.452] Processed: BPM=90.87
+[00:00:22.998] Processed: BPM=99.67
+[00:00:23.646] Processed: BPM=107.38
+[00:00:24.323] Processed: BPM=93.68
+[00:00:24.948] Processed: BPM=96.15
+[00:00:25.473] Processed: BPM=97.01
+[00:00:26.069] Processed: BPM=99.05
+[00:00:26.660] Processed: BPM=102.48
+[00:00:27.247] Processed: BPM=104.39
+[00:00:27.863] Processed: BPM=100.33
+[00:00:28.457] Processed: BPM=100.29
+[00:00:29.059] HYBRID: Locked at 102.1 BPM (stability range: 3.0 BPM)
+[00:00:29.060] Processed: BPM=100.0
+[00:00:29.628] Processed: BPM=100.84
+[00:00:30.231] Processed: BPM=101.31
+[00:00:30.830] Processed: BPM=101.14
+[00:00:31.408] Processed: BPM=102.26
+[00:00:31.961] Processed: BPM=102.92
+[00:00:32.574] Processed: BPM=102.52
+[00:00:33.129] Processed: BPM=104.44
+[00:00:33.684] HYBRID: Unlocking! Walker 107.1 vs Locked 102.1 (deviation: 5.0 > threshold: 5.0)
+[00:00:33.685] Processed: BPM=105.45
+[00:00:34.399] Processed: BPM=98.32

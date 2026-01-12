@@ -2,25 +2,23 @@ import statistics
 from utils.Modes.base_mode import BaseMode
 
 class HybridMode(BaseMode):
-    def __init__(self, context, lock_steps=5, unlock_time=1.5, stability_threshold=3.0, unlock_threshold=15.0):
+    def __init__(self, context, lock_steps=5, unlock_time=1.5, stability_threshold=3.0, unlock_threshold=5.0):
         super().__init__(context)
         # State
         self.locked_bpm = None
         self.stability_buffer = [] 
-        self.unlock_start_time = None
         self.last_step_time = 0.0
         self.last_step_bpm = context.player.walkingBPM 
         
         # Configurable Settings (from init params)
         self.lock_steps = lock_steps
-        self.unlock_time = unlock_time
+        self.unlock_time = unlock_time  # Not used anymore, kept for compatibility
         self.stability_threshold = stability_threshold
         self.unlock_threshold = unlock_threshold
 
     def reset(self):
         self.locked_bpm = None
         self.stability_buffer.clear()
-        self.unlock_start_time = None
 
     def set_lock_steps(self, steps: int):
         self.lock_steps = max(2, int(steps))
@@ -43,7 +41,19 @@ class HybridMode(BaseMode):
         self.last_step_time = now_ts
         self.last_step_bpm = bpm 
         
-        # Buffering for Stability
+        # If locked, check if this step deviates - unlock IMMEDIATELY if so
+        if self.locked_bpm is not None:
+            diff = abs(bpm - self.locked_bpm)
+            
+            if diff > self.unlock_threshold:
+                # Immediate unlock on deviation
+                self.logger.log(f"HYBRID: Unlocking! Walker {bpm:.1f} vs Locked {self.locked_bpm:.1f} (deviation: {diff:.1f} > threshold: {self.unlock_threshold:.1f})")
+                self.locked_bpm = None
+                self.stability_buffer.clear()
+                # Don't start buffering on the same step that caused unlock
+                return
+        
+        # If unlocked, buffer for potential lock
         if self.locked_bpm is None:
             self.stability_buffer.append(bpm)
             if len(self.stability_buffer) > self.lock_steps: 
@@ -53,7 +63,7 @@ class HybridMode(BaseMode):
                 delta = max(self.stability_buffer) - min(self.stability_buffer)
                 if delta < self.stability_threshold:
                     self.locked_bpm = statistics.mean(self.stability_buffer)
-                    self.logger.log(f"HYBRID: Locked at {self.locked_bpm:.1f} BPM")
+                    self.logger.log(f"HYBRID: Locked at {self.locked_bpm:.1f} BPM (stability range: {delta:.1f} BPM)")
 
     def handle_step(self, now_ts, current_bpm, dt):
         """
@@ -76,7 +86,7 @@ class HybridMode(BaseMode):
                     target = decay_limit
 
         # 3. Smoothing with Boost
-        alpha_up = getattr(self.context, 'smoothing_alpha_up', 0.025)
+        alpha_up = getattr(self.context, 'smoothing_alpha_up', 0.1)
         
         # Boost logic - accelerate faster when far from target
         bpm_diff = target - current_bpm
@@ -89,20 +99,7 @@ class HybridMode(BaseMode):
         return target, smoothed
 
     def _handle_locked_check(self, now_ts, current_bpm):
-        """Check if we should unlock based on deviation."""
-        diff = abs(current_bpm - self.locked_bpm)
-        
-        if diff > self.unlock_threshold:
-            if self.unlock_start_time is None:
-                self.unlock_start_time = now_ts
-            
-            # If deviation persists for unlock_time seconds
-            if (now_ts - self.unlock_start_time) > self.unlock_time:
-                self.logger.log(f"HYBRID: Unlocking (Diff {diff:.1f})")
-                self.locked_bpm = None
-                self.unlock_start_time = None
-                return self.last_step_bpm  # Return to following detected BPM
-        else:
-            self.unlock_start_time = None
-            
-        return self.locked_bpm
+        """Return the target BPM (locked or following walker)."""
+        if self.locked_bpm is not None:
+            return self.locked_bpm
+        return self.last_step_bpm

@@ -27,7 +27,7 @@ class DynamicMode(BaseMode):
                     target = decay_limit
 
         # 3. Smoothing with Boost
-        alpha_up = getattr(self.context, 'smoothing_alpha_up', 0.025)
+        alpha_up = getattr(self.context, 'smoothing_alpha_up', 0.1)
         
         # Boost logic - accelerate faster when far from target
         bpm_diff = target - current_bpm

@@ -1,0 +1,250 @@
+Session log started at 2026-01-10_17-10-40 (t=0.000)
+[00:00:00.000] DEBUG: Attempting to initialize MidiBeatSync...
+[00:00:00.000] DEBUG: MidiBeatSync initialized successfully.
+[00:00:00.000] Starting in DYNAMIC MODE
+[00:00:00.000] Run type: hybrid
+[00:00:00.000] Prediction model enabled: lgbm_model.joblib
+[00:00:00.000] HYBRID: Lock steps set to 5
+[00:00:00.000] HYBRID: Unlock time set to 1.5s
+[00:00:00.000] HYBRID: Stability threshold set to 3.0 BPM
+[00:00:00.000] HYBRID: Unlock threshold set to 15.0 BPM
+[00:00:00.000] Mode Activated: HybridMode
+[00:00:00.000] Session started
+[00:00:00.000] DEBUG: Attempting to open serial port COM3...
+[00:00:00.000] DEBUG: Serial port COM3 opened successfully.
+[00:00:00.000] Setting update stride to 1
+[00:00:00.000] Update stride set response: ACK,STRIDE,1
+[00:00:00.000] ACK,RESET received
+[00:00:00.000] ACK,START received
+[00:00:00.000] Session handshake completed
+[00:00:00.000] Running main loop...
+[00:00:00.000] Session timer started - music is now playing
+[00:00:01.718] Processed: BPM=80.0
+[00:00:02.157] Processed: BPM=136.05
+[00:00:02.701] Processed: BPM=121.83
+[00:00:03.207] Processed: BPM=121.54
+[00:00:03.754] Processed: BPM=112.99
+[00:00:04.278] Processed: BPM=114.21
+[00:00:04.815] Processed: BPM=111.39
+[00:00:05.331] Processed: BPM=113.92
+[00:00:06.867] Processed: BPM=69.55
+[00:00:07.372] Processed: BPM=70.37
+[00:00:07.918] Processed: BPM=69.58
+[00:00:08.374] Processed: BPM=119.44
+[00:00:08.932] Processed: BPM=115.46
+[00:00:09.474] Processed: BPM=115.76
+[00:00:09.997] Processed: BPM=110.91
+[00:00:10.479] Processed: BPM=116.35
+[00:00:11.024] Processed: BPM=116.81
+[00:00:11.586] Processed: BPM=113.42
+[00:00:12.101] Processed: BPM=110.97
+[00:00:12.621] Processed: BPM=112.5
+[00:00:13.144] Processed: BPM=115.31
+[00:00:13.708] HYBRID: Locked at 113.2 BPM
+[00:00:13.709] Processed: BPM=112.01
+[00:00:14.218] Processed: BPM=112.15
+[00:00:14.750] Processed: BPM=112.08
+[00:00:15.339] Processed: BPM=110.29
+[00:00:15.790] Processed: BPM=114.58
+[00:00:16.258] Processed: BPM=119.44
+[00:00:16.722] Processed: BPM=130.25
+[00:00:17.169] HYBRID: Deviation detected - Walker 129.6 vs Locked 113.2
+[00:00:17.170] Processed: BPM=130.43
+[00:00:17.615] Processed: BPM=132.55
+[00:00:18.021] Processed: BPM=138.57
+[00:00:18.415] Processed: BPM=144.58
+[00:00:18.785] HYBRID: Unlocking! (Walker 154.2 vs Locked 113.2)
+[00:00:18.786] Processed: BPM=153.85
+[00:00:19.164] Processed: BPM=157.34
+[00:00:19.541] Processed: BPM=160.14
+[00:00:19.929] Processed: BPM=157.89
+[00:00:20.326] Processed: BPM=155.17
+[00:00:20.704] Processed: BPM=154.64
+[00:00:21.119] Processed: BPM=150.88
+[00:00:21.475] Processed: BPM=156.52
+[00:00:21.827] Processed: BPM=160.86
+[00:00:22.229] Processed: BPM=162.45
+[00:00:22.592] Processed: BPM=162.02
+[00:00:23.073] Processed: BPM=144.46
+[00:00:23.543] Processed: BPM=136.78
+[00:00:23.951] Processed: BPM=131.96
+[00:00:24.352] Processed: BPM=140.3
+[00:00:24.762] Processed: BPM=147.54
+[00:00:26.630] Processed: BPM=67.16
+[00:00:27.000] Processed: BPM=67.95
+[00:00:27.421] Processed: BPM=67.69
+[00:00:27.813] Processed: BPM=152.67
+[00:00:29.600] Processed: BPM=69.26
+[00:00:29.838] Processed: BPM=74.5
+[00:00:30.036] Processed: BPM=80.86
+[00:00:30.261] Processed: BPM=272.31
+[00:00:30.467] Processed: BPM=287.54
+[00:00:30.685] Processed: BPM=276.5
+[00:00:30.894] Processed: BPM=284.36
+[00:00:31.128] Processed: BPM=271.08
+[00:00:31.550] Processed: BPM=208.09
+[00:00:31.959] Processed: BPM=169.01
+[00:00:32.302] Processed: BPM=153.19
+[00:00:32.663] Processed: BPM=161.87
+[00:00:33.061] Processed: BPM=163.34
+[00:00:33.426] Processed: BPM=160.28
+[00:00:33.857] Processed: BPM=151.26
+[00:00:34.256] Processed: BPM=150.5
+[00:00:34.648] Processed: BPM=147.66
+[00:00:35.046] Processed: BPM=150.88
+[00:00:35.447] Processed: BPM=151.26
+[00:00:35.872] Processed: BPM=146.94
+[00:00:36.297] Processed: BPM=143.88
+[00:00:36.712] Processed: BPM=142.18
+[00:00:37.119] Processed: BPM=144.12
+[00:00:37.525] Processed: BPM=146.7
+[00:00:37.970] Processed: BPM=143.2
+[00:00:38.382] Processed: BPM=142.63
+[00:00:38.828] Processed: BPM=138.04
+[00:00:39.233] Processed: BPM=142.41
+[00:00:39.655] Processed: BPM=141.29
+[00:00:40.071] Processed: BPM=145.16
+[00:00:40.471] Processed: BPM=145.87
+[00:00:40.891] Processed: BPM=145.51
+[00:00:41.314] Processed: BPM=144.46
+[00:00:41.726] Processed: BPM=143.08
+[00:00:42.140] Processed: BPM=144.35
+[00:00:42.565] HYBRID: Locked at 143.3 BPM
+[00:00:42.567] Processed: BPM=143.66
+[00:00:42.959] Processed: BPM=145.99
+[00:00:43.352] Processed: BPM=148.39
+[00:00:43.778] Processed: BPM=148.76
+[00:00:44.198] Processed: BPM=145.75
+[00:00:44.591] Processed: BPM=145.4
+[00:00:44.964] Processed: BPM=151.77
+[00:00:45.315] HYBRID: Deviation detected - Walker 160.7 vs Locked 143.3
+[00:00:45.316] Processed: BPM=160.57
+[00:00:45.676] Processed: BPM=165.59
+[00:00:46.258] Processed: BPM=139.21
+[00:00:46.784] HYBRID: Deviation detected - Walker 121.7 vs Locked 143.3
+[00:00:46.784] Processed: BPM=122.62
+[00:00:47.189] Processed: BPM=118.97
+[00:00:47.571] Processed: BPM=137.09
+[00:00:47.862] HYBRID: Deviation detected - Walker 169.1 vs Locked 143.3
+[00:00:47.864] Processed: BPM=166.51
+[00:00:48.281] Processed: BPM=164.84
+[00:00:48.689] Processed: BPM=160.86
+[00:00:49.073] Processed: BPM=148.88
+[00:00:49.648] Processed: BPM=131.87
+[00:00:49.969] Processed: BPM=140.41
+[00:00:50.684] HYBRID: Deviation detected - Walker 117.7 vs Locked 143.3
+[00:00:50.685] Processed: BPM=111.59
+[00:00:51.036] Processed: BPM=129.68
+[00:00:51.302] Processed: BPM=135.14
+[00:00:51.570] HYBRID: Deviation detected - Walker 209.2 vs Locked 143.3
+[00:00:51.571] Processed: BPM=204.31
+[00:00:51.840] Processed: BPM=223.33
+[00:00:52.133] Processed: BPM=217.65
+[00:00:52.536] Processed: BPM=185.57
+[00:00:52.830] Processed: BPM=182.19
+[00:00:53.157] HYBRID: Unlocking! (Walker 175.0 vs Locked 143.3)
+[00:00:53.158] Processed: BPM=175.1
+[00:00:53.653] Processed: BPM=161.43
+[00:00:53.870] Processed: BPM=172.74
+[00:00:55.015] Processed: BPM=96.93
+[00:00:55.239] Processed: BPM=113.71
+[00:00:55.419] Processed: BPM=116.35
+[00:00:55.656] Processed: BPM=280.37
+[00:00:55.825] Processed: BPM=305.6
+[00:00:56.793] Processed: BPM=130.81
+[00:00:57.205] Processed: BPM=116.73
+[00:00:57.509] Processed: BPM=107.14
+[00:00:57.717] Processed: BPM=195.02
+[00:00:57.949] Processed: BPM=240.0
+[00:00:58.375] Processed: BPM=207.61
+[00:00:58.578] Processed: BPM=208.82
+[00:00:59.386] Processed: BPM=125.17
+[00:01:00.006] Processed: BPM=110.09
+[00:01:00.299] Processed: BPM=104.77
+[00:01:00.494] Processed: BPM=162.6
+[00:01:00.693] Processed: BPM=261.63
+[00:01:00.919] Processed: BPM=289.86
+[00:01:01.134] Processed: BPM=282.13
+[00:01:01.364] Processed: BPM=269.06
+[00:01:01.608] Processed: BPM=261.25
+[00:01:01.867] Processed: BPM=244.57
+[00:01:02.128] Processed: BPM=238.1
+[00:01:02.368] Processed: BPM=236.53
+[00:01:02.618] Processed: BPM=239.68
+[00:01:02.871] Processed: BPM=239.36
+[00:01:03.134] Processed: BPM=235.29
+[00:01:03.391] Processed: BPM=232.86
+[00:01:03.664] Processed: BPM=226.7
+[00:01:03.939] Processed: BPM=223.33
+[00:01:04.205] Processed: BPM=221.13
+[00:01:04.461] Processed: BPM=226.42
+[00:01:04.732] Processed: BPM=228.14
+[00:01:04.994] Processed: BPM=228.14
+[00:01:05.267] Processed: BPM=223.05
+[00:01:05.524] HYBRID: Locked at 225.1 BPM
+[00:01:05.525] Processed: BPM=226.7
+[00:01:05.772] Processed: BPM=231.66
+[00:01:06.022] Processed: BPM=238.41
+[00:01:06.267] Processed: BPM=241.29
+[00:01:06.543] Processed: BPM=233.16
+[00:01:06.834] Processed: BPM=221.95
+[00:01:07.068] Processed: BPM=225.0
+[00:01:07.320] Processed: BPM=231.36
+[00:01:07.561] HYBRID: Deviation detected - Walker 241.6 vs Locked 225.1
+[00:01:07.561] Processed: BPM=246.91
+[00:01:07.888] Processed: BPM=219.51
+[00:01:08.236] HYBRID: Deviation detected - Walker 193.1 vs Locked 225.1
+[00:01:08.236] Processed: BPM=196.72
+[00:01:08.642] Processed: BPM=166.67
+[00:01:09.046] Processed: BPM=155.57
+[00:01:09.378] Processed: BPM=159.86
+[00:01:09.696] Processed: BPM=171.27
+[00:01:10.040] HYBRID: Unlocking! (Walker 177.7 vs Locked 225.1)
+[00:01:10.041] Processed: BPM=181.27
+[00:01:10.517] Processed: BPM=161.73
+[00:01:10.948] Processed: BPM=144.23
+[00:01:11.423] Processed: BPM=133.14
+[00:01:11.864] Processed: BPM=130.15
+[00:01:12.319] Processed: BPM=130.72
+[00:01:12.777] Processed: BPM=130.62
+[00:01:13.223] Processed: BPM=132.45
+[00:01:13.710] HYBRID: Locked at 130.3 BPM
+[00:01:13.710] Processed: BPM=129.4
+[00:01:14.190] Processed: BPM=126.67
+[00:01:14.653] Processed: BPM=125.52
+[00:01:15.130] Processed: BPM=126.58
+[00:01:15.604] Processed: BPM=127.3
+[00:01:16.027] Processed: BPM=130.81
+[00:01:16.541] Processed: BPM=127.66
+[00:01:17.022] Processed: BPM=126.85
+[00:01:17.493] Processed: BPM=122.87
+[00:01:17.928] Processed: BPM=129.78
+[00:01:18.365] Processed: BPM=134.03
+[00:01:18.824] Processed: BPM=135.14
+[00:01:19.287] Processed: BPM=132.65
+[00:01:19.731] Processed: BPM=131.87
+[00:01:20.188] Processed: BPM=131.96
+[00:01:20.559] Processed: BPM=141.29
+[00:01:20.964] HYBRID: Deviation detected - Walker 148.3 vs Locked 130.3
+[00:01:20.965] Processed: BPM=145.75
+[00:01:21.447] Processed: BPM=143.08
+[00:01:21.856] Processed: BPM=138.89
+[00:01:22.263] Processed: BPM=138.78
+[00:01:22.702] Processed: BPM=143.66
+[00:01:23.084] HYBRID: Deviation detected - Walker 145.3 vs Locked 130.3
+[00:01:23.086] Processed: BPM=146.22
+[00:01:23.563] Processed: BPM=138.46
+[00:01:23.975] Processed: BPM=141.18
+[00:01:24.442] Processed: BPM=133.43
+[00:01:24.900] Processed: BPM=134.43
+[00:01:25.291] Processed: BPM=136.67
+[00:01:25.706] Processed: BPM=141.73
+[00:01:26.061] HYBRID: Deviation detected - Walker 154.2 vs Locked 130.3
+[00:01:26.061] Processed: BPM=155.31
+[00:01:26.447] Processed: BPM=155.71
+[00:01:26.881] Processed: BPM=153.19
+[00:01:27.257] Processed: BPM=150.38
+[00:01:27.618] HYBRID: Unlocking! (Walker 155.8 vs Locked 130.3)
+[00:01:27.620] Processed: BPM=153.71
+[00:01:27.955] Processed: BPM=167.44
+[00:01:28.295] Processed: BPM=173.75

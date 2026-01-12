@@ -14,6 +14,7 @@ import importlib.util
 import json
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING, Any
+import pandas as pd
 
 import joblib
 import matplotlib.pyplot as plt
@@ -22,6 +23,7 @@ from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from analyze_data import analyze_bpm_distribution
 
 try:
     import lightgbm as lgb
@@ -45,7 +47,7 @@ LGBM_ANALYZE = Path(__file__).parent / "analyze_data.py"
 spec_lgbm = importlib.util.spec_from_file_location("lgbm_analyze_data", LGBM_ANALYZE)
 lgbm_analyze = importlib.util.module_from_spec(spec_lgbm)
 spec_lgbm.loader.exec_module(lgbm_analyze)  # type: ignore
-get_raw_and_processed_sessions = lgbm_analyze.get_raw_and_processed_sessions
+prepare_training_dataset = lgbm_analyze.prepare_training_dataset
 process_walking_data = lgbm_analyze.process_walking_data
 build_lag_features = lgbm_analyze.build_lag_features
 
@@ -91,64 +93,23 @@ PRESET_DEEP = dict(
 
 
 def _prepare_dataset(session_paths: list[str] | None = None):
-    """Load, validate, and split data; returns scaled matrices, scaler, and meta mappings.
+    """
+    Wrapper for prepare_training_dataset from analyze_data.py.
     
     Args:
         session_paths: Optional list of specific session CSV paths to use.
                       If None, loads all sessions from server/logs/.
+    
+    Returns:
+        Tuple of (X_train, X_test, y_train, y_test, scaler, meta_mappings)
+        or None if preparation fails.
     """
-    import pandas as pd
-    
-    if session_paths:
-        # Load only specified sessions
-        print(f"Loading {len(session_paths)} specified session(s)...")
-        dfs = []
-        for csv_path in session_paths:
-            if Path(csv_path).exists():
-                df_sess = pd.read_csv(csv_path)
-                df_sess["session_id"] = Path(csv_path).parent.name
-                dfs.append(df_sess)
-        if not dfs:
-            print("No valid session files found.")
-            return None
-        raw_df = pd.concat(dfs, ignore_index=True)
-        df = process_walking_data(raw_df)
-    else:
-        # Load all sessions from default directory
-        logs_dir = BASE_DIR / "server" / "logs"
-        raw_df, df = get_raw_and_processed_sessions(logs_dir)
-    
-    if raw_df.empty:
-        print("No data found. Run some sessions first.")
-        return None
-
-    if df.empty:
-        print("No valid walking_bpm values after filtering.")
-        return None
-
-    print(f"Training on {len(df)} data points from {df['session_id'].nunique()} session(s).")
-
-    X_lag, y, meta, meta_mappings = build_lag_features(df, window_size=WINDOW_SIZE)
-    if len(X_lag) < 20:
-        print(f"Not enough sequences to train (found {len(X_lag)}).")
-        return None
-
-    X = np.concatenate([X_lag, meta], axis=1) if len(meta) > 0 else X_lag
-    finite_mask = np.isfinite(X).all(axis=1)
-    if finite_mask.sum() < len(finite_mask):
-        X = X[finite_mask]
-        y = y[finite_mask]
-        print(f"Dropped {len(finite_mask) - len(X)} rows with non-finite features.")
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=TEST_SIZE, random_state=RANDOM_SEED
+    return prepare_training_dataset(
+        session_paths=session_paths,
+        window_size=WINDOW_SIZE,
+        test_size=TEST_SIZE,
+        random_seed=RANDOM_SEED
     )
-
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
-
-    return X_train, X_test, y_train, y_test, scaler, meta_mappings
 
 
 def _plot_predictions(tag, y_true, preds, mae, r2, limit=200):
@@ -176,7 +137,6 @@ def train_lgbm_model(session_paths: list[str] | None = None, optimize: bool = Fa
         trials: Number of Optuna trials (only used if optimize=True).
     """
     # Generate distribution plots for data analysis
-    from analyze_data import analyze_bpm_distribution
     print("\n[DATA ANALYSIS] Generating BPM distribution plots...")
     analyze_bpm_distribution(session_paths=session_paths)
     
@@ -332,7 +292,12 @@ def optimize_lgbm_model(trials: int = DEFAULT_OPTUNA_TRIALS, timeout: Optional[i
     except ImportError:  # pragma: no cover
         raise SystemExit("Optuna is not installed. Re-run with run_lgbm.bat --optimize to install dependencies.")
 
-    prepared = _prepare_dataset()
+    prepared = prepare_training_dataset(
+        session_paths=None,
+        window_size=WINDOW_SIZE,
+        test_size=TEST_SIZE,
+        random_seed=RANDOM_SEED
+    )
     if prepared is None:
         return
 

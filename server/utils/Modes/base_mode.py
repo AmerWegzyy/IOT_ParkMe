@@ -36,7 +36,7 @@ class BaseMode(ABC):
 
         # Resolve Alphas
         if alpha_up is None:
-            alpha_up = getattr(self.context, 'smoothing_alpha_up', 0.025)
+            alpha_up = getattr(self.context, 'smoothing_alpha_up', 0.1)
         if alpha_down is None:
             alpha_down = getattr(self.context, 'smoothing_alpha_down', 1.0)
 

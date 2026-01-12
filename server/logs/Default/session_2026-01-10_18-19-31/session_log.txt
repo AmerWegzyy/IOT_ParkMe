@@ -1,0 +1,74 @@
+Session log started at 2026-01-10_18-19-31 (t=0.000)
+[00:00:00.000] DEBUG: Attempting to initialize MidiBeatSync...
+[00:00:00.000] DEBUG: MidiBeatSync initialized successfully.
+[00:00:00.000] Starting in RANDOM DRIFT MODE.
+[00:00:00.000] Run type: random
+[00:00:00.000] Prediction model enabled: lgbm_model.joblib
+[00:00:00.000] GAME: Difficulty updated to ±20%
+[00:00:00.000] RANDOM: Mode switched to SIMPLE (Step-based)
+[00:00:00.000] RANDOM: Simple threshold set to 5.0 BPM
+[00:00:00.000] RANDOM: Simple steps set to 20
+[00:00:00.000] RANDOM: Simple timeout set to 30.0s
+[00:00:00.000] Mode Activated: RandomMode
+[00:00:00.000] Session started
+[00:00:00.000] DEBUG: Attempting to open serial port COM3...
+[00:00:00.000] DEBUG: Serial port COM3 opened successfully.
+[00:00:00.000] Setting update stride to 1
+[00:00:00.000] Update stride set response: ACK,STRIDE,1
+[00:00:00.000] ACK,RESET received
+[00:00:00.000] ACK,START received
+[00:00:00.000] Session handshake completed
+[00:00:00.000] Running main loop...
+[00:00:00.000] Session timer started - music is now playing
+[00:00:00.003] GAME: New Target 90.9 BPM! Match it!
+[00:00:01.302] Processed: BPM=88.7172325141535
+[00:00:01.843] SIMPLE: Lost match. Resetting counter.
+[00:00:01.843] Processed: BPM=110.91
+[00:00:02.422] Processed: BPM=107.24
+[00:00:02.945] Processed: BPM=109.96
+[00:00:03.492] Processed: BPM=109.84
+[00:00:04.153] Processed: BPM=103.99
+[00:00:04.748] Processed: BPM=103.18
+[00:00:05.353] Processed: BPM=99.5
+[00:00:05.916] Processed: BPM=98.89
+[00:00:06.521] Processed: BPM=101.35
+[00:00:07.243] Processed: BPM=96.39
+[00:00:07.860] Processed: BPM=95.77
+[00:00:08.517] Processed: BPM=92.31
+[00:00:09.136] Processed: BPM=91.81
+[00:00:09.775] SIMPLE: Matched 5/20 steps...
+[00:00:09.775] Processed: BPM=94.64
+[00:00:10.483] Processed: BPM=91.5
+[00:00:11.588] SIMPLE: Lost match. Resetting counter.
+[00:00:11.588] Processed: BPM=78.12
+[00:00:12.122] Processed: BPM=80.38
+[00:00:12.555] Processed: BPM=86.3
+[00:00:13.062] SIMPLE: Lost match. Resetting counter.
+[00:00:13.064] Processed: BPM=92.95
+[00:00:13.770] Processed: BPM=110.24
+[00:00:14.554] Processed: BPM=98.64
+[00:00:15.255] Processed: BPM=89.05
+[00:00:15.800] Processed: BPM=87.72
+[00:00:16.341] SIMPLE: Lost match. Resetting counter.
+[00:00:16.343] Processed: BPM=93.1
+[00:00:17.449] Processed: BPM=82.93
+[00:00:17.959] Processed: BPM=88.66
+[00:00:18.497] Processed: BPM=88.99
+[00:00:19.041] Processed: BPM=88.95
+[00:00:19.600] SIMPLE: Lost match. Resetting counter.
+[00:00:19.601] Processed: BPM=111.42
+[00:00:20.193] Processed: BPM=107.33
+[00:00:20.703] Processed: BPM=108.84
+[00:00:21.179] Processed: BPM=112.2
+[00:00:21.762] Processed: BPM=111.06
+[00:00:22.284] Processed: BPM=114.83
+[00:00:22.792] Processed: BPM=114.78
+[00:00:23.922] Processed: BPM=87.5
+[00:00:24.397] Processed: BPM=91.08
+[00:00:25.100] Processed: BPM=85.26
+[00:00:25.653] Processed: BPM=83.92
+[00:00:26.132] SIMPLE: Lost match. Resetting counter.
+[00:00:26.132] Processed: BPM=108.65
+[00:00:26.685] Processed: BPM=104.94
+[00:00:30.004] SIMPLE: Timeout (30.0s)! Next target.
+[00:00:30.004] GAME: New Target 68.4 BPM! Match it!

@@ -1,0 +1,66 @@
+Session log started at 2026-01-10_17-30-19 (t=0.000)
+[00:00:00.000] DEBUG: Attempting to initialize MidiBeatSync...
+[00:00:00.000] DEBUG: MidiBeatSync initialized successfully.
+[00:00:00.000] Starting in DYNAMIC MODE
+[00:00:00.000] Run type: dynamic
+[00:00:00.000] Prediction model enabled: lgbm_model.joblib
+[00:00:00.000] Mode Activated: DynamicMode
+[00:00:00.000] Session started
+[00:00:00.000] DEBUG: Attempting to open serial port COM3...
+[00:00:00.000] DEBUG: Serial port COM3 opened successfully.
+[00:00:00.000] Setting smoothing window to 6
+[00:00:00.000] Smoothing window set response: ACK,WINDOW,6
+[00:00:00.000] ACK,RESET received
+[00:00:00.000] ACK,START received
+[00:00:00.000] Session handshake completed
+[00:00:00.000] Running main loop...
+[00:00:00.000] Session timer started - music is now playing
+[00:00:02.589] Processed: BPM=80.0
+[00:00:03.451] Processed: BPM=69.69
+[00:00:04.243] Processed: BPM=72.6
+[00:00:05.107] Processed: BPM=71.71
+[00:00:05.915] Processed: BPM=72.22
+[00:00:06.752] Processed: BPM=72.1
+[00:00:07.610] Processed: BPM=71.74
+[00:00:08.421] Processed: BPM=72.43
+[00:00:09.237] Processed: BPM=72.09
+[00:00:09.991] Processed: BPM=73.68
+[00:00:10.431] Processed: BPM=79.75
+[00:00:10.856] Processed: BPM=87.74
+[00:00:11.527] Processed: BPM=91.91
+[00:00:12.201] Processed: BPM=95.29
+[00:00:12.939] Processed: BPM=97.3
+[00:00:13.605] Processed: BPM=99.5
+[00:00:14.277] Processed: BPM=93.6
+[00:00:14.899] Processed: BPM=89.02
+[00:00:15.456] Processed: BPM=91.6
+[00:00:15.997] Processed: BPM=94.81
+[00:00:16.591] Processed: BPM=98.58
+[00:00:17.223] Processed: BPM=99.5
+[00:00:17.819] Processed: BPM=101.55
+[00:00:18.478] Processed: BPM=100.59
+[00:00:19.138] Processed: BPM=97.77
+[00:00:19.824] Processed: BPM=94.09
+[00:00:20.469] Processed: BPM=92.83
+[00:00:21.111] Processed: BPM=92.59
+[00:00:21.733] Processed: BPM=92.0
+[00:00:22.354] Processed: BPM=92.88
+[00:00:23.010] Processed: BPM=93.12
+[00:00:23.626] Processed: BPM=94.66
+[00:00:24.227] Processed: BPM=95.8
+[00:00:24.809] Processed: BPM=97.38
+[00:00:25.428] Processed: BPM=97.4
+[00:00:26.019] Processed: BPM=98.23
+[00:00:26.595] Processed: BPM=100.25
+[00:00:27.210] Processed: BPM=100.47
+[00:00:27.785] Processed: BPM=101.18
+[00:00:28.540] Processed: BPM=96.46
+[00:00:29.249] Processed: BPM=94.27
+[00:00:29.912] Processed: BPM=92.5
+[00:00:30.584] Processed: BPM=90.27
+[00:00:31.228] Processed: BPM=89.57
+[00:00:31.905] Processed: BPM=87.48
+[00:00:32.525] Processed: BPM=90.36
+[00:00:33.167] Processed: BPM=91.84
+[00:00:33.865] Processed: BPM=91.05
+[00:00:34.531] Processed: BPM=91.19

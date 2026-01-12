@@ -68,12 +68,12 @@ def session_handshake(ser: serial.Serial, logger: Logger, smoothing_window: int 
     # Optional: Set smoothing window before starting
     if smoothing_window != 3:
         if not send_config_command(ser, logger, "SET_WINDOW", smoothing_window, "smoothing window", "ACK,WINDOW"):
-             logger.log("Warning: Failed to set smoothing window")
+            logger.log("Warning: Failed to set smoothing window")
 
     # Optional: Set update stride before starting
     if stride != 2:
         if not send_config_command(ser, logger, "SET_STRIDE", stride, "update stride", "ACK,STRIDE"):
-             logger.log("Warning: Failed to set update stride")
+            logger.log("Warning: Failed to set update stride")
 
     if not send_handshake_command(ser, logger, b"RESET\n", "ACK,RESET"):
         logger.log("RESET handshake failed")
@@ -128,20 +128,20 @@ def handle_engine_command(cmd, ser, logger, bpm_estimation, player):
                 elif key == "SET_STRIDE":
                     send_config_command(ser, logger, "SET_STRIDE", int(val), "update stride", "ACK,STRIDE")
                 elif key == "SET_RANDOM_SPAN":
-                     if hasattr(bpm_estimation, 'set_random_span'):
-                         bpm_estimation.set_random_span(float(val))
+                    if hasattr(bpm_estimation, 'set_random_span'):
+                        bpm_estimation.set_random_span(float(val))
                 elif key == "SET_RANDOM_GAMIFIED":
-                     if hasattr(bpm_estimation, 'set_random_gamified'):
-                         bpm_estimation.set_random_gamified(int(val) == 1)
+                    if hasattr(bpm_estimation, 'set_random_gamified'):
+                        bpm_estimation.set_random_gamified(int(val) == 1)
                 elif key == "SET_RANDOM_SIMPLE_THRESHOLD":
-                     if hasattr(bpm_estimation, 'set_random_simple_threshold'):
-                         bpm_estimation.set_random_simple_threshold(float(val))
+                    if hasattr(bpm_estimation, 'set_random_simple_threshold'):
+                        bpm_estimation.set_random_simple_threshold(float(val))
                 elif key == "SET_RANDOM_SIMPLE_STEPS":
-                     if hasattr(bpm_estimation, 'set_random_simple_steps'):
-                         bpm_estimation.set_random_simple_steps(int(val))
+                    if hasattr(bpm_estimation, 'set_random_simple_steps'):
+                        bpm_estimation.set_random_simple_steps(int(val))
                 elif key == "SET_RANDOM_SIMPLE_TIMEOUT":
-                     if hasattr(bpm_estimation, 'set_random_simple_timeout'):
-                         bpm_estimation.set_random_simple_timeout(float(val))
+                    if hasattr(bpm_estimation, 'set_random_simple_timeout'):
+                        bpm_estimation.set_random_simple_timeout(float(val))
                 elif key == "SET_MODE":
                     mode = val.lower()
                     if mode == "manual":

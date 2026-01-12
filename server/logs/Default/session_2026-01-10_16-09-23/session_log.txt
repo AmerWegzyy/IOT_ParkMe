@@ -1,0 +1,39 @@
+Session log started at 2026-01-10_16-09-23 (t=0.000)
+[00:00:00.000] DEBUG: Attempting to initialize MidiBeatSync...
+[00:00:00.000] DEBUG: MidiBeatSync initialized successfully.
+[00:00:00.000] Starting in DYNAMIC MODE
+[00:00:00.000] Run type: hybrid
+[00:00:00.000] Prediction model enabled: lgbm_model.joblib
+[00:00:00.000] HYBRID: Lock steps set to 5
+[00:00:00.000] HYBRID: Unlock time set to 1.5s
+[00:00:00.000] HYBRID: Stability threshold set to 3.0 BPM
+[00:00:00.000] HYBRID: Unlock threshold set to 15.0 BPM
+[00:00:00.000] Mode Activated: HybridMode
+[00:00:00.000] Session started
+[00:00:00.000] DEBUG: Attempting to open serial port COM3...
+[00:00:00.000] DEBUG: Serial port COM3 opened successfully.
+[00:00:00.000] Setting update stride to 1
+[00:00:00.000] Update stride set response: ACK,STRIDE,1
+[00:00:00.000] ACK,RESET received
+[00:00:00.000] ACK,START received
+[00:00:00.000] Session handshake completed
+[00:00:00.000] WALK-FIRST MODE: Collecting 4 calibration steps...
+[00:00:00.000] Session timer started - calibration phase
+[00:00:00.001] Calibration step 1/4: 80.0 BPM
+[00:00:00.634] Calibration step 2/4: 94.6 BPM
+[00:00:01.247] Calibration step 3/4: 96.2 BPM
+[00:00:01.879] Calibration step 4/4: 95.8 BPM
+[00:00:01.886] Calibration complete. Starting music at 91.7 BPM
+[00:00:02.525] Processed: BPM=95.34
+[00:00:03.103] Processed: BPM=97.09
+[00:00:03.694] Processed: BPM=99.23
+[00:00:04.299] Processed: BPM=101.41
+[00:00:05.467] Processed: BPM=76.11
+[00:00:06.017] Processed: BPM=77.52
+[00:00:06.561] Processed: BPM=79.61
+[00:00:07.113] Processed: BPM=109.42
+[00:00:07.686] Processed: BPM=107.85
+[00:00:08.237] Processed: BPM=107.33
+[00:00:08.768] Processed: BPM=109.09
+[00:00:09.295] Processed: BPM=111.87
+[00:00:10.339] Processed: BPM=85.63

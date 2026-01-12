@@ -15,7 +15,7 @@ class BPM_estimation:
                 manual_bpm: float = None, prediction_model: LGBMPredictor = None,
                 random_span: float = 0.20, random_gamified: bool = False,
                 hybrid_lock_steps: int = 5, hybrid_unlock_time: float = 1.5,
-                hybrid_stability_threshold: float = 3.0, hybrid_unlock_threshold: float = 15.0,
+                hybrid_stability_threshold: float = 3.0, hybrid_unlock_threshold: float = 5.0,
                 random_simple_threshold: float = 5.0, random_simple_steps: int = 20,
                 random_simple_timeout: float = 30.0) -> None:
         
@@ -33,14 +33,14 @@ class BPM_estimation:
         # ------------ Modes ------------
         self.manual_mode_obj = ManualMode(self)
         self.random_mode_obj = RandomMode(self, span=random_span, gamified=random_gamified,
-                                          simple_threshold=random_simple_threshold,
-                                          simple_steps=random_simple_steps,
-                                          simple_timeout=random_simple_timeout)
+                                        simple_threshold=random_simple_threshold,
+                                        simple_steps=random_simple_steps,
+                                        simple_timeout=random_simple_timeout)
         self.dynamic_mode_obj = DynamicMode(self)
         self.hybrid_mode_obj = HybridMode(self, lock_steps=hybrid_lock_steps, 
-                                          unlock_time=hybrid_unlock_time,
-                                          stability_threshold=hybrid_stability_threshold,
-                                          unlock_threshold=hybrid_unlock_threshold)
+                                        unlock_time=hybrid_unlock_time,
+                                        stability_threshold=hybrid_stability_threshold,
+                                        unlock_threshold=hybrid_unlock_threshold)
         
         # ------------ Active State ------------
         self.active_mode = initial_mode # "dynamic", "random", "manual", "hybrid"
@@ -72,8 +72,8 @@ class BPM_estimation:
             self.dynamic_mode_obj.activate()
 
         # ------------ Smoothing Params ------------
-        self.smoothing_alpha_up = 0.025
-        self.smoothing_alpha_down = 1.0
+        self.smoothing_alpha_up = 0.1
+        self.smoothing_alpha_down = 0.05
         self.target_bpm = player.walkingBPM
 
         # ------------ ML Warmup ------------
@@ -133,7 +133,7 @@ class BPM_estimation:
     def set_dynamic_mode(self, enabled: bool):
         self.active_mode = "dynamic"
         self.dynamic_mode_obj.activate()
-   
+
 
     def _get_active_mode(self):
         if self.active_mode == "manual": return self.manual_mode_obj
@@ -188,7 +188,7 @@ class BPM_estimation:
         return None
 
 
-     # ----------- Main Loop -----------
+    # ----------- Main Loop -----------
     def update_bpm(self):
         """Called ~10Hz by main loop."""
         now_ts = time.time()
