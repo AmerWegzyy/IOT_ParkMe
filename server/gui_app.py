@@ -276,7 +276,7 @@ class GuiApp:
         self.job_ports = None
         
         self.port_scan_thread = None
-        
+
         # Registry for scrollable canvases (for smart mousewheel routing)
         self.scrollable_canvases = []
         
@@ -1591,7 +1591,24 @@ class GuiApp:
         ttk.Button(tree_btn_frame, text="↻ Refresh", command=self._refresh_training_sessions,
                    style="Compact.TButton").pack(side="left", padx=(0, 5))
         ttk.Button(tree_btn_frame, text="Select All", command=self._select_all_sessions,
+                   style="Compact.TButton").pack(side="left", padx=(0, 5))
+        ttk.Button(tree_btn_frame, text="🔄 Generate Augmented Data", command=self._generate_augmented_data,
+                   style="Compact.TButton").pack(side="left", padx=(0, 5))
+        ttk.Button(tree_btn_frame, text="🗑️ Delete Selected", command=self._delete_selected_sessions,
                    style="Compact.TButton").pack(side="left")
+        
+        # Augmentation progress
+        self.augmentation_progress = ttk.Progressbar(left_card, mode="indeterminate", length=200)
+        self.augmentation_progress.pack(fill="x", pady=(10, 5))
+        
+        self.augmentation_status_var = tk.StringVar(value="")
+        self.augmentation_status_label = ttk.Label(left_card, textvariable=self.augmentation_status_var, 
+                                                    style="CardSub.TLabel", font=("Segoe UI", 9))
+        self.augmentation_status_label.pack(anchor="w")
+        
+        # Hide progress bar initially
+        self.augmentation_progress.pack_forget()
+        self.augmentation_status_label.pack_forget()
 
         # ---- RIGHT: Training Options & Controls ----
         right_card = ttk.Frame(paned, style="Card.TFrame", padding=15)
@@ -1716,12 +1733,28 @@ class GuiApp:
         for user_dir in sorted(logs_dir.iterdir()):
             if not user_dir.is_dir():
                 continue
-            user_node = self.session_tree.insert("", "end", text=f"📁 {user_dir.name}", open=False, tags=("user",))
-            sessions = sorted(user_dir.glob("session_*/session_data.csv"))
-            for sess in sessions:
-                sess_name = sess.parent.name
-                self.session_tree.insert(user_node, "end", text=f"  📄 {sess_name}",
-                                          values=(str(sess),), tags=("session",))
+            
+            # Handle Augmented folder (nested structure: Augmented/UserName/session_*)
+            if user_dir.name == "Augmented":
+                aug_node = self.session_tree.insert("", "end", text=f"📁 {user_dir.name}", open=False, tags=("user",))
+                # Iterate through user folders inside Augmented
+                for aug_user_dir in sorted(user_dir.iterdir()):
+                    if not aug_user_dir.is_dir():
+                        continue
+                    aug_user_node = self.session_tree.insert(aug_node, "end", text=f"📁 {aug_user_dir.name}", open=False, tags=("user",))
+                    sessions = sorted(aug_user_dir.glob("session_*/session_data.csv"))
+                    for sess in sessions:
+                        sess_name = sess.parent.name
+                        self.session_tree.insert(aug_user_node, "end", text=f"  📄 {sess_name}",
+                                                  values=(str(sess),), tags=("session",))
+            else:
+                # Regular user folder (Default, Eitan, etc.)
+                user_node = self.session_tree.insert("", "end", text=f"📁 {user_dir.name}", open=False, tags=("user",))
+                sessions = sorted(user_dir.glob("session_*/session_data.csv"))
+                for sess in sessions:
+                    sess_name = sess.parent.name
+                    self.session_tree.insert(user_node, "end", text=f"  📄 {sess_name}",
+                                              values=(str(sess),), tags=("session",))
 
     def _select_all_sessions(self):
         """Select all items in session tree."""
@@ -1731,6 +1764,222 @@ class GuiApp:
                 select_recursive(child)
         for item in self.session_tree.get_children():
             select_recursive(item)
+
+    def _generate_augmented_data(self):
+        """Generate augmented data from selected sessions."""
+        import threading
+        import subprocess
+        import sys
+        from pathlib import Path
+        
+        # Get selected items
+        selected = self.session_tree.selection()
+        if not selected:
+            self.log("Select sessions or user folders to augment.")
+            return
+        
+        # Parse selection to determine mode
+        selected_users = []
+        selected_sessions = []
+        
+        for item in selected:
+            tags = self.session_tree.item(item, "tags")
+            item_text = self.session_tree.item(item, "text")
+            
+            if "session" in tags:
+                # Individual session selected
+                vals = self.session_tree.item(item, "values")
+                if vals:
+                    selected_sessions.append(vals[0])
+            elif "user" in tags:
+                # User folder selected
+                # Extract user name from "📁 UserName"
+                user_name = item_text.replace("📁", "").strip()
+                if user_name != "Augmented":  # Don't augment the Augmented folder itself
+                    selected_users.append(user_name)
+        
+        # Build command
+        base_dir = Path(__file__).resolve().parent.parent
+        script_path = base_dir / "research" / "LightGBM" / "generate_augmented_data.py"
+        
+        if not script_path.exists():
+            self.log(f"ERROR: Augmentation script not found at {script_path}")
+            return
+        
+        # Determine command based on selection
+        if selected_users and not selected_sessions:
+            # User folder(s) selected - augment first user only for simplicity
+            # (Could be extended to support multiple users)
+            mode = f"user folder '{selected_users[0]}'"
+            cmd = [sys.executable, str(script_path), "--user", selected_users[0]]
+        elif selected_sessions:
+            # Specific sessions selected
+            mode = f"{len(selected_sessions)} specific session(s)"
+            cmd = [sys.executable, str(script_path), "--sessions"] + selected_sessions
+        else:
+            self.log("Select sessions or user folders to augment.")
+            return
+        
+        self.log(f"Generating augmented data for {mode}...")
+        self.log("This may take a few minutes...")
+        
+        # Show progress bar and update status
+        self.augmentation_progress.pack(fill="x", pady=(10, 5))
+        self.augmentation_status_label.pack(anchor="w")
+        self.augmentation_progress.start(10)
+        self.augmentation_status_var.set("🔄 Generating augmented data...")
+        
+        # Run in background thread
+        def _worker():
+            try:
+                result = subprocess.run(
+                    cmd,
+                    cwd=str(base_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=600  # 10 minute timeout
+                )
+                
+                # Update GUI from main thread
+                def _update_gui():
+                    # Stop and hide progress bar
+                    self.augmentation_progress.stop()
+                    self.augmentation_progress.pack_forget()
+                    
+                    if result.returncode == 0:
+                        self.log("✓ Augmentation complete!")
+                        self.augmentation_status_var.set("✓ Augmentation complete!")
+                        # Show output
+                        for line in result.stdout.strip().split('\n'):
+                            if line.strip():
+                                self.log(f"  {line}")
+                        # Refresh session tree to show new augmented sessions
+                        self._refresh_training_sessions()
+                        # Hide status after 3 seconds
+                        self.root.after(3000, lambda: self.augmentation_status_label.pack_forget())
+                    else:
+                        self.log(f"✗ Augmentation failed with code {result.returncode}")
+                        self.augmentation_status_var.set("✗ Augmentation failed")
+                        if result.stderr:
+                            self.log(f"Error: {result.stderr}")
+                        # Hide status after 5 seconds
+                        self.root.after(5000, lambda: self.augmentation_status_label.pack_forget())
+                
+                self.root.after(0, _update_gui)
+            
+            except subprocess.TimeoutExpired:
+                def _timeout_gui():
+                    self.augmentation_progress.stop()
+                    self.augmentation_progress.pack_forget()
+                    self.augmentation_status_var.set("✗ Augmentation timed out")
+                    self.log("✗ Augmentation timed out (>10 minutes)")
+                    self.root.after(5000, lambda: self.augmentation_status_label.pack_forget())
+                self.root.after(0, _timeout_gui)
+            except Exception as e:
+                def _error_gui():
+                    self.augmentation_progress.stop()
+                    self.augmentation_progress.pack_forget()
+                    self.augmentation_status_var.set(f"✗ Error: {e}")
+                    self.log(f"✗ Augmentation error: {e}")
+                    self.root.after(5000, lambda: self.augmentation_status_label.pack_forget())
+                self.root.after(0, _error_gui)
+        
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _delete_selected_sessions(self):
+        """Delete selected sessions or folders from disk and refresh UI."""
+        from tkinter import messagebox
+        import shutil
+        from pathlib import Path
+        
+        # Get selected items
+        selected = self.session_tree.selection()
+        if not selected:
+            self.log("Select sessions or user folders to delete.")
+            return
+        
+        # Parse selection to get paths to delete
+        items_to_delete = []
+        user_folders_to_delete = []
+        
+        for item in selected:
+            tags = self.session_tree.item(item, "tags")
+            item_text = self.session_tree.item(item, "text")
+            
+            if "session" in tags:
+                # Individual session selected
+                vals = self.session_tree.item(item, "values")
+                if vals:
+                    csv_path = Path(vals[0])
+                    session_dir = csv_path.parent
+                    items_to_delete.append(("session", session_dir))
+            elif "user" in tags:
+                # User folder selected - delete entire folder
+                user_name = item_text.replace("📁", "").strip()
+                user_folder = get_logs_dir() / user_name
+                if user_folder.exists():
+                    items_to_delete.append(("folder", user_folder))
+                    user_folders_to_delete.append(user_name)
+        
+        if not items_to_delete:
+            self.log("No sessions or folders found to delete.")
+            return
+        
+        # Count items for confirmation message
+        session_count = sum(1 for item_type, _ in items_to_delete if item_type == "session")
+        folder_count = sum(1 for item_type, _ in items_to_delete if item_type == "folder")
+        
+        # Build confirmation message
+        msg_parts = []
+        if folder_count > 0:
+            folder_word = "folder" if folder_count == 1 else "folders"
+            msg_parts.append(f"{folder_count} entire {folder_word}")
+        if session_count > 0:
+            session_word = "session" if session_count == 1 else "sessions"
+            msg_parts.append(f"{session_count} {session_word}")
+        
+        items_text = " and ".join(msg_parts)
+        
+        confirm = messagebox.askyesno(
+            "Confirm Deletion",
+            f"Are you sure you want to delete {items_text}?\n\n"
+            f"This action cannot be undone!\n\n"
+            f"Deleted items will be removed from:\n"
+            f"  • Model Training tab\n"
+            f"  • Analysis tab\n"
+            f"  • File system (permanently)",
+            icon="warning"
+        )
+        
+        if not confirm:
+            self.log("Deletion cancelled.")
+            return
+        
+        # Delete items
+        deleted_count = 0
+        failed_count = 0
+        
+        for item_type, path in items_to_delete:
+            try:
+                shutil.rmtree(path)
+                deleted_count += 1
+                if item_type == "folder":
+                    self.log(f"✓ Deleted entire folder: {path.name}")
+                else:
+                    self.log(f"✓ Deleted: {path.name}")
+            except Exception as e:
+                failed_count += 1
+                self.log(f"✗ Failed to delete {path.name}: {e}")
+        
+        # Summary
+        if deleted_count > 0:
+            self.log(f"✓ Successfully deleted {deleted_count} item(s)")
+        if failed_count > 0:
+            self.log(f"✗ Failed to delete {failed_count} item(s)")
+        
+        # Refresh both training and analysis tabs
+        self._refresh_training_sessions()
+        self.refresh_analysis_subjects()
 
     def _get_selected_session_paths(self):
         """Get list of selected session CSV paths."""

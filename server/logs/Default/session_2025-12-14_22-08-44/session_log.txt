@@ -1,4 +1,0 @@
-Session log started at 2025-12-14_22-08-44 (t=0.000)
-[00:00:00.598] Starting in DYNAMIC MODE
-[00:00:00.598] Session started
-[00:00:01.101] Setting update stride to 1

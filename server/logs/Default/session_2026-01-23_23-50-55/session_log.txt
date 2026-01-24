@@ -1,0 +1,317 @@
+Session log started at 2026-01-23_23-50-55 (t=0.000)
+[00:00:00.000] DEBUG: Attempting to initialize MidiBeatSync...
+[00:00:00.000] DEBUG: MidiBeatSync initialized successfully.
+[00:00:00.000] Starting in RANDOM DRIFT MODE.
+[00:00:00.000] Run type: random
+[00:00:00.000] Prediction model enabled: lgbm_model.joblib
+[00:00:00.000] GAME: Difficulty updated to ±30%
+[00:00:00.000] RANDOM: Mode switched to GAMIFIED
+[00:00:00.000] RANDOM: Simple threshold set to 8.0 BPM
+[00:00:00.000] RANDOM: Simple steps set to 7
+[00:00:00.000] RANDOM: Simple timeout set to 7.0s
+[00:00:00.000] Mode Activated: RandomMode
+[00:00:00.000] Session started
+[00:00:00.000] DEBUG: Attempting to open serial port COM6...
+[00:00:00.000] DEBUG: Serial port COM6 opened successfully.
+[00:00:00.000] Setting smoothing window to 1
+[00:00:00.000] Smoothing window set response: ACK,WINDOW,1
+[00:00:00.000] Setting update stride to 1
+[00:00:00.000] Update stride set response: ACK,STRIDE,1
+[00:00:00.000] ACK,RESET received
+[00:00:00.000] ACK,START received
+[00:00:00.000] Session handshake completed
+[00:00:00.000] Running main loop...
+[00:00:00.000] Session timer started - music is now playing
+[00:00:00.004] GAME: New Target 114.1 BPM! Match it!
+[00:00:00.008] GAME: Matched! Hold it...
+[00:00:01.266] Processed: BPM=114.08517493312766
+[00:00:01.766] Processed: BPM=119.76
+[00:00:02.305] Processed: BPM=111.11
+[00:00:02.817] Processed: BPM=121.7
+[00:00:03.303] Processed: BPM=119.05
+[00:00:03.789] Processed: BPM=123.71
+[00:00:04.321] Processed: BPM=112.78
+[00:00:04.886] Processed: BPM=106.95
+[00:00:05.420] Processed: BPM=111.73
+[00:00:05.953] Processed: BPM=112.57
+[00:00:06.467] Processed: BPM=116.96
+[00:00:07.006] GAME: Timeout (7.0s)! Skipping...
+[00:00:07.006] GAME: New Target 125.4 BPM! Match it!
+[00:00:07.092] Processed: BPM=96.0
+[00:00:07.145] GAME: Matched! Hold it...
+[00:00:07.556] Processed: BPM=128.76
+[00:00:08.156] Processed: BPM=100.5
+[00:00:08.624] Processed: BPM=127.93
+[00:00:09.190] Processed: BPM=106.38
+[00:00:09.624] Processed: BPM=136.99
+[00:00:10.043] Processed: BPM=143.88
+[00:00:10.494] Processed: BPM=132.45
+[00:00:10.942] Processed: BPM=134.53
+[00:00:11.438] Processed: BPM=120.72
+[00:00:11.919] Processed: BPM=126.85
+[00:00:12.408] Processed: BPM=120.48
+[00:00:12.914] Processed: BPM=119.76
+[00:00:13.366] Processed: BPM=131.0
+[00:00:13.880] Processed: BPM=116.96
+[00:00:14.006] GAME: Timeout (7.0s)! Skipping...
+[00:00:14.007] GAME: New Target 108.8 BPM! Match it!
+[00:00:14.352] Processed: BPM=127.39
+[00:00:14.591] GAME: Matched! Hold it...
+[00:00:14.843] Processed: BPM=122.2
+[00:00:15.317] Processed: BPM=126.58
+[00:00:15.916] Processed: BPM=100.17
+[00:00:16.399] Processed: BPM=124.48
+[00:00:17.014] Processed: BPM=97.24
+[00:00:17.540] Processed: BPM=114.5
+[00:00:18.183] Processed: BPM=93.31
+[00:00:18.665] Processed: BPM=124.74
+[00:00:19.278] Processed: BPM=97.88
+[00:00:19.793] Processed: BPM=116.5
+[00:00:20.331] Processed: BPM=110.91
+[00:00:20.890] Processed: BPM=107.91
+[00:00:21.007] GAME: Timeout (7.0s)! Skipping...
+[00:00:21.008] GAME: New Target 132.9 BPM! Match it!
+[00:00:21.431] Processed: BPM=110.91
+[00:00:21.450] GAME: Matched! Hold it...
+[00:00:22.012] Processed: BPM=102.92
+[00:00:22.484] Processed: BPM=126.85
+[00:00:22.906] Processed: BPM=143.2
+[00:00:23.341] Processed: BPM=137.3
+[00:00:23.787] Processed: BPM=134.83
+[00:00:24.239] Processed: BPM=132.74
+[00:00:24.727] Processed: BPM=122.7
+[00:00:25.174] Processed: BPM=133.93
+[00:00:25.629] Processed: BPM=131.87
+[00:00:26.125] Processed: BPM=121.46
+[00:00:26.576] Processed: BPM=132.45
+[00:00:27.032] Processed: BPM=131.87
+[00:00:27.503] Processed: BPM=127.93
+[00:00:27.935] Processed: BPM=138.89
+[00:00:28.008] GAME: Timeout (7.0s)! Skipping...
+[00:00:28.008] GAME: New Target 119.0 BPM! Match it!
+[00:00:28.402] Processed: BPM=129.31
+[00:00:28.451] GAME: Matched! Hold it...
+[00:00:28.868] Processed: BPM=127.93
+[00:00:29.368] Processed: BPM=120.24
+[00:00:29.897] Processed: BPM=112.99
+[00:00:30.369] Processed: BPM=127.39
+[00:00:30.880] Processed: BPM=116.96
+[00:00:31.399] Processed: BPM=115.83
+[00:00:31.874] Processed: BPM=126.58
+[00:00:32.370] Processed: BPM=120.72
+[00:00:32.894] Processed: BPM=114.5
+[00:00:33.437] Processed: BPM=110.29
+[00:00:34.013] Processed: BPM=104.35
+[00:00:34.477] Processed: BPM=128.76
+[00:00:34.987] Processed: BPM=118.34
+[00:00:35.009] GAME: Timeout (7.0s)! Skipping...
+[00:00:35.009] GAME: New Target 93.8 BPM! Match it!
+[00:00:35.510] Processed: BPM=113.85
+[00:00:35.928] GAME: Matched! Hold it...
+[00:00:36.036] Processed: BPM=114.5
+[00:00:36.557] Processed: BPM=115.61
+[00:00:37.158] Processed: BPM=99.34
+[00:00:37.830] Processed: BPM=89.42
+[00:00:38.485] Processed: BPM=91.74
+[00:00:39.146] Processed: BPM=90.63
+[00:00:39.815] Processed: BPM=89.69
+[00:00:40.435] Processed: BPM=96.93
+[00:00:41.193] Processed: BPM=79.05
+[00:00:41.736] Processed: BPM=110.91
+[00:00:42.010] GAME: Timeout (7.0s)! Skipping...
+[00:00:42.010] GAME: New Target 106.6 BPM! Match it!
+[00:00:42.198] GAME: Matched! Hold it...
+[00:00:42.398] Processed: BPM=90.36
+[00:00:43.018] Processed: BPM=96.93
+[00:00:43.557] Processed: BPM=111.52
+[00:00:44.094] Processed: BPM=111.52
+[00:00:44.689] Processed: BPM=100.84
+[00:00:45.265] Processed: BPM=103.81
+[00:00:45.833] Processed: BPM=106.38
+[00:00:46.415] Processed: BPM=102.39
+[00:00:47.006] Processed: BPM=101.69
+[00:00:47.544] Processed: BPM=111.52
+[00:00:48.141] Processed: BPM=100.67
+[00:00:48.696] Processed: BPM=107.91
+[00:00:49.011] GAME: Timeout (7.0s)! Skipping...
+[00:00:49.011] GAME: New Target 154.6 BPM! Match it!
+[00:00:49.274] Processed: BPM=103.63
+[00:00:49.728] GAME: Matched! Hold it...
+[00:00:49.826] Processed: BPM=108.89
+[00:00:50.286] Processed: BPM=130.15
+[00:00:50.624] Processed: BPM=184.05
+[00:00:50.963] Processed: BPM=172.41
+[00:00:51.353] Processed: BPM=153.45
+[00:00:51.740] Processed: BPM=155.44
+[00:00:52.136] Processed: BPM=151.13
+[00:00:52.534] Processed: BPM=151.52
+[00:00:52.934] Processed: BPM=149.63
+[00:00:53.318] Processed: BPM=155.44
+[00:00:53.725] Processed: BPM=147.78
+[00:00:54.115] Processed: BPM=153.45
+[00:00:54.522] Processed: BPM=147.06
+[00:00:54.936] Processed: BPM=145.63
+[00:00:55.325] Processed: BPM=154.64
+[00:00:55.729] Processed: BPM=148.15
+[00:00:56.012] GAME: Timeout (7.0s)! Skipping...
+[00:00:56.013] GAME: New Target 109.5 BPM! Match it!
+[00:00:56.110] Processed: BPM=157.48
+[00:00:56.481] Processed: BPM=161.29
+[00:00:56.892] Processed: BPM=145.63
+[00:00:57.391] Processed: BPM=120.24
+[00:00:57.396] GAME: Matched! Hold it...
+[00:00:57.969] Processed: BPM=103.99
+[00:00:58.503] Processed: BPM=112.57
+[00:00:59.005] Processed: BPM=119.28
+[00:00:59.573] Processed: BPM=106.01
+[00:01:00.069] Processed: BPM=120.48
+[00:01:00.603] Processed: BPM=112.57
+[00:01:01.184] Processed: BPM=103.27
+[00:01:01.767] Processed: BPM=103.27
+[00:01:02.322] Processed: BPM=107.72
+[00:01:02.927] Processed: BPM=99.01
+[00:01:03.014] GAME: Timeout (7.0s)! Skipping...
+[00:01:03.014] GAME: New Target 129.7 BPM! Match it!
+[00:01:03.386] GAME: Matched! Hold it...
+[00:01:03.432] Processed: BPM=118.81
+[00:01:03.936] Processed: BPM=119.28
+[00:01:04.440] Processed: BPM=118.81
+[00:01:04.909] Processed: BPM=127.93
+[00:01:05.360] Processed: BPM=133.33
+[00:01:05.821] Processed: BPM=130.43
+[00:01:06.283] Processed: BPM=129.87
+[00:01:06.769] Processed: BPM=123.2
+[00:01:07.241] Processed: BPM=127.66
+[00:01:07.717] Processed: BPM=125.52
+[00:01:08.169] Processed: BPM=133.33
+[00:01:08.634] Processed: BPM=127.93
+[00:01:09.126] Processed: BPM=122.95
+[00:01:09.595] Processed: BPM=127.12
+[00:01:10.014] GAME: Timeout (7.0s)! Skipping...
+[00:01:10.014] GAME: New Target 111.1 BPM! Match it!
+[00:01:10.049] Processed: BPM=132.16
+[00:01:10.523] Processed: BPM=127.12
+[00:01:10.691] GAME: Matched! Hold it...
+[00:01:11.003] Processed: BPM=126.05
+[00:01:11.475] Processed: BPM=125.79
+[00:01:12.042] Processed: BPM=105.63
+[00:01:12.616] Processed: BPM=105.08
+[00:01:13.169] Processed: BPM=107.91
+[00:01:13.778] Processed: BPM=98.52
+[00:01:14.291] Processed: BPM=117.19
+[00:01:14.790] Processed: BPM=121.21
+[00:01:15.324] Processed: BPM=111.32
+[00:01:15.894] Processed: BPM=105.63
+[00:01:16.416] Processed: BPM=114.72
+[00:01:16.972] Processed: BPM=108.7
+[00:01:17.015] GAME: Timeout (7.0s)! Skipping...
+[00:01:17.015] GAME: New Target 92.6 BPM! Match it!
+[00:01:17.525] Processed: BPM=107.53
+[00:01:17.686] GAME: Matched! Hold it...
+[00:01:18.110] Processed: BPM=103.09
+[00:01:18.747] Processed: BPM=93.75
+[00:01:19.363] Processed: BPM=97.72
+[00:01:20.039] Processed: BPM=88.5
+[00:01:20.692] Processed: BPM=91.74
+[00:01:21.377] Processed: BPM=87.72
+[00:01:21.992] Processed: BPM=97.56
+[00:01:22.644] Processed: BPM=92.17
+[00:01:23.264] Processed: BPM=96.77
+[00:01:23.919] Processed: BPM=91.74
+[00:01:24.016] GAME: Timeout (7.0s)! Skipping...
+[00:01:24.016] GAME: New Target 108.0 BPM! Match it!
+[00:01:24.278] GAME: Matched! Hold it...
+[00:01:24.578] Processed: BPM=91.19
+[00:01:25.203] Processed: BPM=95.85
+[00:01:25.766] Processed: BPM=106.76
+[00:01:26.289] Processed: BPM=114.5
+[00:01:26.841] Processed: BPM=108.89
+[00:01:27.412] Processed: BPM=104.71
+[00:01:27.975] Processed: BPM=106.57
+[00:01:28.529] Processed: BPM=108.3
+[00:01:29.101] Processed: BPM=105.08
+[00:01:29.670] Processed: BPM=105.45
+[00:01:30.225] Processed: BPM=107.91
+[00:01:30.805] Processed: BPM=103.99
+[00:01:31.016] GAME: Timeout (7.0s)! Skipping...
+[00:01:31.017] GAME: New Target 141.9 BPM! Match it!
+[00:01:31.356] Processed: BPM=108.89
+[00:01:31.594] GAME: Matched! Hold it...
+[00:01:31.927] Processed: BPM=104.35
+[00:01:32.355] Processed: BPM=141.18
+[00:01:32.727] Processed: BPM=160.43
+[00:01:33.101] Processed: BPM=161.29
+[00:01:33.514] Processed: BPM=144.23
+[00:01:33.962] Processed: BPM=134.83
+[00:01:34.416] Processed: BPM=131.58
+[00:01:34.839] Processed: BPM=141.84
+[00:01:35.289] Processed: BPM=135.75
+[00:01:35.706] Processed: BPM=140.52
+[00:01:36.143] Processed: BPM=138.25
+[00:01:36.593] Processed: BPM=133.33
+[00:01:37.012] Processed: BPM=142.86
+[00:01:37.448] Processed: BPM=138.25
+[00:01:37.831] Processed: BPM=155.44
+[00:01:38.017] GAME: Timeout (7.0s)! Skipping...
+[00:01:38.017] GAME: New Target 86.9 BPM! Match it!
+[00:01:38.274] Processed: BPM=135.75
+[00:01:38.726] Processed: BPM=132.74
+[00:01:39.268] Processed: BPM=112.57
+[00:01:39.558] GAME: Matched! Hold it...
+[00:01:39.946] Processed: BPM=87.21
+[00:01:40.561] Processed: BPM=98.04
+[00:01:41.253] Processed: BPM=86.71
+[00:01:42.017] Processed: BPM=78.53
+[00:01:42.622] Processed: BPM=98.85
+[00:01:43.368] Processed: BPM=80.54
+[00:01:44.029] Processed: BPM=90.63
+[00:01:44.726] Processed: BPM=86.21
+[00:01:45.018] GAME: Timeout (7.0s)! Skipping...
+[00:01:45.018] GAME: New Target 142.9 BPM! Match it!
+[00:01:45.420] Processed: BPM=86.46
+[00:01:45.794] GAME: Matched! Hold it...
+[00:01:46.068] Processed: BPM=93.02
+[00:01:46.479] Processed: BPM=144.93
+[00:01:46.866] Processed: BPM=154.64
+[00:01:47.231] Processed: BPM=165.29
+[00:01:47.644] Processed: BPM=144.93
+[00:01:48.077] Processed: BPM=138.89
+[00:01:48.536] Processed: BPM=130.15
+[00:01:48.955] Processed: BPM=143.54
+[00:01:49.439] Processed: BPM=124.48
+[00:01:49.849] Processed: BPM=146.34
+[00:01:50.286] Processed: BPM=136.36
+[00:01:50.673] Processed: BPM=155.44
+[00:01:51.111] Processed: BPM=136.36
+[00:01:51.520] Processed: BPM=147.78
+[00:01:51.953] Processed: BPM=138.25
+[00:01:52.019] GAME: Timeout (7.0s)! Skipping...
+[00:01:52.020] GAME: New Target 102.1 BPM! Match it!
+[00:01:52.349] Processed: BPM=151.9
+[00:01:52.832] Processed: BPM=123.71
+[00:01:53.264] Processed: BPM=139.21
+[00:01:53.320] GAME: Matched! Hold it...
+[00:01:53.909] Processed: BPM=92.74
+[00:01:54.425] Processed: BPM=116.5
+[00:01:55.022] Processed: BPM=100.5
+[00:01:55.590] Processed: BPM=105.82
+[00:01:56.191] Processed: BPM=99.83
+[00:01:56.744] Processed: BPM=108.3
+[00:01:57.364] Processed: BPM=96.62
+[00:01:57.947] Processed: BPM=103.09
+[00:01:58.582] Processed: BPM=94.49
+[00:01:59.019] GAME: Timeout (7.0s)! Skipping...
+[00:01:59.019] GAME: New Target 131.2 BPM! Match it!
+[00:01:59.185] Processed: BPM=99.5
+[00:01:59.536] GAME: Matched! Hold it...
+[00:01:59.820] Processed: BPM=94.64
+[00:02:00.259] Processed: BPM=138.57
+[00:02:00.758] Processed: BPM=118.58
+[00:02:01.162] Processed: BPM=149.25
+[00:02:01.669] Processed: BPM=118.11
+[00:02:01.999] Processed: BPM=185.19
+[00:02:02.421] Processed: BPM=140.52
+[00:02:02.802] Processed: BPM=157.07
+[00:02:03.269] Processed: BPM=129.31
+[00:02:03.709] Processed: BPM=135.75
+[00:02:04.259] Processed: BPM=109.09

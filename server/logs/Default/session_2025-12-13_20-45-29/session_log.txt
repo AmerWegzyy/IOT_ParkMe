@@ -1,4 +1,0 @@
-Session log started at 2025-12-13_20-45-29 (t=0.000)
-[00:00:00.514] Starting in DYNAMIC MODE
-[00:00:00.514] Session started
-[00:00:05.639] Failed to open serial port COM4: could not open port 'COM4': OSError(22, 'The semaphore timeout period has expired.', None, 121)

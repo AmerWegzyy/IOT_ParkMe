@@ -1,8 +1,0 @@
-Session log started at 2025-12-26_17-24-53 (t=0.000)
-[00:00:00.002] DEBUG: Attempting to initialize MidiBeatSync...
-[00:00:00.097] DEBUG: MidiBeatSync initialized successfully.
-[00:00:00.099] Starting in DYNAMIC MODE
-[00:00:12.623] KNN prediction enabled
-[00:00:12.624] Session started
-[00:00:12.625] DEBUG: Attempting to open serial port COM6...
-[00:00:12.625] Failed to open serial port COM6: could not open port 'COM6': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)

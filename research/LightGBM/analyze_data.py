@@ -20,64 +20,12 @@ spec = importlib.util.spec_from_file_location("research_analyze_data", PARENT_AN
 parent_mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(parent_mod)  # type: ignore
 load_all_sessions = parent_mod.load_all_sessions
-remove_spikes = getattr(parent_mod, "remove_spikes", lambda df, col="walking_bpm", window=5, threshold=200: df)
 
 # Output directories for results
 RESULTS_DIR = Path(__file__).parent / "results"
 PLOTS_DIR = RESULTS_DIR / "plots"
 PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR = BASE_DIR / "server" / "logs"
-
-
-def filter_true_steps(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Keep only rows marked as true steps if the 'step_event' column exists.
-    Accepts boolean or string 'True'/'False'. If column missing, returns df unchanged.
-    """
-    if "step_event" not in df.columns:
-        return df
-    mask = df["step_event"]
-    if mask.dtype == object:
-        mask = mask.astype(str).str.lower() == "true"
-    return df[mask].copy()
-
-
-def filter_positive_bpm(df: pd.DataFrame, col: str = "walking_bpm") -> pd.DataFrame:
-    """Drop rows with non-positive BPM values."""
-    if col not in df.columns:
-        return df
-    return df[df[col] > 0].copy()
-
-
-def drop_high_spikes(df: pd.DataFrame, col: str = "walking_bpm", window: int = 5, min_bpm: float = 150, deviation: float = 50) -> pd.DataFrame:
-    """
-    Remove spikes only when the value is high AND far from the local median:
-    keep rows where bpm < min_bpm OR |bpm - rolling_median| <= deviation.
-    """
-    if col not in df.columns:
-        return df
-    med = df[col].rolling(window=window, center=True, min_periods=1).median()
-    mask = (df[col] < min_bpm) | ((df[col] - med).abs() <= deviation)
-    return df[mask].copy()
-
-
-def process_walking_data(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Apply the standard LightGBM preprocessing pipeline:
-    - positive BPM only
-    - true step events when available
-    - rolling-median spike removal
-    - high-spike suppression
-    - clamp BPM to a sane upper bound
-    """
-    if df.empty:
-        return df
-    cleaned = filter_positive_bpm(df)
-    cleaned = filter_true_steps(cleaned)
-    cleaned = remove_spikes(cleaned, col="walking_bpm", window=5, threshold=200)
-    cleaned = drop_high_spikes(cleaned, col="walking_bpm", window=5, min_bpm=150, deviation=50)
-    cleaned = cleaned.replace([np.inf, -np.inf], np.nan).dropna(subset=["walking_bpm"])
-    return cleaned
 
 
 def load_raw_sessions(logs_dir=None) -> pd.DataFrame:
@@ -87,27 +35,21 @@ def load_raw_sessions(logs_dir=None) -> pd.DataFrame:
     return load_all_sessions(str(resolved))
 
 
-def get_raw_and_processed_sessions(logs_dir=None):
-    """Return both raw and processed DataFrames for the requested logs directory."""
-    raw_df = load_raw_sessions(logs_dir)
-    if raw_df.empty:
-        return raw_df, raw_df
-    processed = process_walking_data(raw_df)
-    return raw_df, processed
-
-
-def load_processed_sessions(logs_dir=None) -> pd.DataFrame:
-    """Convenience wrapper that returns only the processed DataFrame."""
-    _, processed = get_raw_and_processed_sessions(logs_dir)
-    return processed
-
-
-def build_lag_features(df: pd.DataFrame, window_size: int):
+def build_lag_features(df: pd.DataFrame, window_size: int, stride_aware: bool = True):
     """
     Create sliding window lag features for one-step-ahead prediction.
     Uses both smoothed walking_bpm and per-step instant_bpm, and carries
     session-level meta (smoothing_window, stride, run_type).
-    Returns (X_lag, y, meta, meta_mappings).
+    
+    Args:
+        df: DataFrame with session data
+        window_size: Number of lag steps (configurable, not hardcoded!)
+        stride_aware: If True, lag features account for stride.
+                     Note: Current implementation treats stride consistently
+                     since data is already recorded at stride intervals.
+    
+    Returns:
+        (X_lag, y, meta, meta_mappings) tuple
     """
     sequences, targets, metas = [], [], []
 
@@ -165,12 +107,16 @@ def build_lag_features(df: pd.DataFrame, window_size: int):
         sw = g["smoothing_window"].iloc[0] if "smoothing_window" in g else 3
         st = g["stride"].iloc[0] if "stride" in g else 1
         run_type_code = g["_run_type_code"].iloc[0] if "_run_type_code" in g else 0.0
+        
+        # Dynamic window_size allows Optuna to tune the lookback period
+        # Stride is included as metadata so model learns its effect
         for idx in range(window_size, len(walk_vals)):
             walk_slice = walk_vals[idx - window_size : idx]
             inst_slice = inst_vals[idx - window_size : idx]
             sequences.append(list(walk_slice) + list(inst_slice))
             targets.append(walk_vals[idx])
             metas.append([sw, st, run_type_code])
+            
     if not sequences:
         return np.array([]), np.array([]), np.array([]), {"run_type": run_type_mapping}
     return (
@@ -225,12 +171,14 @@ def _plot_distribution(df: pd.DataFrame, title_prefix: str, output_name: str):
     print(f"Saved '{output_path}'")
 
 
-def prepare_training_dataset(session_paths=None, window_size=4, test_size=0.2, random_seed=42):
+
+
+def prepare_training_dataset(session_paths=None, window_size=4, test_size=0.2, random_seed=42, min_steps=20):
     """
     Complete dataset preparation pipeline for training.
     
     Loads sessions, applies filters, builds lag features, splits into train/test,
-    and scales the features.
+    and scales the features. Automatically filters out invalid sessions.
     
     Args:
         session_paths: Optional list of specific session CSV paths to use.
@@ -238,6 +186,7 @@ def prepare_training_dataset(session_paths=None, window_size=4, test_size=0.2, r
         window_size: Number of lag steps for time series features.
         test_size: Fraction of data to use for testing.
         random_seed: Random seed for reproducibility.
+        min_steps: Minimum number of step events required per session (default: 20).
     
     Returns:
         Tuple of (X_train, X_test, y_train, y_test, scaler, meta_mappings)
@@ -245,26 +194,76 @@ def prepare_training_dataset(session_paths=None, window_size=4, test_size=0.2, r
     """
     from sklearn.model_selection import train_test_split
     from sklearn.preprocessing import StandardScaler
+    from data_filtering import DataFiltering
+    
+    # Initialize filter
+    data_filter = DataFiltering(min_steps=min_steps)
     
     # Load and process data
     if session_paths:
-        # Load only specified sessions
-        print(f"Loading {len(session_paths)} specified session(s)...")
-        dfs = []
+        # Filter valid sessions first
+        print(f"[FILTERING] Validating {len(session_paths)} session(s)...")
+        valid_sessions = []
+        filtered_out = []
+        
         for csv_path in session_paths:
+            is_valid, reason = data_filter.is_valid_session(Path(csv_path))
+            if is_valid:
+                valid_sessions.append(csv_path)
+            else:
+                filtered_out.append((Path(csv_path).name, reason))
+        
+        # Report filtering results
+        if filtered_out:
+            print(f"[FILTERED] Skipped {len(filtered_out)} invalid session(s):")
+            from collections import Counter
+            reason_counts = Counter(reason for _, reason in filtered_out)
+            for reason, count in sorted(reason_counts.items()):
+                print(f"   - {reason}: {count} session(s)")
+        
+        if not valid_sessions:
+            print("No valid sessions found after filtering.")
+            return None
+        
+        print(f"[LOADING] Loading {len(valid_sessions)} valid session(s)...")
+        
+        # Load only valid sessions
+        dfs = []
+        for csv_path in valid_sessions:
             if Path(csv_path).exists():
-                df_sess = pd.read_csv(csv_path)
+                # Skip comment lines (metadata header)
+                df_sess = pd.read_csv(csv_path, comment="#")
+                if df_sess.empty:
+                    continue
                 df_sess["session_id"] = Path(csv_path).parent.name
+                
+                # Parse metadata from first line
+                try:
+                    with open(csv_path, "r", encoding="utf-8") as f:
+                        first = f.readline()
+                        if first.startswith("# meta:"):
+                            import json
+                            meta_str = first.replace("# meta:", "").strip()
+                            meta = json.loads(meta_str)
+                            df_sess["smoothing_window"] = meta.get("smoothing_window", 3)
+                            df_sess["stride"] = meta.get("stride", 1)
+                            df_sess["run_type"] = str(meta.get("run_type", "dynamic"))
+                except Exception:
+                    df_sess["smoothing_window"] = 3
+                    df_sess["stride"] = 1
+                    df_sess["run_type"] = "dynamic"
+                
                 dfs.append(df_sess)
         if not dfs:
             print("No valid session files found.")
             return None
         raw_df = pd.concat(dfs, ignore_index=True)
-        df = process_walking_data(raw_df)
+        df = data_filter.process_walking_data(raw_df)
     else:
         # Load all sessions from default directory
         logs_dir = BASE_DIR / "server" / "logs"
-        raw_df, df = get_raw_and_processed_sessions(logs_dir)
+        raw_df = load_raw_sessions(logs_dir)
+        df = data_filter.process_walking_data(raw_df)
     
     if raw_df.empty:
         print("No data found. Run some sessions first.")
@@ -305,33 +304,85 @@ def prepare_training_dataset(session_paths=None, window_size=4, test_size=0.2, r
     return X_train, X_test, y_train, y_test, scaler, meta_mappings
 
 
-def analyze_bpm_distribution(logs_dir=None, session_paths=None):
+def analyze_bpm_distribution(logs_dir=None, session_paths=None, min_steps=20):
     """
     Load sessions, apply the LightGBM preprocessing pipeline, and produce
     two plots: one for raw data and one for processed data.
+    Automatically filters out invalid sessions.
     
     Args:
         logs_dir: Directory containing session logs (if None, uses default)
         session_paths: Optional list of specific session CSV paths to analyze
+        min_steps: Minimum number of step events required per session (default: 20)
     """
+    import json
+    from collections import Counter
+    from data_filtering import DataFiltering
+    
+    # Initialize filter
+    data_filter = DataFiltering(min_steps=min_steps)
+    
     if session_paths:
-        # Load specific sessions
-        import pandas as pd
-        from pathlib import Path
-        dfs = []
+        # Filter valid sessions first
+        print(f"[FILTERING] Validating {len(session_paths)} session(s)...")
+        valid_sessions = []
+        filtered_out = []
+        
         for csv_path in session_paths:
+            is_valid, reason = data_filter.is_valid_session(Path(csv_path))
+            if is_valid:
+                valid_sessions.append(csv_path)
+            else:
+                filtered_out.append((Path(csv_path).name, reason))
+        
+        # Report filtering results
+        if filtered_out:
+            print(f"[FILTERED] Skipped {len(filtered_out)} invalid session(s):")
+            reason_counts = Counter(reason for _, reason in filtered_out)
+            for reason, count in sorted(reason_counts.items()):
+                print(f"   - {reason}: {count} session(s)")
+        
+        if not valid_sessions:
+            print("No valid sessions found after filtering.")
+            return
+        
+        print(f"[LOADING] Loading {len(valid_sessions)} valid session(s)...")
+        
+        # Load specific sessions
+        dfs = []
+        for csv_path in valid_sessions:
             if Path(csv_path).exists():
-                df_sess = pd.read_csv(csv_path)
+                # Skip comment lines (metadata header)
+                df_sess = pd.read_csv(csv_path, comment="#")
+                if df_sess.empty:
+                    continue
                 df_sess["session_id"] = Path(csv_path).parent.name
+                
+                # Parse metadata from first line
+                try:
+                    with open(csv_path, "r", encoding="utf-8") as f:
+                        first = f.readline()
+                        if first.startswith("# meta:"):
+                            meta_str = first.replace("# meta:", "").strip()
+                            meta = json.loads(meta_str)
+                            df_sess["smoothing_window"] = meta.get("smoothing_window", 3)
+                            df_sess["stride"] = meta.get("stride", 1)
+                            df_sess["run_type"] = str(meta.get("run_type", "dynamic"))
+                except Exception:
+                    df_sess["smoothing_window"] = 3
+                    df_sess["stride"] = 1
+                    df_sess["run_type"] = "dynamic"
+                
                 dfs.append(df_sess)
         if not dfs:
             print("No valid session files found.")
             return
         raw_df = pd.concat(dfs, ignore_index=True)
-        processed_df = process_walking_data(raw_df)
+        processed_df = data_filter.process_walking_data(raw_df)
     else:
         # Load all sessions from directory
-        raw_df, processed_df = get_raw_and_processed_sessions(logs_dir)
+        raw_df = load_raw_sessions(logs_dir)
+        processed_df = data_filter.process_walking_data(raw_df)
 
     if raw_df.empty:
         print("No data found.")
@@ -345,4 +396,3 @@ def analyze_bpm_distribution(logs_dir=None, session_paths=None):
 
 if __name__ == "__main__":
     analyze_bpm_distribution()
-

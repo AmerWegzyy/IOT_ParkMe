@@ -1,7 +1,0 @@
-Session log started at 2025-12-06_19-05-31 (t=0.000)
-[00:00:00.002] Session started
-[00:00:00.070] Serial port opened on port COM5, baud 115200
-[00:00:00.095] MIDI event played
-[00:00:00.115] MIDI event played
-[00:00:00.128] MIDI event played
-[00:00:00.141] MIDI event played

@@ -1,2 +1,0 @@
-Session log started at 2025-12-11_15-46-22 (t=0.000)
-[00:00:00.004] Session started

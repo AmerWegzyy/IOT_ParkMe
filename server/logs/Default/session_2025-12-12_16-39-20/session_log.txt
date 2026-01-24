@@ -1,4 +1,0 @@
-Session log started at 2025-12-12_16-39-20 (t=0.000)
-[00:00:00.670] Reset ACK received
-[00:00:00.772] Start ACK received
-[00:00:00.772] Session handshake completed

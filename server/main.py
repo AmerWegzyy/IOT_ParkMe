@@ -20,7 +20,6 @@ from utils.midi_player import MidiBeatSync
 from utils.logger import Logger
 from utils.BPM_estimation import BPM_estimation
 from utils.comms import session_handshake, handle_engine_command, handle_step, send_calibration_command
-from utils.main_helper_functions import retrain_prediction_model
 from utils.LGBM_predictor import LGBMPredictor
 # from utils.safety import safe_execute
 
@@ -463,9 +462,6 @@ def main(args, status_callback=print, stop_event=None, session_dir_callback=None
     player.stop()
     player.close()
     if ser: ser.close()
-    
-    # Auto-retrain prediction model with new session data
-    retrain_prediction_model()
     
     print("EXIT_CLEAN")
     return player, logger, bpm_estimation
