@@ -13,12 +13,27 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 # --- Mock imports for context ---
 try:
     from utils.paths import get_logs_dir, get_models_dir, get_plots_dir, get_midi_dir, get_research_dir, get_app_root
-    from utils.plotter import _elapsed_to_seconds, LivePlotter, generate_post_session_plot
-    from utils.process_manager import SubprocessManager
-    from utils.comms import send_calibration_command
+    from utils.session.plotter import _elapsed_to_seconds, LivePlotter, generate_post_session_plot
+    from utils.engine.process_manager import SubprocessManager
+    from utils.hardware.comms import send_calibration_command
+    from utils.engine.BPM_estimation import BPM_estimation
 except ImportError:
     send_calibration_command = None
+    BPM_estimation = None
     pass
+
+# Default values matching ESP32 step_receiver_sketch.ino
+DEFAULT_SMOOTHING_WINDOW = 3  # Line 6: int smoothingWindow = 3
+DEFAULT_UPDATE_STRIDE = 1     # Line 7: int updateStride = 1
+
+# Get smoothing alpha defaults from BPM_estimation (will be set after class check)
+DEFAULT_SMOOTHING_UP = 0.1    # Will try to read from BPM_estimation
+DEFAULT_SMOOTHING_DOWN = 0.05 # Will try to read from BPM_estimation
+
+# Hybrid Mode defaults from BPM_estimation.py
+DEFAULT_HYBRID_LOCK_STEPS = 5        # Line 17: hybrid_lock_steps: int = 5
+DEFAULT_HYBRID_STABILITY_THRESHOLD = 5.0  # Line 18: hybrid_stability_threshold: float = 5.0
+DEFAULT_HYBRID_UNLOCK_THRESHOLD = 10.0    # Line 18: hybrid_unlock_threshold: float = 10.0
 
 
 try:
@@ -287,10 +302,10 @@ class GuiApp:
         self.random_simple_threshold_var = tk.StringVar(value="5.0")
         self.random_simple_steps_var = tk.StringVar(value="5")
         self.random_simple_timeout_var = tk.StringVar(value="15.0")
-        self.hybrid_lock_var = tk.StringVar(value="5")
+        self.hybrid_lock_var = tk.StringVar(value=str(DEFAULT_HYBRID_LOCK_STEPS))
         self.hybrid_unlock_var = tk.StringVar(value="1.5")
-        self.hybrid_stability_var = tk.StringVar(value="3.0")
-        self.hybrid_unlock_thres_var = tk.StringVar(value="5.0")
+        self.hybrid_stability_var = tk.StringVar(value=str(DEFAULT_HYBRID_STABILITY_THRESHOLD))
+        self.hybrid_unlock_thres_var = tk.StringVar(value=str(DEFAULT_HYBRID_UNLOCK_THRESHOLD))
 
     # --- LAYOUT ---
         # Enhanced navbar with gradient-like effect
@@ -1304,7 +1319,7 @@ class GuiApp:
             csv_path = base_dir / "session_data.csv"
             if csv_path.exists():
                 try:
-                    from utils.plotter import generate_post_session_plot
+                    from utils.session.plotter import generate_post_session_plot
                     print(f"DEBUG: Generating plot for {base_dir}...")
                     generate_post_session_plot(base_dir)
                 except Exception as e:
@@ -1799,8 +1814,8 @@ class GuiApp:
                     selected_users.append(user_name)
         
         # Build command
-        base_dir = Path(__file__).resolve().parent.parent
-        script_path = base_dir / "research" / "LightGBM" / "generate_augmented_data.py"
+        base_dir = Path(__file__).resolve().parent
+        script_path = base_dir / "utils" / "prediction_model" / "generate_augmented_data.py"
         
         if not script_path.exists():
             self.log(f"ERROR: Augmentation script not found at {script_path}")
@@ -2064,7 +2079,7 @@ class GuiApp:
                 
                 if train_type == "base":
                     # Run train_lgbm.py with selected sessions
-                    script = get_research_dir() / "LightGBM" / "train_lgbm.py"
+                    script = get_research_dir() / "train_lgbm.py"
                     cmd = [sys.executable, str(script), "--sessions-file", sessions_file.name]
                     # Add Optuna optimization if enabled
                     if use_optuna:
@@ -2072,7 +2087,7 @@ class GuiApp:
                         cmd.extend(["--trials", str(optuna_trials)])
                 else:
                     # Run train_user_head.py with selected sessions
-                    script = get_research_dir() / "LightGBM" / "train_user_head.py"
+                    script = get_research_dir() / "train_user_head.py"
                     cmd = [sys.executable, str(script), "--sessions-file", sessions_file.name, "--suffix", user_head_name.replace(" ", "_")]
 
                 self.root.after(0, lambda: self._log_training(f"Running: {' '.join(cmd)}"))
@@ -2466,7 +2481,7 @@ class GuiApp:
             csv_path = base_dir / "session_data.csv"
             if csv_path.exists():
                 try:
-                    from utils.plotter import generate_post_session_plot
+                    from utils.session.plotter import generate_post_session_plot
                     generate_post_session_plot(base_dir)
                 except Exception as e:
                     print(f"Plot generation failed: {e}")
@@ -2757,11 +2772,11 @@ class GuiApp:
         attack_row = ttk.Frame(advanced_card, style="Card.TFrame")
         attack_row.pack(fill="x", pady=(0, 10))
         
-        self.smoothing_up_var = tk.StringVar()
-        entry_up = ttk.Entry(attack_row, textvariable=self.smoothing_up_var, width=15)
+        self.smoothing_up_var = tk.StringVar(value=str(DEFAULT_SMOOTHING_UP))
+        entry_up = ttk.Entry(attack_row, textvariable=self.smoothing_up_var, width=10)
         entry_up.pack(side="left", padx=(0, 5))
-        self._bind_placeholder(entry_up, self.smoothing_up_var, "Default")
-        ttk.Button(attack_row, text="?", style="Help.TButton", width=2, command=self.show_attack_help).pack(side="left", padx=5)
+        ttk.Label(attack_row, text="(0.01 - 1.0)", style="CardLabel.TLabel", font=("Segoe UI", 9)).pack(side="left")
+        ttk.Button(attack_row, text="i", style="Help.TButton", width=2, command=self.show_attack_help).pack(side="left", padx=5)
         
         # Cascading (Slow Down)
         ttk.Label(advanced_card, text="Cascading (Slow Down)", style="CardLabel.TLabel", 
@@ -2770,11 +2785,11 @@ class GuiApp:
         decay_row = ttk.Frame(advanced_card, style="Card.TFrame")
         decay_row.pack(fill="x", pady=(0, 10))
         
-        self.smoothing_down_var = tk.StringVar()
-        entry_down = ttk.Entry(decay_row, textvariable=self.smoothing_down_var, width=15)
+        self.smoothing_down_var = tk.StringVar(value=str(DEFAULT_SMOOTHING_DOWN))
+        entry_down = ttk.Entry(decay_row, textvariable=self.smoothing_down_var, width=10)
         entry_down.pack(side="left", padx=(0, 5))
-        self._bind_placeholder(entry_down, self.smoothing_down_var, "Default")
-        ttk.Button(decay_row, text="?", style="Help.TButton", width=2, command=self.show_decay_help).pack(side="left", padx=5)
+        ttk.Label(decay_row, text="(0.01 - 1.0)", style="CardLabel.TLabel", font=("Segoe UI", 9)).pack(side="left")
+        ttk.Button(decay_row, text="i", style="Help.TButton", width=2, command=self.show_decay_help).pack(side="left", padx=5)
         
         # Smoothing Window
         ttk.Label(advanced_card, text="Smoothing Window", style="CardLabel.TLabel", 
@@ -2782,12 +2797,11 @@ class GuiApp:
         window_row = ttk.Frame(advanced_card, style="Card.TFrame")
         window_row.pack(fill="x", pady=(0, 10))
         
-        self.step_window_var = tk.StringVar()
-        entry_win = ttk.Entry(window_row, textvariable=self.step_window_var, width=12)
+        self.step_window_var = tk.StringVar(value=str(DEFAULT_SMOOTHING_WINDOW))
+        entry_win = ttk.Entry(window_row, textvariable=self.step_window_var, width=10)
         entry_win.pack(side="left", padx=(0, 5))
-        self._bind_placeholder(entry_win, self.step_window_var, "Default")
-        ttk.Label(window_row, text="Steps", style="CardLabel.TLabel").pack(side="left", padx=(0, 5))
-        ttk.Button(window_row, text="?", style="Help.TButton", width=2, command=self.show_window_help).pack(side="left")
+        ttk.Label(window_row, text="Steps (1 - 10)", style="CardLabel.TLabel", font=("Segoe UI", 9)).pack(side="left")
+        ttk.Button(window_row, text="i", style="Help.TButton", width=2, command=self.show_window_help).pack(side="left", padx=5)
         
         # Update Stride
         ttk.Label(advanced_card, text="Update Stride", style="CardLabel.TLabel", 
@@ -2795,12 +2809,11 @@ class GuiApp:
         stride_row = ttk.Frame(advanced_card, style="Card.TFrame")
         stride_row.pack(fill="x", pady=(0, 10))
         
-        self.stride_var = tk.StringVar()
-        entry_stride = ttk.Entry(stride_row, textvariable=self.stride_var, width=12)
+        self.stride_var = tk.StringVar(value=str(DEFAULT_UPDATE_STRIDE))
+        entry_stride = ttk.Entry(stride_row, textvariable=self.stride_var, width=10)
         entry_stride.pack(side="left", padx=(0, 5))
-        self._bind_placeholder(entry_stride, self.stride_var, "Default")
-        ttk.Label(stride_row, text="Steps", style="CardLabel.TLabel").pack(side="left", padx=(0, 5))
-        ttk.Button(stride_row, text="?", style="Help.TButton", width=2, command=self.show_stride_help).pack(side="left")
+        ttk.Label(stride_row, text="Steps (1 - 5)", style="CardLabel.TLabel", font=("Segoe UI", 9)).pack(side="left")
+        ttk.Button(stride_row, text="i", style="Help.TButton", width=2, command=self.show_stride_help).pack(side="left", padx=5)
         
         # Prediction Model
         ttk.Label(advanced_card, text="Prediction Model", style="CardLabel.TLabel", 

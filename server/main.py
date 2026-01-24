@@ -16,11 +16,11 @@ import serial
 import argparse
 import threading
 from pathlib import Path
-from utils.midi_player import MidiBeatSync
-from utils.logger import Logger
-from utils.BPM_estimation import BPM_estimation
-from utils.comms import session_handshake, handle_engine_command, handle_step, send_calibration_command
-from utils.LGBM_predictor import LGBMPredictor
+from utils.hardware.midi_player import MidiBeatSync
+from utils.session.logger import Logger
+from utils.engine.BPM_estimation import BPM_estimation
+from utils.hardware.comms import session_handshake, handle_engine_command, handle_step, send_calibration_command
+from utils.prediction_model.LGBM_predictor import LGBMPredictor
 # from utils.safety import safe_execute
 
 #parse the arguments

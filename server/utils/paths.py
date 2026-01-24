@@ -34,14 +34,14 @@ def get_logs_dir():
 
 def get_models_dir():
     """Get the models directory (always external, writable)."""
-    models = get_app_root() / "research" / "LightGBM" / "results" / "models"
+    models = get_app_root() / "server" / "utils" / "prediction_model" / "results" / "models"
     models.mkdir(parents=True, exist_ok=True)
     return models
 
 
 def get_plots_dir():
     """Get the plots directory (always external, writable)."""
-    plots = get_app_root() / "research" / "LightGBM" / "results" / "plots"
+    plots = get_app_root() / "server" / "utils" / "prediction_model" / "results" / "plots"
     plots.mkdir(parents=True, exist_ok=True)
     return plots
 
@@ -57,10 +57,10 @@ def get_midi_dir():
 
 
 def get_research_dir():
-    """Get the research directory (always external, writable)."""
-    research = get_app_root() / "research"
-    research.mkdir(parents=True, exist_ok=True)
-    return research
+    """Get the prediction model directory (legacy name for compatibility)."""
+    prediction_model = get_app_root() / "server" / "utils" / "prediction_model"
+    prediction_model.mkdir(parents=True, exist_ok=True)
+    return prediction_model
 
 
 def get_project_root():

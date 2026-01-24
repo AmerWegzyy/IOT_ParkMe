@@ -1,0 +1,37 @@
+Session log started at 2026-01-25_00-37-57 (t=0.000)
+[00:00:00.000] DEBUG: Attempting to initialize MidiBeatSync...
+[00:00:00.000] DEBUG: MidiBeatSync initialized successfully.
+[00:00:00.000] Starting in DYNAMIC MODE
+[00:00:00.000] Run type: dynamic
+[00:00:00.000] Prediction model enabled: lgbm_model.joblib
+[00:00:00.000] Mode Activated: DynamicMode
+[00:00:00.000] Session started
+[00:00:00.000] DEBUG: Attempting to open serial port COM3...
+[00:00:00.000] DEBUG: Serial port COM3 opened successfully.
+[00:00:00.000] Setting smoothing window to 4
+[00:00:00.000] Smoothing window set response: ACK,WINDOW,4
+[00:00:00.000] ACK,RESET received
+[00:00:00.000] ACK,START received
+[00:00:00.000] Session handshake completed
+[00:00:00.000] Running main loop...
+[00:00:00.000] Session timer started - music is now playing
+[00:00:01.276] Processed: BPM=80.0
+[00:00:01.722] Processed: BPM=134.83
+[00:00:02.183] Processed: BPM=132.6
+[00:00:02.697] Processed: BPM=128.57
+[00:00:03.160] Processed: BPM=127.86
+[00:00:03.644] Processed: BPM=125.13
+[00:00:04.100] Processed: BPM=125.33
+[00:00:04.571] Processed: BPM=127.12
+[00:00:05.027] Processed: BPM=128.27
+[00:00:05.496] Processed: BPM=129.45
+[00:00:05.963] Processed: BPM=128.82
+[00:00:06.419] Processed: BPM=129.59
+[00:00:06.864] Processed: BPM=130.65
+[00:00:07.278] Processed: BPM=134.68
+[00:00:07.694] Processed: BPM=138.57
+[00:00:08.173] Processed: BPM=136.83
+[00:00:08.649] Processed: BPM=134.68
+[00:00:09.115] Processed: BPM=130.65
+[00:00:09.603] Processed: BPM=125.85
+[00:00:10.069] Processed: BPM=126.52

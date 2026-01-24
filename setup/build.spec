@@ -31,7 +31,7 @@ a = Analysis(
     datas=[
         # No need to bundle MIDI files - they'll be external and writable
         # Include one default base model (optional)
-        (os.path.join(project_root, 'research/LightGBM/results/models/lgbm_model.joblib'), 'research/LightGBM/results/models'),
+        (os.path.join(project_root, 'server/utils/prediction_model/results/models/lgbm_model.joblib'), 'server/utils/prediction_model/results/models'),
     ],
     hiddenimports=[
         # Tkinter support (critical for macOS)

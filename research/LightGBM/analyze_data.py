@@ -4,22 +4,70 @@ LightGBM Data Analysis Module
 Loads session logs and generates visualizations to inspect BPM data
 before LightGBM training.
 """
-import importlib.util
+import glob
+import json
+import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-# Load the shared loader from research/analyze_data.py without clashing with this module's name.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BASE_DIR = PROJECT_ROOT
-RESEARCH_DIR = PROJECT_ROOT / "research"
-PARENT_ANALYZE = RESEARCH_DIR / "analyze_data.py"
-spec = importlib.util.spec_from_file_location("research_analyze_data", PARENT_ANALYZE)
-parent_mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(parent_mod)  # type: ignore
-load_all_sessions = parent_mod.load_all_sessions
+
+
+def _read_session(csv_path: str):
+    """
+    Read a single session CSV, parse optional # meta line for params,
+    attach session_id, smoothing_window, stride, run_type.
+    """
+    session_id = Path(csv_path).parent.name
+    meta = {"smoothing_window": 3, "stride": 1, "run_type": "dynamic"}
+    # Read first line for meta
+    try:
+        with open(csv_path, "r", encoding="utf-8") as f:
+            first = f.readline()
+            if first.startswith("#"):
+                tag, _, rest = first.partition(":")
+                if tag.strip() == "# meta":
+                    meta.update(json.loads(rest.strip()))
+    except Exception:
+        pass
+    try:
+        df = pd.read_csv(csv_path, comment="#")
+    except Exception as e:
+        print(f"Error reading {csv_path}: {e}")
+        return None
+    if df.empty:
+        return None
+    df["session_id"] = session_id
+    df["smoothing_window"] = meta.get("smoothing_window", 3)
+    df["stride"] = meta.get("stride", 1)
+    df["run_type"] = str(meta.get("run_type", "dynamic"))
+    return df
+
+
+def load_all_sessions(base_dir):
+    """
+    Scans the directory for all session_data.csv files.
+    Returns a combined DataFrame.
+    """
+    path_pattern = os.path.join(base_dir, "**", "session_data.csv")
+    csv_files = glob.glob(path_pattern, recursive=True)
+    
+    print(f"Found {len(csv_files)} session files.")
+    
+    dfs = []
+    for f in csv_files:
+        df = _read_session(f)
+        if df is not None:
+            dfs.append(df)
+            
+    if not dfs:
+        return pd.DataFrame()
+        
+    return pd.concat(dfs, ignore_index=True)
 
 # Output directories for results
 RESULTS_DIR = Path(__file__).parent / "results"
