@@ -417,29 +417,40 @@ class LivePlotter:
             # Lines will be updated after scatter so points appear first
             pass
             
-        # X-axis: sliding window based on view_window_sec
+        # X-axis: show full session up to 100s, then sliding window
         current_max = t.max() if len(t) > 0 else 0
+        current_min = t.min() if len(t) > 0 else 0
         self.max_x_seen = current_max
-        x_min = max(0, current_max - getattr(self, "view_window_sec", 240))
-        self.ax1.set_xlim(x_min, current_max + 5)
+        
+        # Use actual data range (handles sliding window from GUI)
+        x_min = max(0, current_min)
+        x_max = max(10, current_max + 2)
+        self.ax1.set_xlim(x_min, x_max)
         
         # Calculate multiples (from sliced song data)
         s_double = s_song * 2
         s_half = s_song * 0.5
         
-        # Y-axis Auto-Scaling
-        # We need to account for the new lines if they are visible
+        # Y-axis Dynamic Auto-Scaling
+        # Calculate min and max from visible data
         max_s = s_song.max() if len(s_song) > 0 and not pd.isna(s_song.max()) else 0
         max_w = w.max() if len(w) > 0 and not pd.isna(w.max()) else 0
+        min_s = s_song.min() if len(s_song) > 0 and not pd.isna(s_song.min()) else 0
+        min_w = w[w > 0].min() if len(w[w > 0]) > 0 else 0  # Exclude zeros
         
         current_max = max(max_s, max_w)
+        current_min = min(min_s, min_w) if (min_s > 0 and min_w > 0) else min(min_s, min_w) if max(min_s, min_w) > 0 else 0
+        
         if self.show_double: 
             max_d = s_double.max() if len(s_double)>0 else 0
             current_max = max(current_max, max_d)
         
-        # Determine new upper limit (at least 160)
-        new_ymax = max(160, current_max + 10)
-        self.ax1.set_ylim(0, new_ymax)
+        # Dynamic Y range with padding (15 BPM margin)
+        padding = 15
+        new_ymin = max(0, current_min - padding) if current_min > 0 else 0
+        new_ymax = max(160, current_max + padding)
+        
+        self.ax1.set_ylim(new_ymin, new_ymax)
 
         # Scatter points (Footsteps) - with safety guards and recent-window limit
         try:

@@ -285,8 +285,8 @@ class GuiApp:
         self.rnd_val_str = tk.StringVar(value="20")
         self.gamify_var = tk.BooleanVar(value=False)
         self.random_simple_threshold_var = tk.StringVar(value="5.0")
-        self.random_simple_steps_var = tk.StringVar(value="20")
-        self.random_simple_timeout_var = tk.StringVar(value="30.0")
+        self.random_simple_steps_var = tk.StringVar(value="5")
+        self.random_simple_timeout_var = tk.StringVar(value="15.0")
         self.hybrid_lock_var = tk.StringVar(value="5")
         self.hybrid_unlock_var = tk.StringVar(value="1.5")
         self.hybrid_stability_var = tk.StringVar(value="3.0")
@@ -2151,7 +2151,7 @@ class GuiApp:
         # Create results window
         results_win = tk.Toplevel(self.root)
         results_win.title("Training Results")
-        results_win.geometry("900x700")
+        results_win.geometry("1200x900")
         results_win.configure(bg=self.P["bg"])
         
         # Header
@@ -2170,15 +2170,16 @@ class GuiApp:
         plot_combo = ttk.Combobox(selector_frame, textvariable=plot_var, values=plot_names, state="readonly", width=40)
         plot_combo.pack(side="left", padx=(10, 0))
         
-        # Image display area
-        img_frame = ttk.Frame(results_win, style="Card.TFrame", padding=10)
-        img_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        # Image display area - minimal padding to maximize image space
+        img_frame = ttk.Frame(results_win, style="Card.TFrame", padding=5)
+        img_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
         
-        img_label = ttk.Label(img_frame, text="Select a plot to view", style="CardLabel.TLabel")
+        img_label = ttk.Label(img_frame, text="Select a plot to view", style="CardLabel.TLabel", anchor="center")
         img_label.pack(fill="both", expand=True)
         
         # Store reference to prevent garbage collection
         results_win._photo_ref = None
+        results_win._current_plot_path = None
         
         def load_plot(*_):
             selected = plot_var.get()
@@ -2187,21 +2188,57 @@ class GuiApp:
             plot_path = results_dir / f"{selected}.png"
             if not plot_path.exists():
                 return
+            
+            # Store current plot path for resize events
+            results_win._current_plot_path = plot_path
+            
+            try:
+                # Use the shared loading function
+                load_plot_from_path(plot_path)
+            except ImportError:
+                img_label.configure(text=f"PIL/Pillow not installed.\nPlot saved at:\n{plot_path}", image="")
+        
+        plot_combo.bind("<<ComboboxSelected>>", load_plot)
+        
+        # Reload plot on window resize with debouncing to prevent flickering
+        results_win._resize_timer = None
+        def on_resize(event=None):
+            # Only reload if we have a plot loaded and event is from the main window
+            if event and event.widget != results_win:
+                return
+            if results_win._current_plot_path is not None:
+                # Cancel previous timer if exists
+                if results_win._resize_timer:
+                    results_win.after_cancel(results_win._resize_timer)
+                # Schedule reload after 200ms of no resize events
+                results_win._resize_timer = results_win.after(200, lambda: load_plot_from_path(results_win._current_plot_path))
+        
+        def load_plot_from_path(plot_path):
+            """Helper to reload plot from a specific path."""
             try:
                 from PIL import Image, ImageTk
                 img = Image.open(plot_path)
-                # Scale to fit window while maintaining aspect ratio
-                max_w, max_h = 850, 550
+                
+                # Force window to update geometry before measuring
+                results_win.update_idletasks()
+                
+                # Get actual window size
+                win_width = results_win.winfo_width()
+                win_height = results_win.winfo_height()
+                
+                # Use window dimensions with minimal margins (header ~80px, padding ~40px)
+                max_w = max(400, win_width - 50)
+                max_h = max(300, win_height - 130)
+                
+                # Scale to fit available space while maintaining aspect ratio
                 img.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
                 photo = ImageTk.PhotoImage(img)
                 img_label.configure(image=photo, text="")
-                results_win._photo_ref = photo  # Keep reference
-            except ImportError:
-                img_label.configure(text=f"PIL/Pillow not installed.\nPlot saved at:\n{plot_path}", image="")
+                results_win._photo_ref = photo
             except Exception as e:
                 img_label.configure(text=f"Error loading image: {e}", image="")
         
-        plot_combo.bind("<<ComboboxSelected>>", load_plot)
+        results_win.bind("<Configure>", on_resize)
         
         # Open folder button
         def open_folder():
@@ -2317,6 +2354,83 @@ class GuiApp:
         # Bind canvas resize to update plot display
         self.analysis_plot_canvas.bind("<Configure>", lambda e: self._on_analysis_canvas_resize())
         
+        # Mouse wheel scrolling for zoomed plot
+        def on_analysis_mousewheel(event):
+            if self.analysis_zoom_level > 1.0:
+                # Calculate scroll amount (10% of view per scroll)
+                scroll_amount = 0.1 * (-1 if event.delta > 0 else 1)
+                
+                # Shift+scroll for horizontal, regular scroll for vertical
+                if event.state & 0x1:  # Shift key held
+                    x_pos = self.analysis_plot_canvas.xview()[0] + scroll_amount
+                    self.analysis_plot_canvas.xview_moveto(max(0, min(1, x_pos)))
+                else:
+                    y_pos = self.analysis_plot_canvas.yview()[0] + scroll_amount
+                    self.analysis_plot_canvas.yview_moveto(max(0, min(1, y_pos)))
+        
+        self.analysis_plot_canvas.bind("<MouseWheel>", on_analysis_mousewheel)
+        
+        # Also bind keyboard arrows for panning when zoomed
+        def on_analysis_key(event):
+            if self.analysis_zoom_level > 1.0:
+                scroll_amount = 0.05  # 5% per key press
+                if event.keysym == "Left":
+                    x_pos = self.analysis_plot_canvas.xview()[0] - scroll_amount
+                    self.analysis_plot_canvas.xview_moveto(max(0, min(1, x_pos)))
+                elif event.keysym == "Right":
+                    x_pos = self.analysis_plot_canvas.xview()[0] + scroll_amount
+                    self.analysis_plot_canvas.xview_moveto(max(0, min(1, x_pos)))
+                elif event.keysym == "Up":
+                    y_pos = self.analysis_plot_canvas.yview()[0] - scroll_amount
+                    self.analysis_plot_canvas.yview_moveto(max(0, min(1, y_pos)))
+                elif event.keysym == "Down":
+                    y_pos = self.analysis_plot_canvas.yview()[0] + scroll_amount
+                    self.analysis_plot_canvas.yview_moveto(max(0, min(1, y_pos)))
+        
+        self.analysis_plot_canvas.bind("<Left>", on_analysis_key)
+        self.analysis_plot_canvas.bind("<Right>", on_analysis_key)
+        self.analysis_plot_canvas.bind("<Up>", on_analysis_key)
+        self.analysis_plot_canvas.bind("<Down>", on_analysis_key)
+        
+        # Drag-to-pan functionality when zoomed
+        self._drag_data = {"x": 0, "y": 0, "dragging": False}
+        
+        def on_drag_start(event):
+            if self.analysis_zoom_level > 1.0:
+                self._drag_data["x"] = event.x
+                self._drag_data["y"] = event.y
+                self._drag_data["dragging"] = True
+                self.analysis_plot_canvas.config(cursor="fleur")
+                self.analysis_plot_canvas.focus_set()
+        
+        def on_drag_motion(event):
+            if self._drag_data["dragging"] and self.analysis_zoom_level > 1.0:
+                # Calculate scroll amount as fraction of canvas size
+                canvas_width = self.analysis_plot_canvas.winfo_width()
+                canvas_height = self.analysis_plot_canvas.winfo_height()
+                
+                dx = (self._drag_data["x"] - event.x) / canvas_width
+                dy = (self._drag_data["y"] - event.y) / canvas_height
+                
+                # Get current scroll position and add delta
+                x_pos = self.analysis_plot_canvas.xview()[0] + dx
+                y_pos = self.analysis_plot_canvas.yview()[0] + dy
+                
+                # Apply scroll
+                self.analysis_plot_canvas.xview_moveto(max(0, min(1, x_pos)))
+                self.analysis_plot_canvas.yview_moveto(max(0, min(1, y_pos)))
+                
+                self._drag_data["x"] = event.x
+                self._drag_data["y"] = event.y
+        
+        def on_drag_end(event):
+            self._drag_data["dragging"] = False
+            self.analysis_plot_canvas.config(cursor="")
+        
+        self.analysis_plot_canvas.bind("<ButtonPress-1>", on_drag_start)
+        self.analysis_plot_canvas.bind("<B1-Motion>", on_drag_motion)
+        self.analysis_plot_canvas.bind("<ButtonRelease-1>", on_drag_end)
+        
         # Register this canvas for smart mousewheel routing
         self.scrollable_canvases.append(('analysis', self.analysis_plot_canvas, plot_scroll_frame))
         
@@ -2422,8 +2536,12 @@ class GuiApp:
             self.analysis_plot_label.configure(image=photo, text="")
             self.analysis_photo_ref = photo  # Keep reference
             
-            # Update canvas scroll region
+            # Update canvas scroll region and scroll increments
             self.analysis_plot_canvas.configure(scrollregion=(0, 0, new_w, new_h))
+            
+            # Set scroll increments (10% of visible area per unit)
+            self.analysis_plot_canvas.configure(xscrollincrement=max(1, new_w // 20))
+            self.analysis_plot_canvas.configure(yscrollincrement=max(1, new_h // 20))
             
             # Update zoom level display
             zoom_percent = int(self.analysis_zoom_level * 100)
@@ -3157,16 +3275,23 @@ class GuiApp:
             if df.empty:
                 return
 
-            # Sliding time window: keep only recent seconds
+            # Sliding window after 100 seconds to prevent performance issues
             stage = "window"
             tmax = df["seconds"].max()
             if pd.isna(tmax):
                 return
-
-            window_start = tmax - self.view_window_sec
-            keep_mask = df["seconds"] >= window_start
-            if not keep_mask.all():
-                df = df[keep_mask].reset_index(drop=True)
+            
+            # After 100 seconds, start sliding window to keep performance stable
+            window_size = 100  # seconds
+            if tmax > window_size:
+                window_start = tmax - window_size
+                keep_mask = df["seconds"] >= window_start
+                if not keep_mask.all():
+                    df = df[keep_mask].reset_index(drop=True)
+                    
+                # Also trim the live_data_buffer to prevent memory growth
+                if len(self.live_data_buffer) > 10000:
+                    self.live_data_buffer = self.live_data_buffer[-8000:]
                 
             # Downsample for rendering only (keep full buffer for history/export)
             stage = "downsample"
