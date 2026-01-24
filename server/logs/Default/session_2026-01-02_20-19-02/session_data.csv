@@ -1,3 +1,0 @@
-# meta: {"smoothing_window": 3, "stride": 1}
-time,song_bpm,walking_bpm,step_event,instant_bpm
-00:00:00.519,80.0,80.0,False,

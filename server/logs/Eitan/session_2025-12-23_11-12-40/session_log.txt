@@ -1,8 +1,0 @@
-Session log started at 2025-12-23_11-12-40 (t=0.000)
-[00:00:00.003] DEBUG: Attempting to initialize MidiBeatSync...
-[00:00:00.071] DEBUG: MidiBeatSync initialized successfully.
-[00:00:00.072] Starting in DYNAMIC MODE
-[00:00:02.529] KNN prediction enabled
-[00:00:02.530] Session started
-[00:00:02.530] DEBUG: Attempting to open serial port COM3...
-[00:00:02.534] DEBUG: Serial port COM3 opened successfully.

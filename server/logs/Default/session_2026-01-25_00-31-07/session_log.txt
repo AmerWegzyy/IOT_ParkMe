@@ -1,0 +1,259 @@
+Session log started at 2026-01-25_00-31-07 (t=0.000)
+[00:00:00.000] DEBUG: Attempting to initialize MidiBeatSync...
+[00:00:00.000] DEBUG: MidiBeatSync initialized successfully.
+[00:00:00.000] Starting in MANUAL MODE.
+[00:00:00.000] Setting fixed BPM to 100.0
+[00:00:00.000] Run type: manual
+[00:00:00.000] Prediction model enabled: lgbm_model.joblib
+[00:00:00.000] MANUAL: Target set to 100.0
+[00:00:00.000] Mode Activated: ManualMode
+[00:00:00.000] Session started
+[00:00:00.000] DEBUG: Attempting to open serial port COM3...
+[00:00:00.000] DEBUG: Serial port COM3 opened successfully.
+[00:00:00.000] Setting smoothing window to 4
+[00:00:00.000] Smoothing window set response: ACK,WINDOW,4
+[00:00:00.000] ACK,RESET received
+[00:00:00.000] ACK,START received
+[00:00:00.000] Session handshake completed
+[00:00:00.000] Running main loop...
+[00:00:00.000] Session timer started - music is now playing
+[00:00:01.980] Processed: BPM=100.0
+[00:00:03.435] Processed: BPM=41.18
+[00:00:04.122] Processed: BPM=56.34
+[00:00:04.682] Processed: BPM=66.82
+[00:00:05.341] Processed: BPM=71.45
+[00:00:05.518] HARDWARE: Button Delta Received: -1.0
+[00:00:05.518] MANUAL: Target set to 99.0
+[00:00:05.782] HARDWARE: Button Delta Received: -1.0
+[00:00:05.782] MANUAL: Target set to 98.0
+[00:00:05.926] Processed: BPM=96.42
+[00:00:05.972] HARDWARE: Button Delta Received: -1.0
+[00:00:05.972] MANUAL: Target set to 97.0
+[00:00:06.212] HARDWARE: Button Delta Received: -1.0
+[00:00:06.212] MANUAL: Target set to 96.0
+[00:00:06.404] HARDWARE: Button Delta Received: -1.0
+[00:00:06.404] MANUAL: Target set to 95.0
+[00:00:06.597] Processed: BPM=96.5
+[00:00:07.030] HARDWARE: Button Delta Received: -1.0
+[00:00:07.030] MANUAL: Target set to 94.0
+[00:00:07.208] HARDWARE: Button Delta Received: -1.0
+[00:00:07.209] MANUAL: Target set to 93.0
+[00:00:07.214] Processed: BPM=94.6
+[00:00:07.690] HARDWARE: Button Delta Received: -1.0
+[00:00:07.690] MANUAL: Target set to 92.0
+[00:00:07.890] HARDWARE: Button Delta Received: -1.0
+[00:00:07.890] MANUAL: Target set to 91.0
+[00:00:07.949] Processed: BPM=91.92
+[00:00:07.995] HARDWARE: Button Delta Received: -1.0
+[00:00:07.996] MANUAL: Target set to 90.0
+[00:00:08.010] HARDWARE: Button Delta Received: -1.0
+[00:00:08.010] MANUAL: Target set to 89.0
+[00:00:08.070] HARDWARE: Button Delta Received: -1.0
+[00:00:08.071] MANUAL: Target set to 88.0
+[00:00:08.131] HARDWARE: Button Delta Received: -1.0
+[00:00:08.131] MANUAL: Target set to 87.0
+[00:00:08.525] Processed: BPM=92.41
+[00:00:08.615] HARDWARE: Button Delta Received: -1.0
+[00:00:08.616] MANUAL: Target set to 86.0
+[00:00:09.045] HARDWARE: Button Delta Received: -1.0
+[00:00:09.045] MANUAL: Target set to 85.0
+[00:00:09.142] Processed: BPM=94.34
+[00:00:09.249] HARDWARE: Button Delta Received: -1.0
+[00:00:09.250] MANUAL: Target set to 84.0
+[00:00:09.305] HARDWARE: Button Delta Received: -1.0
+[00:00:09.305] MANUAL: Target set to 83.0
+[00:00:09.363] HARDWARE: Button Delta Received: -1.0
+[00:00:09.363] MANUAL: Target set to 82.0
+[00:00:09.424] HARDWARE: Button Delta Received: -1.0
+[00:00:09.424] MANUAL: Target set to 81.0
+[00:00:09.483] HARDWARE: Button Delta Received: -1.0
+[00:00:09.483] MANUAL: Target set to 80.0
+[00:00:09.543] HARDWARE: Button Delta Received: -1.0
+[00:00:09.543] MANUAL: Target set to 79.0
+[00:00:09.604] HARDWARE: Button Delta Received: -1.0
+[00:00:09.606] MANUAL: Target set to 78.0
+[00:00:09.664] HARDWARE: Button Delta Received: -1.0
+[00:00:09.664] MANUAL: Target set to 77.0
+[00:00:09.727] HARDWARE: Button Delta Received: -1.0
+[00:00:09.728] MANUAL: Target set to 76.0
+[00:00:09.784] HARDWARE: Button Delta Received: -1.0
+[00:00:09.784] MANUAL: Target set to 75.0
+[00:00:09.797] Processed: BPM=92.84
+[00:00:09.843] HARDWARE: Button Delta Received: -1.0
+[00:00:09.843] MANUAL: Target set to 74.0
+[00:00:09.903] HARDWARE: Button Delta Received: -1.0
+[00:00:09.903] MANUAL: Target set to 73.0
+[00:00:09.967] HARDWARE: Button Delta Received: -1.0
+[00:00:09.967] MANUAL: Target set to 72.0
+[00:00:10.030] HARDWARE: Button Delta Received: -1.0
+[00:00:10.030] MANUAL: Target set to 71.0
+[00:00:10.083] HARDWARE: Button Delta Received: -2.0
+[00:00:10.083] MANUAL: Target set to 69.0
+[00:00:10.144] HARDWARE: Button Delta Received: -2.0
+[00:00:10.144] MANUAL: Target set to 67.0
+[00:00:10.204] HARDWARE: Button Delta Received: -2.0
+[00:00:10.204] MANUAL: Target set to 65.0
+[00:00:10.263] HARDWARE: Button Delta Received: -2.0
+[00:00:10.264] MANUAL: Target set to 63.0
+[00:00:10.324] HARDWARE: Button Delta Received: -2.0
+[00:00:10.324] MANUAL: Target set to 61.0
+[00:00:10.383] HARDWARE: Button Delta Received: -2.0
+[00:00:10.383] MANUAL: Target set to 59.0
+[00:00:10.419] Processed: BPM=97.21
+[00:00:10.464] HARDWARE: Button Delta Received: -2.0
+[00:00:10.464] MANUAL: Target set to 57.0
+[00:00:10.504] HARDWARE: Button Delta Received: -2.0
+[00:00:10.504] MANUAL: Target set to 55.0
+[00:00:10.563] HARDWARE: Button Delta Received: -2.0
+[00:00:10.563] MANUAL: Target set to 53.0
+[00:00:10.623] HARDWARE: Button Delta Received: -2.0
+[00:00:10.623] MANUAL: Target set to 51.0
+[00:00:10.683] HARDWARE: Button Delta Received: -2.0
+[00:00:10.683] MANUAL: Target set to 49.0
+[00:00:10.759] HARDWARE: Button Delta Received: -1.0
+[00:00:10.759] MANUAL: Target set to 48.0
+[00:00:10.960] HARDWARE: Button Delta Received: -1.0
+[00:00:10.960] MANUAL: Target set to 47.0
+[00:00:11.019] HARDWARE: Button Delta Received: -1.0
+[00:00:11.020] MANUAL: Target set to 46.0
+[00:00:11.038] Processed: BPM=95.54
+[00:00:11.556] HARDWARE: Button Delta Received: 1.0
+[00:00:11.557] MANUAL: Target set to 47.0
+[00:00:11.716] Processed: BPM=93.28
+[00:00:11.761] HARDWARE: Button Delta Received: 1.0
+[00:00:11.761] MANUAL: Target set to 48.0
+[00:00:11.817] HARDWARE: Button Delta Received: 1.0
+[00:00:11.817] MANUAL: Target set to 49.0
+[00:00:11.877] HARDWARE: Button Delta Received: 1.0
+[00:00:11.877] MANUAL: Target set to 50.0
+[00:00:11.937] HARDWARE: Button Delta Received: 1.0
+[00:00:11.937] MANUAL: Target set to 51.0
+[00:00:11.997] HARDWARE: Button Delta Received: 1.0
+[00:00:11.997] MANUAL: Target set to 52.0
+[00:00:12.057] HARDWARE: Button Delta Received: 1.0
+[00:00:12.057] MANUAL: Target set to 53.0
+[00:00:12.117] HARDWARE: Button Delta Received: 1.0
+[00:00:12.117] MANUAL: Target set to 54.0
+[00:00:12.176] HARDWARE: Button Delta Received: 1.0
+[00:00:12.176] MANUAL: Target set to 55.0
+[00:00:12.236] HARDWARE: Button Delta Received: 1.0
+[00:00:12.237] MANUAL: Target set to 56.0
+[00:00:12.296] HARDWARE: Button Delta Received: 1.0
+[00:00:12.297] MANUAL: Target set to 57.0
+[00:00:12.341] Processed: BPM=94.3
+[00:00:12.387] HARDWARE: Button Delta Received: 1.0
+[00:00:12.388] MANUAL: Target set to 58.0
+[00:00:12.450] HARDWARE: Button Delta Received: 1.0
+[00:00:12.450] MANUAL: Target set to 59.0
+[00:00:12.597] HARDWARE: Button Delta Received: 1.0
+[00:00:12.598] MANUAL: Target set to 60.0
+[00:00:12.973] Processed: BPM=93.97
+[00:00:13.169] HARDWARE: Button Delta Received: 1.0
+[00:00:13.169] MANUAL: Target set to 61.0
+[00:00:13.989] HARDWARE: Button Delta Received: 1.0
+[00:00:13.989] MANUAL: Target set to 62.0
+[00:00:14.166] HARDWARE: Button Delta Received: 1.0
+[00:00:14.166] MANUAL: Target set to 63.0
+[00:00:14.391] HARDWARE: Button Delta Received: 1.0
+[00:00:14.391] MANUAL: Target set to 64.0
+[00:00:14.587] HARDWARE: Button Delta Received: 1.0
+[00:00:14.587] MANUAL: Target set to 65.0
+[00:00:14.772] HARDWARE: Button Delta Received: 1.0
+[00:00:14.772] MANUAL: Target set to 66.0
+[00:00:14.949] HARDWARE: Button Delta Received: 1.0
+[00:00:14.950] MANUAL: Target set to 67.0
+[00:00:15.179] HARDWARE: Button Delta Received: 1.0
+[00:00:15.179] MANUAL: Target set to 68.0
+[00:00:15.377] HARDWARE: Button Delta Received: 1.0
+[00:00:15.377] MANUAL: Target set to 69.0
+[00:00:15.436] HARDWARE: Button Delta Received: 1.0
+[00:00:15.437] MANUAL: Target set to 70.0
+[00:00:15.496] HARDWARE: Button Delta Received: 1.0
+[00:00:15.497] MANUAL: Target set to 71.0
+[00:00:15.556] HARDWARE: Button Delta Received: 1.0
+[00:00:15.556] MANUAL: Target set to 72.0
+[00:00:15.617] HARDWARE: Button Delta Received: 1.0
+[00:00:15.617] MANUAL: Target set to 73.0
+[00:00:15.676] HARDWARE: Button Delta Received: 1.0
+[00:00:15.676] MANUAL: Target set to 74.0
+[00:00:15.736] HARDWARE: Button Delta Received: 1.0
+[00:00:15.737] MANUAL: Target set to 75.0
+[00:00:15.804] HARDWARE: Button Delta Received: 1.0
+[00:00:15.804] MANUAL: Target set to 76.0
+[00:00:15.857] HARDWARE: Button Delta Received: 1.0
+[00:00:15.857] MANUAL: Target set to 77.0
+[00:00:15.917] HARDWARE: Button Delta Received: 1.0
+[00:00:15.917] MANUAL: Target set to 78.0
+[00:00:15.977] HARDWARE: Button Delta Received: 1.0
+[00:00:15.977] MANUAL: Target set to 79.0
+[00:00:16.036] HARDWARE: Button Delta Received: 1.0
+[00:00:16.038] MANUAL: Target set to 80.0
+[00:00:16.096] HARDWARE: Button Delta Received: 1.0
+[00:00:16.096] MANUAL: Target set to 81.0
+[00:00:16.157] HARDWARE: Button Delta Received: 1.0
+[00:00:16.157] MANUAL: Target set to 82.0
+[00:00:16.217] HARDWARE: Button Delta Received: 2.0
+[00:00:16.217] MANUAL: Target set to 84.0
+[00:00:16.276] HARDWARE: Button Delta Received: 2.0
+[00:00:16.277] MANUAL: Target set to 86.0
+[00:00:16.337] HARDWARE: Button Delta Received: 2.0
+[00:00:16.337] MANUAL: Target set to 88.0
+[00:00:16.397] HARDWARE: Button Delta Received: 2.0
+[00:00:16.397] MANUAL: Target set to 90.0
+[00:00:16.457] HARDWARE: Button Delta Received: 2.0
+[00:00:16.458] MANUAL: Target set to 92.0
+[00:00:16.520] HARDWARE: Button Delta Received: 2.0
+[00:00:16.520] MANUAL: Target set to 94.0
+[00:00:16.577] HARDWARE: Button Delta Received: 2.0
+[00:00:16.577] MANUAL: Target set to 96.0
+[00:00:16.636] HARDWARE: Button Delta Received: 2.0
+[00:00:16.637] MANUAL: Target set to 98.0
+[00:00:16.697] HARDWARE: Button Delta Received: 2.0
+[00:00:16.697] MANUAL: Target set to 100.0
+[00:00:16.759] HARDWARE: Button Delta Received: 2.0
+[00:00:16.760] MANUAL: Target set to 102.0
+[00:00:16.817] HARDWARE: Button Delta Received: 2.0
+[00:00:16.817] MANUAL: Target set to 104.0
+[00:00:16.877] HARDWARE: Button Delta Received: 2.0
+[00:00:16.877] MANUAL: Target set to 106.0
+[00:00:16.936] HARDWARE: Button Delta Received: 2.0
+[00:00:16.936] MANUAL: Target set to 108.0
+[00:00:17.708] HARDWARE: Button Delta Received: -1.0
+[00:00:17.708] MANUAL: Target set to 107.0
+[00:00:17.906] HARDWARE: Button Delta Received: -1.0
+[00:00:17.906] MANUAL: Target set to 106.0
+[00:00:17.966] HARDWARE: Button Delta Received: -1.0
+[00:00:17.966] MANUAL: Target set to 105.0
+[00:00:18.025] HARDWARE: Button Delta Received: -1.0
+[00:00:18.025] MANUAL: Target set to 104.0
+[00:00:18.086] HARDWARE: Button Delta Received: -1.0
+[00:00:18.086] MANUAL: Target set to 103.0
+[00:00:18.148] HARDWARE: Button Delta Received: -1.0
+[00:00:18.148] MANUAL: Target set to 102.0
+[00:00:18.208] HARDWARE: Button Delta Received: -1.0
+[00:00:18.209] MANUAL: Target set to 101.0
+[00:00:18.267] HARDWARE: Button Delta Received: -1.0
+[00:00:18.267] MANUAL: Target set to 100.0
+[00:00:18.326] HARDWARE: Button Delta Received: -1.0
+[00:00:18.326] MANUAL: Target set to 99.0
+[00:00:18.385] HARDWARE: Button Delta Received: -1.0
+[00:00:18.386] MANUAL: Target set to 98.0
+[00:00:18.446] HARDWARE: Button Delta Received: -1.0
+[00:00:18.447] MANUAL: Target set to 97.0
+[00:00:18.506] HARDWARE: Button Delta Received: -1.0
+[00:00:18.507] MANUAL: Target set to 96.0
+[00:00:18.568] HARDWARE: Button Delta Received: -1.0
+[00:00:18.568] MANUAL: Target set to 95.0
+[00:00:18.625] HARDWARE: Button Delta Received: -1.0
+[00:00:18.625] MANUAL: Target set to 94.0
+[00:00:18.686] HARDWARE: Button Delta Received: -1.0
+[00:00:18.686] MANUAL: Target set to 93.0
+[00:00:18.745] HARDWARE: Button Delta Received: -2.0
+[00:00:18.745] MANUAL: Target set to 91.0
+[00:00:18.808] HARDWARE: Button Delta Received: -2.0
+[00:00:18.808] MANUAL: Target set to 89.0
+[00:00:18.865] HARDWARE: Button Delta Received: -2.0
+[00:00:18.865] MANUAL: Target set to 87.0
+[00:00:19.821] Processed: BPM=27.32
+[00:00:20.324] Processed: BPM=27.87
+[00:00:23.578] Processed: BPM=21.37

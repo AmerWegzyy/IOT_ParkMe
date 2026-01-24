@@ -1,0 +1,8 @@
+# meta: {"smoothing_window": 3, "stride": 1, "run_type": "dynamic"}
+time,song_bpm,walking_bpm,step_event,instant_bpm
+00:00:00.000,0,80.0,True,0.0
+00:00:00.634,0,94.79,True,94.79
+00:00:01.297,0,92.59,True,90.5
+00:00:01.778,0,101.29,True,124.74
+00:00:02.864,0,80.75,True,55.3
+00:00:04.471,0,56.71,True,37.31

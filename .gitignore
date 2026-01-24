@@ -5,16 +5,14 @@ server/.idea/
 server/__pycache__/
 server/utils/__pycache__/
 server/utils/logs
+server/utils/engine/__pycache__
+server/utils/hardware/__pycache__
 server/utils/Modes/__pycache__
+server/utils/prediction_model/__pycache__
+server/utils/session/__pycache__
 .vscode/
 .venv/
 venv311/
 .cursor/
-server/utils/__pycache__
-research/processed_data
-research/__pycache__
-research/results/plots
-research/results/models/
-research/lightGBM/__pycache__/
 
 

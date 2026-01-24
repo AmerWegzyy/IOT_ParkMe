@@ -1,0 +1,2 @@
+# meta: {"smoothing_window": 3, "stride": 1, "run_type": "dynamic"}
+time,song_bpm,walking_bpm,step_event,instant_bpm

@@ -1,0 +1,50 @@
+Session log started at 2026-01-25_00-16-11 (t=0.000)
+[00:00:00.000] DEBUG: Attempting to initialize MidiBeatSync...
+[00:00:00.000] DEBUG: MidiBeatSync initialized successfully.
+[00:00:00.000] Starting in DYNAMIC MODE
+[00:00:00.000] Run type: dynamic
+[00:00:00.000] Prediction model enabled: lgbm_model.joblib
+[00:00:00.000] Mode Activated: DynamicMode
+[00:00:00.000] Session started
+[00:00:00.000] DEBUG: Attempting to open serial port COM3...
+[00:00:00.000] DEBUG: Serial port COM3 opened successfully.
+[00:00:00.000] Setting smoothing window to 1
+[00:00:00.000] Smoothing window set response: ACK,WINDOW,1
+[00:00:00.000] Setting update stride to 1
+[00:00:00.000] Update stride set response: ACK,STRIDE,1
+[00:00:00.000] ACK,RESET received
+[00:00:00.000] ACK,START received
+[00:00:00.000] Session handshake completed
+[00:00:00.000] Running main loop...
+[00:00:00.000] Session timer started - music is now playing
+[00:00:00.039] Processed: BPM=80.0
+[00:00:01.587] Processed: BPM=38.61
+[00:00:02.330] Processed: BPM=80.97
+[00:00:02.952] Processed: BPM=96.46
+[00:00:03.587] Processed: BPM=96.77
+[00:00:04.145] Processed: BPM=105.82
+[00:00:05.762] Processed: BPM=37.01
+[00:00:06.443] Processed: BPM=87.98
+[00:00:07.032] Processed: BPM=102.56
+[00:00:07.704] Processed: BPM=88.63
+[00:00:08.560] Processed: BPM=70.18
+[00:00:08.987] Processed: BPM=140.85
+[00:00:10.367] Processed: BPM=43.38
+[00:00:13.471] Processed: BPM=19.35
+[00:00:17.045] Processed: BPM=16.8
+[00:00:20.956] Processed: BPM=15.33
+[00:00:24.898] Processed: BPM=15.21
+[00:00:25.022] Processed: BPM=491.8
+[00:00:25.315] Processed: BPM=202.7
+[00:00:26.590] Processed: BPM=47.1
+[00:00:29.042] Processed: BPM=24.48
+[00:00:29.621] Processed: BPM=104.53
+[00:00:32.563] Processed: BPM=20.38
+[00:00:35.695] Processed: BPM=19.15
+[00:00:36.813] Processed: BPM=53.57
+[00:00:37.481] Processed: BPM=89.69
+[00:00:38.180] Processed: BPM=85.84
+[00:00:38.859] Processed: BPM=88.76
+[00:00:39.374] Processed: BPM=116.73
+[00:00:45.433] Processed: BPM=9.9
+[00:00:45.876] Processed: BPM=135.75

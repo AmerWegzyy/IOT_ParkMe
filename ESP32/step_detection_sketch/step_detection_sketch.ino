@@ -25,14 +25,14 @@ typedef struct __attribute__((packed)) {
     struct __attribute__((packed)) {
        uint32_t intervalMS;
       uint8_t footId; 
-    } Step;
+    } step;
     struct __attribute__((packed)) {
       int8_t delta;
-    } BPM;
+    } bpm;
     struct __attribute__((packed)) {
       uint8_t cmd;
       int16_t arg;
-    } Ctrl;
+    } ctrl;
   };
 } Packet;
 
@@ -40,8 +40,17 @@ typedef struct __attribute__((packed)) {
 const uint8_t CMD_CAL_WEIGHT = 1;
 
 // Step detection tuning (mutable after calibration):
-int threshold = 1200;
-int pressureBuffer = 600;
+// Per-sensor thresholds and baselines
+int thresholdRight = 1200;
+int thresholdLeft = 1200;
+int baselineRight = 0;   // Resting state value
+int baselineLeft = 0;    // Resting state value
+
+// Pressure buffer as percentage of threshold (hysteresis)
+const float PRESSURE_BUFFER_PERCENT = 0.55;  // 55% of threshold
+int pressureBufferRight = 540;  // Will be recalculated in calibration
+int pressureBufferLeft = 540;   // Will be recalculated in calibration
+
 const uint32_t REFRACTORY_MS = 120;
 
 uint32_t lastStepTime = 0;
@@ -91,29 +100,62 @@ void onDataRecv(const uint8_t* mac, const uint8_t* incomingData, int len) {
   }
 }
 
-// Calibration helper: sample both FSRs, set threshold/buffer
-int calibrateWeight(uint16_t samples = 20000, uint16_t delayMs = 5, int margin = 150, int minThresh = 300) {
+// Calibration helper: sample both FSRs, set PER-SENSOR thresholds
+int calibrateWeight(uint16_t samples = 200, uint16_t delayMs = 5, int margin = 150, int minThresh = 300) {
   long sumR = 0, sumL = 0;
+  
+  Serial.println("Calibrating... Stand normally on both sensors.");
+  
   for (uint16_t i = 0; i < samples; i++) {
     sumR += analogRead(RIGHT_PIN);
     sumL += analogRead(LEFT_PIN);
     delay(delayMs);
   }
+  
   int avgR = sumR / samples;
   int avgL = sumL / samples;
-  int baseline = max(avgR, avgL);              // heavier-loaded side
-  int newThresh = max(minThresh, baseline - margin);
-  threshold = newThresh;
-  pressureBuffer = max(200, newThresh / 2);   
-  return newThresh;
+  
+  // Store baselines (resting/standing state)
+  baselineRight = avgR;
+  baselineLeft = avgL;
+  
+  // Calculate individual thresholds: baseline - margin
+  // This accounts for weaker sensors automatically
+  thresholdRight = max(minThresh, avgR - margin);
+  thresholdLeft = max(minThresh, avgL - margin);
+  
+  // Calculate pressure buffers as PERCENTAGE of threshold
+  pressureBufferRight = (int)(thresholdRight * PRESSURE_BUFFER_PERCENT);
+  pressureBufferLeft = (int)(thresholdLeft * PRESSURE_BUFFER_PERCENT);
+  
+  // Safety check: minimum buffer
+  pressureBufferRight = max(200, pressureBufferRight);
+  pressureBufferLeft = max(200, pressureBufferLeft);
+  
+  Serial.print("Right sensor - baseline: ");
+  Serial.print(avgR);
+  Serial.print(", threshold: ");
+  Serial.print(thresholdRight);
+  Serial.print(", buffer: ");
+  Serial.println(pressureBufferRight);
+  
+  Serial.print("Left sensor - baseline: ");
+  Serial.print(avgL);
+  Serial.print(", threshold: ");
+  Serial.print(thresholdLeft);
+  Serial.print(", buffer: ");
+  Serial.println(pressureBufferLeft);
+  
+  // Return average threshold for ACK
+  return (thresholdRight + thresholdLeft) / 2;
 }
 
 // Send a control ACK/ERR back to receiver (arg can carry status or threshold)
 void sendControlAck(uint8_t cmd, int16_t arg) {
   Packet resp{};
   resp.type = MSG_CMD;
-  resp.Ctrl.cmd = cmd;
-  resp.Ctrl.arg = arg;
+  resp.ctrl.cmd = cmd;
+  resp.ctrl.arg = arg;
   sendPacket(resp);
 }
 
@@ -125,13 +167,13 @@ void processControlIfPending() {
   ctrlPending = false;
   interrupts();
 
-  if (p.Ctrl.cmd == CMD_CAL_WEIGHT) {
-    int margin = (int)p.Ctrl.arg;
+  if (p.ctrl.cmd == CMD_CAL_WEIGHT) {
+    int margin = (int)p.ctrl.arg;
     if (margin <= 0) margin = 150;
     int newThresh = calibrateWeight(200, 5, margin);
     sendControlAck(CMD_CAL_WEIGHT, (int16_t)newThresh);  // Ack with new threshold value
   } else {
-    sendControlAck(p.Ctrl.cmd, (int16_t)-1); // Unknown command -> error
+    sendControlAck(p.ctrl.cmd, (int16_t)-1); // Unknown command -> error
   }
 }
 
@@ -167,7 +209,7 @@ void handleButton(Button &b, int8_t dir, uint32_t now) {
 
     Packet p{};
     p.type = MSG_BPM_DELTA;
-    p.BPM.delta = dir * 1;
+    p.bpm.delta = dir * 1;
     sendPacket(p);
     return;
   }
@@ -187,7 +229,7 @@ void handleButton(Button &b, int8_t dir, uint32_t now) {
 
       Packet p{};
       p.type = MSG_BPM_DELTA;
-      p.BPM.delta = dir * step;
+      p.bpm.delta = dir * step;
       sendPacket(p);
 
       b.tRepeat = now;
@@ -234,7 +276,13 @@ void setup() {
 
   esp_now_register_recv_cb(onDataRecv);
 
-  Serial.println("ready to send");
+  // Initial calibration on startup
+  Serial.println("Starting initial calibration in 2 seconds...");
+  Serial.println("Please stand normally on BOTH sensors.");
+  delay(2000);
+  calibrateWeight(200, 5, 200);  // Increased margin to 200 for less sensitivity
+  
+  Serial.println("\nCalibration complete. Ready to send.");
 }
 
 // ---------------- Loop ----------------
@@ -259,10 +307,10 @@ void loop() {
   int rightFsr = lowPass(analogRead(RIGHT_PIN), rState);
   int leftFsr  = lowPass(analogRead(LEFT_PIN),  lState);
 
-  // Flag reset:
-  if (rightFsr <= threshold - pressureBuffer) 
+  // Flag reset (per-sensor thresholds with percentage-based buffers):
+  if (rightFsr <= thresholdRight - pressureBufferRight) 
     rightFlag = false;
-  if (leftFsr  <= threshold - pressureBuffer) 
+  if (leftFsr  <= thresholdLeft - pressureBufferLeft) 
     leftFlag  = false;
 
   // New step detection:
@@ -270,14 +318,14 @@ void loop() {
   int stepFootId = 0;
   int triggeredFsr = 0;
 
-  //checking if there is pressure on the sensors
-  if(!rightFlag && rightFsr > threshold){
+  // Checking if there is pressure on the sensors (per-sensor thresholds)
+  if(!rightFlag && rightFsr > thresholdRight){
     rightFlag = true;
     stepDetected = true;
     stepFootId = 1;
     triggeredFsr = rightFsr;
   }
-  if(!leftFlag && leftFsr > threshold){
+  if(!leftFlag && leftFsr > thresholdLeft){
     leftFlag = true;
     stepDetected = true;
     stepFootId = 2;
@@ -290,9 +338,9 @@ void loop() {
 
     Packet p{};
     p.type = MSG_STEP;
-    p.Step.intervalMS = now - lastStepTime;
+    p.step.intervalMS = now - lastStepTime;
     lastStepTime = now;
-    p.Step.footId = stepFootId;            
+    p.step.footId = stepFootId;            
 
     // Sending step event:
     Serial.println(triggeredFsr);

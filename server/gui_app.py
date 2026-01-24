@@ -13,12 +13,27 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 # --- Mock imports for context ---
 try:
     from utils.paths import get_logs_dir, get_models_dir, get_plots_dir, get_midi_dir, get_research_dir, get_app_root
-    from utils.plotter import _elapsed_to_seconds, LivePlotter, generate_post_session_plot
-    from utils.process_manager import SubprocessManager
-    from utils.comms import send_calibration_command
+    from utils.session.plotter import _elapsed_to_seconds, LivePlotter, generate_post_session_plot
+    from utils.engine.process_manager import SubprocessManager
+    from utils.hardware.comms import send_calibration_command
+    from utils.engine.BPM_estimation import BPM_estimation
 except ImportError:
     send_calibration_command = None
+    BPM_estimation = None
     pass
+
+# Default values matching ESP32 step_receiver_sketch.ino
+DEFAULT_SMOOTHING_WINDOW = 3  # Line 6: int smoothingWindow = 3
+DEFAULT_UPDATE_STRIDE = 1     # Line 7: int updateStride = 1
+
+# Get smoothing alpha defaults from BPM_estimation (will be set after class check)
+DEFAULT_SMOOTHING_UP = 0.1    # Will try to read from BPM_estimation
+DEFAULT_SMOOTHING_DOWN = 0.05 # Will try to read from BPM_estimation
+
+# Hybrid Mode defaults from BPM_estimation.py
+DEFAULT_HYBRID_LOCK_STEPS = 5        # Line 17: hybrid_lock_steps: int = 5
+DEFAULT_HYBRID_STABILITY_THRESHOLD = 5.0  # Line 18: hybrid_stability_threshold: float = 5.0
+DEFAULT_HYBRID_UNLOCK_THRESHOLD = 10.0    # Line 18: hybrid_unlock_threshold: float = 10.0
 
 
 try:
@@ -276,7 +291,7 @@ class GuiApp:
         self.job_ports = None
         
         self.port_scan_thread = None
-        
+
         # Registry for scrollable canvases (for smart mousewheel routing)
         self.scrollable_canvases = []
         
@@ -285,12 +300,12 @@ class GuiApp:
         self.rnd_val_str = tk.StringVar(value="20")
         self.gamify_var = tk.BooleanVar(value=False)
         self.random_simple_threshold_var = tk.StringVar(value="5.0")
-        self.random_simple_steps_var = tk.StringVar(value="20")
-        self.random_simple_timeout_var = tk.StringVar(value="30.0")
-        self.hybrid_lock_var = tk.StringVar(value="5")
+        self.random_simple_steps_var = tk.StringVar(value="5")
+        self.random_simple_timeout_var = tk.StringVar(value="15.0")
+        self.hybrid_lock_var = tk.StringVar(value=str(DEFAULT_HYBRID_LOCK_STEPS))
         self.hybrid_unlock_var = tk.StringVar(value="1.5")
-        self.hybrid_stability_var = tk.StringVar(value="3.0")
-        self.hybrid_unlock_thres_var = tk.StringVar(value="5.0")
+        self.hybrid_stability_var = tk.StringVar(value=str(DEFAULT_HYBRID_STABILITY_THRESHOLD))
+        self.hybrid_unlock_thres_var = tk.StringVar(value=str(DEFAULT_HYBRID_UNLOCK_THRESHOLD))
 
     # --- LAYOUT ---
         # Enhanced navbar with gradient-like effect
@@ -1304,7 +1319,7 @@ class GuiApp:
             csv_path = base_dir / "session_data.csv"
             if csv_path.exists():
                 try:
-                    from utils.plotter import generate_post_session_plot
+                    from utils.session.plotter import generate_post_session_plot
                     print(f"DEBUG: Generating plot for {base_dir}...")
                     generate_post_session_plot(base_dir)
                 except Exception as e:
@@ -1591,7 +1606,24 @@ class GuiApp:
         ttk.Button(tree_btn_frame, text="↻ Refresh", command=self._refresh_training_sessions,
                    style="Compact.TButton").pack(side="left", padx=(0, 5))
         ttk.Button(tree_btn_frame, text="Select All", command=self._select_all_sessions,
+                   style="Compact.TButton").pack(side="left", padx=(0, 5))
+        ttk.Button(tree_btn_frame, text="🔄 Generate Augmented Data", command=self._generate_augmented_data,
+                   style="Compact.TButton").pack(side="left", padx=(0, 5))
+        ttk.Button(tree_btn_frame, text="🗑️ Delete Selected", command=self._delete_selected_sessions,
                    style="Compact.TButton").pack(side="left")
+        
+        # Augmentation progress
+        self.augmentation_progress = ttk.Progressbar(left_card, mode="indeterminate", length=200)
+        self.augmentation_progress.pack(fill="x", pady=(10, 5))
+        
+        self.augmentation_status_var = tk.StringVar(value="")
+        self.augmentation_status_label = ttk.Label(left_card, textvariable=self.augmentation_status_var, 
+                                                    style="CardSub.TLabel", font=("Segoe UI", 9))
+        self.augmentation_status_label.pack(anchor="w")
+        
+        # Hide progress bar initially
+        self.augmentation_progress.pack_forget()
+        self.augmentation_status_label.pack_forget()
 
         # ---- RIGHT: Training Options & Controls ----
         right_card = ttk.Frame(paned, style="Card.TFrame", padding=15)
@@ -1716,12 +1748,28 @@ class GuiApp:
         for user_dir in sorted(logs_dir.iterdir()):
             if not user_dir.is_dir():
                 continue
-            user_node = self.session_tree.insert("", "end", text=f"📁 {user_dir.name}", open=False, tags=("user",))
-            sessions = sorted(user_dir.glob("session_*/session_data.csv"))
-            for sess in sessions:
-                sess_name = sess.parent.name
-                self.session_tree.insert(user_node, "end", text=f"  📄 {sess_name}",
-                                          values=(str(sess),), tags=("session",))
+            
+            # Handle Augmented folder (nested structure: Augmented/UserName/session_*)
+            if user_dir.name == "Augmented":
+                aug_node = self.session_tree.insert("", "end", text=f"📁 {user_dir.name}", open=False, tags=("user",))
+                # Iterate through user folders inside Augmented
+                for aug_user_dir in sorted(user_dir.iterdir()):
+                    if not aug_user_dir.is_dir():
+                        continue
+                    aug_user_node = self.session_tree.insert(aug_node, "end", text=f"📁 {aug_user_dir.name}", open=False, tags=("user",))
+                    sessions = sorted(aug_user_dir.glob("session_*/session_data.csv"))
+                    for sess in sessions:
+                        sess_name = sess.parent.name
+                        self.session_tree.insert(aug_user_node, "end", text=f"  📄 {sess_name}",
+                                                  values=(str(sess),), tags=("session",))
+            else:
+                # Regular user folder (Default, Eitan, etc.)
+                user_node = self.session_tree.insert("", "end", text=f"📁 {user_dir.name}", open=False, tags=("user",))
+                sessions = sorted(user_dir.glob("session_*/session_data.csv"))
+                for sess in sessions:
+                    sess_name = sess.parent.name
+                    self.session_tree.insert(user_node, "end", text=f"  📄 {sess_name}",
+                                              values=(str(sess),), tags=("session",))
 
     def _select_all_sessions(self):
         """Select all items in session tree."""
@@ -1731,6 +1779,222 @@ class GuiApp:
                 select_recursive(child)
         for item in self.session_tree.get_children():
             select_recursive(item)
+
+    def _generate_augmented_data(self):
+        """Generate augmented data from selected sessions."""
+        import threading
+        import subprocess
+        import sys
+        from pathlib import Path
+        
+        # Get selected items
+        selected = self.session_tree.selection()
+        if not selected:
+            self.log("Select sessions or user folders to augment.")
+            return
+        
+        # Parse selection to determine mode
+        selected_users = []
+        selected_sessions = []
+        
+        for item in selected:
+            tags = self.session_tree.item(item, "tags")
+            item_text = self.session_tree.item(item, "text")
+            
+            if "session" in tags:
+                # Individual session selected
+                vals = self.session_tree.item(item, "values")
+                if vals:
+                    selected_sessions.append(vals[0])
+            elif "user" in tags:
+                # User folder selected
+                # Extract user name from "📁 UserName"
+                user_name = item_text.replace("📁", "").strip()
+                if user_name != "Augmented":  # Don't augment the Augmented folder itself
+                    selected_users.append(user_name)
+        
+        # Build command
+        base_dir = Path(__file__).resolve().parent
+        script_path = base_dir / "utils" / "prediction_model" / "generate_augmented_data.py"
+        
+        if not script_path.exists():
+            self.log(f"ERROR: Augmentation script not found at {script_path}")
+            return
+        
+        # Determine command based on selection
+        if selected_users and not selected_sessions:
+            # User folder(s) selected - augment first user only for simplicity
+            # (Could be extended to support multiple users)
+            mode = f"user folder '{selected_users[0]}'"
+            cmd = [sys.executable, str(script_path), "--user", selected_users[0]]
+        elif selected_sessions:
+            # Specific sessions selected
+            mode = f"{len(selected_sessions)} specific session(s)"
+            cmd = [sys.executable, str(script_path), "--sessions"] + selected_sessions
+        else:
+            self.log("Select sessions or user folders to augment.")
+            return
+        
+        self.log(f"Generating augmented data for {mode}...")
+        self.log("This may take a few minutes...")
+        
+        # Show progress bar and update status
+        self.augmentation_progress.pack(fill="x", pady=(10, 5))
+        self.augmentation_status_label.pack(anchor="w")
+        self.augmentation_progress.start(10)
+        self.augmentation_status_var.set("🔄 Generating augmented data...")
+        
+        # Run in background thread
+        def _worker():
+            try:
+                result = subprocess.run(
+                    cmd,
+                    cwd=str(base_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=600  # 10 minute timeout
+                )
+                
+                # Update GUI from main thread
+                def _update_gui():
+                    # Stop and hide progress bar
+                    self.augmentation_progress.stop()
+                    self.augmentation_progress.pack_forget()
+                    
+                    if result.returncode == 0:
+                        self.log("✓ Augmentation complete!")
+                        self.augmentation_status_var.set("✓ Augmentation complete!")
+                        # Show output
+                        for line in result.stdout.strip().split('\n'):
+                            if line.strip():
+                                self.log(f"  {line}")
+                        # Refresh session tree to show new augmented sessions
+                        self._refresh_training_sessions()
+                        # Hide status after 3 seconds
+                        self.root.after(3000, lambda: self.augmentation_status_label.pack_forget())
+                    else:
+                        self.log(f"✗ Augmentation failed with code {result.returncode}")
+                        self.augmentation_status_var.set("✗ Augmentation failed")
+                        if result.stderr:
+                            self.log(f"Error: {result.stderr}")
+                        # Hide status after 5 seconds
+                        self.root.after(5000, lambda: self.augmentation_status_label.pack_forget())
+                
+                self.root.after(0, _update_gui)
+            
+            except subprocess.TimeoutExpired:
+                def _timeout_gui():
+                    self.augmentation_progress.stop()
+                    self.augmentation_progress.pack_forget()
+                    self.augmentation_status_var.set("✗ Augmentation timed out")
+                    self.log("✗ Augmentation timed out (>10 minutes)")
+                    self.root.after(5000, lambda: self.augmentation_status_label.pack_forget())
+                self.root.after(0, _timeout_gui)
+            except Exception as e:
+                def _error_gui():
+                    self.augmentation_progress.stop()
+                    self.augmentation_progress.pack_forget()
+                    self.augmentation_status_var.set(f"✗ Error: {e}")
+                    self.log(f"✗ Augmentation error: {e}")
+                    self.root.after(5000, lambda: self.augmentation_status_label.pack_forget())
+                self.root.after(0, _error_gui)
+        
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _delete_selected_sessions(self):
+        """Delete selected sessions or folders from disk and refresh UI."""
+        from tkinter import messagebox
+        import shutil
+        from pathlib import Path
+        
+        # Get selected items
+        selected = self.session_tree.selection()
+        if not selected:
+            self.log("Select sessions or user folders to delete.")
+            return
+        
+        # Parse selection to get paths to delete
+        items_to_delete = []
+        user_folders_to_delete = []
+        
+        for item in selected:
+            tags = self.session_tree.item(item, "tags")
+            item_text = self.session_tree.item(item, "text")
+            
+            if "session" in tags:
+                # Individual session selected
+                vals = self.session_tree.item(item, "values")
+                if vals:
+                    csv_path = Path(vals[0])
+                    session_dir = csv_path.parent
+                    items_to_delete.append(("session", session_dir))
+            elif "user" in tags:
+                # User folder selected - delete entire folder
+                user_name = item_text.replace("📁", "").strip()
+                user_folder = get_logs_dir() / user_name
+                if user_folder.exists():
+                    items_to_delete.append(("folder", user_folder))
+                    user_folders_to_delete.append(user_name)
+        
+        if not items_to_delete:
+            self.log("No sessions or folders found to delete.")
+            return
+        
+        # Count items for confirmation message
+        session_count = sum(1 for item_type, _ in items_to_delete if item_type == "session")
+        folder_count = sum(1 for item_type, _ in items_to_delete if item_type == "folder")
+        
+        # Build confirmation message
+        msg_parts = []
+        if folder_count > 0:
+            folder_word = "folder" if folder_count == 1 else "folders"
+            msg_parts.append(f"{folder_count} entire {folder_word}")
+        if session_count > 0:
+            session_word = "session" if session_count == 1 else "sessions"
+            msg_parts.append(f"{session_count} {session_word}")
+        
+        items_text = " and ".join(msg_parts)
+        
+        confirm = messagebox.askyesno(
+            "Confirm Deletion",
+            f"Are you sure you want to delete {items_text}?\n\n"
+            f"This action cannot be undone!\n\n"
+            f"Deleted items will be removed from:\n"
+            f"  • Model Training tab\n"
+            f"  • Analysis tab\n"
+            f"  • File system (permanently)",
+            icon="warning"
+        )
+        
+        if not confirm:
+            self.log("Deletion cancelled.")
+            return
+        
+        # Delete items
+        deleted_count = 0
+        failed_count = 0
+        
+        for item_type, path in items_to_delete:
+            try:
+                shutil.rmtree(path)
+                deleted_count += 1
+                if item_type == "folder":
+                    self.log(f"✓ Deleted entire folder: {path.name}")
+                else:
+                    self.log(f"✓ Deleted: {path.name}")
+            except Exception as e:
+                failed_count += 1
+                self.log(f"✗ Failed to delete {path.name}: {e}")
+        
+        # Summary
+        if deleted_count > 0:
+            self.log(f"✓ Successfully deleted {deleted_count} item(s)")
+        if failed_count > 0:
+            self.log(f"✗ Failed to delete {failed_count} item(s)")
+        
+        # Refresh both training and analysis tabs
+        self._refresh_training_sessions()
+        self.refresh_analysis_subjects()
 
     def _get_selected_session_paths(self):
         """Get list of selected session CSV paths."""
@@ -1815,7 +2079,7 @@ class GuiApp:
                 
                 if train_type == "base":
                     # Run train_lgbm.py with selected sessions
-                    script = get_research_dir() / "LightGBM" / "train_lgbm.py"
+                    script = get_research_dir() / "train_lgbm.py"
                     cmd = [sys.executable, str(script), "--sessions-file", sessions_file.name]
                     # Add Optuna optimization if enabled
                     if use_optuna:
@@ -1823,7 +2087,7 @@ class GuiApp:
                         cmd.extend(["--trials", str(optuna_trials)])
                 else:
                     # Run train_user_head.py with selected sessions
-                    script = get_research_dir() / "LightGBM" / "train_user_head.py"
+                    script = get_research_dir() / "train_user_head.py"
                     cmd = [sys.executable, str(script), "--sessions-file", sessions_file.name, "--suffix", user_head_name.replace(" ", "_")]
 
                 self.root.after(0, lambda: self._log_training(f"Running: {' '.join(cmd)}"))
@@ -1902,7 +2166,7 @@ class GuiApp:
         # Create results window
         results_win = tk.Toplevel(self.root)
         results_win.title("Training Results")
-        results_win.geometry("900x700")
+        results_win.geometry("1200x900")
         results_win.configure(bg=self.P["bg"])
         
         # Header
@@ -1921,15 +2185,16 @@ class GuiApp:
         plot_combo = ttk.Combobox(selector_frame, textvariable=plot_var, values=plot_names, state="readonly", width=40)
         plot_combo.pack(side="left", padx=(10, 0))
         
-        # Image display area
-        img_frame = ttk.Frame(results_win, style="Card.TFrame", padding=10)
-        img_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        # Image display area - minimal padding to maximize image space
+        img_frame = ttk.Frame(results_win, style="Card.TFrame", padding=5)
+        img_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
         
-        img_label = ttk.Label(img_frame, text="Select a plot to view", style="CardLabel.TLabel")
+        img_label = ttk.Label(img_frame, text="Select a plot to view", style="CardLabel.TLabel", anchor="center")
         img_label.pack(fill="both", expand=True)
         
         # Store reference to prevent garbage collection
         results_win._photo_ref = None
+        results_win._current_plot_path = None
         
         def load_plot(*_):
             selected = plot_var.get()
@@ -1938,21 +2203,57 @@ class GuiApp:
             plot_path = results_dir / f"{selected}.png"
             if not plot_path.exists():
                 return
+            
+            # Store current plot path for resize events
+            results_win._current_plot_path = plot_path
+            
+            try:
+                # Use the shared loading function
+                load_plot_from_path(plot_path)
+            except ImportError:
+                img_label.configure(text=f"PIL/Pillow not installed.\nPlot saved at:\n{plot_path}", image="")
+        
+        plot_combo.bind("<<ComboboxSelected>>", load_plot)
+        
+        # Reload plot on window resize with debouncing to prevent flickering
+        results_win._resize_timer = None
+        def on_resize(event=None):
+            # Only reload if we have a plot loaded and event is from the main window
+            if event and event.widget != results_win:
+                return
+            if results_win._current_plot_path is not None:
+                # Cancel previous timer if exists
+                if results_win._resize_timer:
+                    results_win.after_cancel(results_win._resize_timer)
+                # Schedule reload after 200ms of no resize events
+                results_win._resize_timer = results_win.after(200, lambda: load_plot_from_path(results_win._current_plot_path))
+        
+        def load_plot_from_path(plot_path):
+            """Helper to reload plot from a specific path."""
             try:
                 from PIL import Image, ImageTk
                 img = Image.open(plot_path)
-                # Scale to fit window while maintaining aspect ratio
-                max_w, max_h = 850, 550
+                
+                # Force window to update geometry before measuring
+                results_win.update_idletasks()
+                
+                # Get actual window size
+                win_width = results_win.winfo_width()
+                win_height = results_win.winfo_height()
+                
+                # Use window dimensions with minimal margins (header ~80px, padding ~40px)
+                max_w = max(400, win_width - 50)
+                max_h = max(300, win_height - 130)
+                
+                # Scale to fit available space while maintaining aspect ratio
                 img.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
                 photo = ImageTk.PhotoImage(img)
                 img_label.configure(image=photo, text="")
-                results_win._photo_ref = photo  # Keep reference
-            except ImportError:
-                img_label.configure(text=f"PIL/Pillow not installed.\nPlot saved at:\n{plot_path}", image="")
+                results_win._photo_ref = photo
             except Exception as e:
                 img_label.configure(text=f"Error loading image: {e}", image="")
         
-        plot_combo.bind("<<ComboboxSelected>>", load_plot)
+        results_win.bind("<Configure>", on_resize)
         
         # Open folder button
         def open_folder():
@@ -2068,6 +2369,83 @@ class GuiApp:
         # Bind canvas resize to update plot display
         self.analysis_plot_canvas.bind("<Configure>", lambda e: self._on_analysis_canvas_resize())
         
+        # Mouse wheel scrolling for zoomed plot
+        def on_analysis_mousewheel(event):
+            if self.analysis_zoom_level > 1.0:
+                # Calculate scroll amount (10% of view per scroll)
+                scroll_amount = 0.1 * (-1 if event.delta > 0 else 1)
+                
+                # Shift+scroll for horizontal, regular scroll for vertical
+                if event.state & 0x1:  # Shift key held
+                    x_pos = self.analysis_plot_canvas.xview()[0] + scroll_amount
+                    self.analysis_plot_canvas.xview_moveto(max(0, min(1, x_pos)))
+                else:
+                    y_pos = self.analysis_plot_canvas.yview()[0] + scroll_amount
+                    self.analysis_plot_canvas.yview_moveto(max(0, min(1, y_pos)))
+        
+        self.analysis_plot_canvas.bind("<MouseWheel>", on_analysis_mousewheel)
+        
+        # Also bind keyboard arrows for panning when zoomed
+        def on_analysis_key(event):
+            if self.analysis_zoom_level > 1.0:
+                scroll_amount = 0.05  # 5% per key press
+                if event.keysym == "Left":
+                    x_pos = self.analysis_plot_canvas.xview()[0] - scroll_amount
+                    self.analysis_plot_canvas.xview_moveto(max(0, min(1, x_pos)))
+                elif event.keysym == "Right":
+                    x_pos = self.analysis_plot_canvas.xview()[0] + scroll_amount
+                    self.analysis_plot_canvas.xview_moveto(max(0, min(1, x_pos)))
+                elif event.keysym == "Up":
+                    y_pos = self.analysis_plot_canvas.yview()[0] - scroll_amount
+                    self.analysis_plot_canvas.yview_moveto(max(0, min(1, y_pos)))
+                elif event.keysym == "Down":
+                    y_pos = self.analysis_plot_canvas.yview()[0] + scroll_amount
+                    self.analysis_plot_canvas.yview_moveto(max(0, min(1, y_pos)))
+        
+        self.analysis_plot_canvas.bind("<Left>", on_analysis_key)
+        self.analysis_plot_canvas.bind("<Right>", on_analysis_key)
+        self.analysis_plot_canvas.bind("<Up>", on_analysis_key)
+        self.analysis_plot_canvas.bind("<Down>", on_analysis_key)
+        
+        # Drag-to-pan functionality when zoomed
+        self._drag_data = {"x": 0, "y": 0, "dragging": False}
+        
+        def on_drag_start(event):
+            if self.analysis_zoom_level > 1.0:
+                self._drag_data["x"] = event.x
+                self._drag_data["y"] = event.y
+                self._drag_data["dragging"] = True
+                self.analysis_plot_canvas.config(cursor="fleur")
+                self.analysis_plot_canvas.focus_set()
+        
+        def on_drag_motion(event):
+            if self._drag_data["dragging"] and self.analysis_zoom_level > 1.0:
+                # Calculate scroll amount as fraction of canvas size
+                canvas_width = self.analysis_plot_canvas.winfo_width()
+                canvas_height = self.analysis_plot_canvas.winfo_height()
+                
+                dx = (self._drag_data["x"] - event.x) / canvas_width
+                dy = (self._drag_data["y"] - event.y) / canvas_height
+                
+                # Get current scroll position and add delta
+                x_pos = self.analysis_plot_canvas.xview()[0] + dx
+                y_pos = self.analysis_plot_canvas.yview()[0] + dy
+                
+                # Apply scroll
+                self.analysis_plot_canvas.xview_moveto(max(0, min(1, x_pos)))
+                self.analysis_plot_canvas.yview_moveto(max(0, min(1, y_pos)))
+                
+                self._drag_data["x"] = event.x
+                self._drag_data["y"] = event.y
+        
+        def on_drag_end(event):
+            self._drag_data["dragging"] = False
+            self.analysis_plot_canvas.config(cursor="")
+        
+        self.analysis_plot_canvas.bind("<ButtonPress-1>", on_drag_start)
+        self.analysis_plot_canvas.bind("<B1-Motion>", on_drag_motion)
+        self.analysis_plot_canvas.bind("<ButtonRelease-1>", on_drag_end)
+        
         # Register this canvas for smart mousewheel routing
         self.scrollable_canvases.append(('analysis', self.analysis_plot_canvas, plot_scroll_frame))
         
@@ -2103,7 +2481,7 @@ class GuiApp:
             csv_path = base_dir / "session_data.csv"
             if csv_path.exists():
                 try:
-                    from utils.plotter import generate_post_session_plot
+                    from utils.session.plotter import generate_post_session_plot
                     generate_post_session_plot(base_dir)
                 except Exception as e:
                     print(f"Plot generation failed: {e}")
@@ -2173,8 +2551,12 @@ class GuiApp:
             self.analysis_plot_label.configure(image=photo, text="")
             self.analysis_photo_ref = photo  # Keep reference
             
-            # Update canvas scroll region
+            # Update canvas scroll region and scroll increments
             self.analysis_plot_canvas.configure(scrollregion=(0, 0, new_w, new_h))
+            
+            # Set scroll increments (10% of visible area per unit)
+            self.analysis_plot_canvas.configure(xscrollincrement=max(1, new_w // 20))
+            self.analysis_plot_canvas.configure(yscrollincrement=max(1, new_h // 20))
             
             # Update zoom level display
             zoom_percent = int(self.analysis_zoom_level * 100)
@@ -2390,11 +2772,11 @@ class GuiApp:
         attack_row = ttk.Frame(advanced_card, style="Card.TFrame")
         attack_row.pack(fill="x", pady=(0, 10))
         
-        self.smoothing_up_var = tk.StringVar()
-        entry_up = ttk.Entry(attack_row, textvariable=self.smoothing_up_var, width=15)
+        self.smoothing_up_var = tk.StringVar(value=str(DEFAULT_SMOOTHING_UP))
+        entry_up = ttk.Entry(attack_row, textvariable=self.smoothing_up_var, width=10)
         entry_up.pack(side="left", padx=(0, 5))
-        self._bind_placeholder(entry_up, self.smoothing_up_var, "Default")
-        ttk.Button(attack_row, text="?", style="Help.TButton", width=2, command=self.show_attack_help).pack(side="left", padx=5)
+        ttk.Label(attack_row, text="(0.01 - 1.0)", style="CardLabel.TLabel", font=("Segoe UI", 9)).pack(side="left")
+        ttk.Button(attack_row, text="i", style="Help.TButton", width=2, command=self.show_attack_help).pack(side="left", padx=5)
         
         # Cascading (Slow Down)
         ttk.Label(advanced_card, text="Cascading (Slow Down)", style="CardLabel.TLabel", 
@@ -2403,11 +2785,11 @@ class GuiApp:
         decay_row = ttk.Frame(advanced_card, style="Card.TFrame")
         decay_row.pack(fill="x", pady=(0, 10))
         
-        self.smoothing_down_var = tk.StringVar()
-        entry_down = ttk.Entry(decay_row, textvariable=self.smoothing_down_var, width=15)
+        self.smoothing_down_var = tk.StringVar(value=str(DEFAULT_SMOOTHING_DOWN))
+        entry_down = ttk.Entry(decay_row, textvariable=self.smoothing_down_var, width=10)
         entry_down.pack(side="left", padx=(0, 5))
-        self._bind_placeholder(entry_down, self.smoothing_down_var, "Default")
-        ttk.Button(decay_row, text="?", style="Help.TButton", width=2, command=self.show_decay_help).pack(side="left", padx=5)
+        ttk.Label(decay_row, text="(0.01 - 1.0)", style="CardLabel.TLabel", font=("Segoe UI", 9)).pack(side="left")
+        ttk.Button(decay_row, text="i", style="Help.TButton", width=2, command=self.show_decay_help).pack(side="left", padx=5)
         
         # Smoothing Window
         ttk.Label(advanced_card, text="Smoothing Window", style="CardLabel.TLabel", 
@@ -2415,12 +2797,11 @@ class GuiApp:
         window_row = ttk.Frame(advanced_card, style="Card.TFrame")
         window_row.pack(fill="x", pady=(0, 10))
         
-        self.step_window_var = tk.StringVar()
-        entry_win = ttk.Entry(window_row, textvariable=self.step_window_var, width=12)
+        self.step_window_var = tk.StringVar(value=str(DEFAULT_SMOOTHING_WINDOW))
+        entry_win = ttk.Entry(window_row, textvariable=self.step_window_var, width=10)
         entry_win.pack(side="left", padx=(0, 5))
-        self._bind_placeholder(entry_win, self.step_window_var, "Default")
-        ttk.Label(window_row, text="Steps", style="CardLabel.TLabel").pack(side="left", padx=(0, 5))
-        ttk.Button(window_row, text="?", style="Help.TButton", width=2, command=self.show_window_help).pack(side="left")
+        ttk.Label(window_row, text="Steps (1 - 10)", style="CardLabel.TLabel", font=("Segoe UI", 9)).pack(side="left")
+        ttk.Button(window_row, text="i", style="Help.TButton", width=2, command=self.show_window_help).pack(side="left", padx=5)
         
         # Update Stride
         ttk.Label(advanced_card, text="Update Stride", style="CardLabel.TLabel", 
@@ -2428,12 +2809,11 @@ class GuiApp:
         stride_row = ttk.Frame(advanced_card, style="Card.TFrame")
         stride_row.pack(fill="x", pady=(0, 10))
         
-        self.stride_var = tk.StringVar()
-        entry_stride = ttk.Entry(stride_row, textvariable=self.stride_var, width=12)
+        self.stride_var = tk.StringVar(value=str(DEFAULT_UPDATE_STRIDE))
+        entry_stride = ttk.Entry(stride_row, textvariable=self.stride_var, width=10)
         entry_stride.pack(side="left", padx=(0, 5))
-        self._bind_placeholder(entry_stride, self.stride_var, "Default")
-        ttk.Label(stride_row, text="Steps", style="CardLabel.TLabel").pack(side="left", padx=(0, 5))
-        ttk.Button(stride_row, text="?", style="Help.TButton", width=2, command=self.show_stride_help).pack(side="left")
+        ttk.Label(stride_row, text="Steps (1 - 5)", style="CardLabel.TLabel", font=("Segoe UI", 9)).pack(side="left")
+        ttk.Button(stride_row, text="i", style="Help.TButton", width=2, command=self.show_stride_help).pack(side="left", padx=5)
         
         # Prediction Model
         ttk.Label(advanced_card, text="Prediction Model", style="CardLabel.TLabel", 
@@ -2908,16 +3288,23 @@ class GuiApp:
             if df.empty:
                 return
 
-            # Sliding time window: keep only recent seconds
+            # Sliding window after 100 seconds to prevent performance issues
             stage = "window"
             tmax = df["seconds"].max()
             if pd.isna(tmax):
                 return
-
-            window_start = tmax - self.view_window_sec
-            keep_mask = df["seconds"] >= window_start
-            if not keep_mask.all():
-                df = df[keep_mask].reset_index(drop=True)
+            
+            # After 100 seconds, start sliding window to keep performance stable
+            window_size = 100  # seconds
+            if tmax > window_size:
+                window_start = tmax - window_size
+                keep_mask = df["seconds"] >= window_start
+                if not keep_mask.all():
+                    df = df[keep_mask].reset_index(drop=True)
+                    
+                # Also trim the live_data_buffer to prevent memory growth
+                if len(self.live_data_buffer) > 10000:
+                    self.live_data_buffer = self.live_data_buffer[-8000:]
                 
             # Downsample for rendering only (keep full buffer for history/export)
             stage = "downsample"

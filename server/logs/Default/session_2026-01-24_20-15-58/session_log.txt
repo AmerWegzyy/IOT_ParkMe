@@ -1,0 +1,252 @@
+Session log started at 2026-01-24_20-15-58 (t=0.000)
+[00:00:00.000] DEBUG: Attempting to initialize MidiBeatSync...
+[00:00:00.000] DEBUG: MidiBeatSync initialized successfully.
+[00:00:00.000] Starting in DYNAMIC MODE
+[00:00:00.000] Run type: dynamic
+[00:00:00.000] Prediction model enabled: lgbm_model.joblib
+[00:00:00.000] Mode Activated: DynamicMode
+[00:00:00.000] Session started
+[00:00:00.000] DEBUG: Attempting to open serial port COM3...
+[00:00:00.000] DEBUG: Serial port COM3 opened successfully.
+[00:00:00.000] Setting update stride to 1
+[00:00:00.000] Update stride set response: ACK,STRIDE,1
+[00:00:00.000] ACK,RESET received
+[00:00:00.000] ACK,START received
+[00:00:00.000] Session handshake completed
+[00:00:00.000] WALK-FIRST MODE: Collecting 10 calibration steps...
+[00:00:00.000] Session timer started - calibration phase
+[00:00:00.001] Calibration step 1/10: 80.0 BPM
+[00:00:00.578] Calibration step 2/10: 102.7 BPM
+[00:00:01.157] Calibration step 3/10: 102.9 BPM
+[00:00:01.710] Calibration step 4/10: 104.8 BPM
+[00:00:02.253] Calibration step 5/10: 107.7 BPM
+[00:00:02.799] Calibration step 6/10: 109.8 BPM
+[00:00:03.350] Calibration step 7/10: 109.8 BPM
+[00:00:03.923] Calibration step 8/10: 108.1 BPM
+[00:00:04.479] Calibration step 9/10: 107.3 BPM
+[00:00:05.019] Calibration step 10/10: 107.9 BPM
+[00:00:05.026] Calibration complete. Starting music at 104.1 BPM
+[00:00:05.561] Processed: BPM=109.36
+[00:00:06.087] Processed: BPM=112.22
+[00:00:06.597] Processed: BPM=114.07
+[00:00:07.106] Processed: BPM=116.5
+[00:00:07.602] Processed: BPM=118.34
+[00:00:08.096] Processed: BPM=120.16
+[00:00:08.567] Processed: BPM=123.03
+[00:00:09.075] Processed: BPM=122.28
+[00:00:09.557] Processed: BPM=122.95
+[00:00:10.072] Processed: BPM=119.68
+[00:00:10.567] Processed: BPM=120.56
+[00:00:11.069] Processed: BPM=119.21
+[00:00:11.577] Processed: BPM=119.6
+[00:00:12.092] Processed: BPM=118.03
+[00:00:12.702] Processed: BPM=110.09
+[00:00:13.523] Processed: BPM=92.5
+[00:00:14.274] Processed: BPM=82.49
+[00:00:15.037] Processed: BPM=77.15
+[00:00:15.710] Processed: BPM=82.27
+[00:00:16.527] Processed: BPM=79.89
+[00:00:17.222] Processed: BPM=82.3
+[00:00:17.888] Processed: BPM=82.61
+[00:00:18.501] Processed: BPM=91.28
+[00:00:19.217] Processed: BPM=90.45
+[00:00:19.908] Processed: BPM=89.29
+[00:00:20.545] Processed: BPM=87.98
+[00:00:21.168] Processed: BPM=92.02
+[00:00:21.820] Processed: BPM=93.99
+[00:00:22.469] Processed: BPM=93.6
+[00:00:27.146] Processed: BPM=30.12
+[00:00:28.421] Processed: BPM=27.27
+[00:00:29.090] Processed: BPM=27.18
+[00:00:29.595] Processed: BPM=73.56
+[00:00:30.039] Processed: BPM=111.39
+[00:00:30.467] Processed: BPM=130.72
+[00:00:30.897] Processed: BPM=138.04
+[00:00:31.339] Processed: BPM=138.46
+[00:00:31.814] Processed: BPM=134.23
+[00:00:32.281] Processed: BPM=130.06
+[00:00:32.751] Processed: BPM=127.48
+[00:00:33.234] Processed: BPM=126.32
+[00:00:33.707] Processed: BPM=126.32
+[00:00:34.187] Processed: BPM=125.17
+[00:00:34.663] Processed: BPM=125.87
+[00:00:35.138] Processed: BPM=125.79
+[00:00:35.628] Processed: BPM=124.91
+[00:00:36.109] Processed: BPM=124.57
+[00:00:36.615] Processed: BPM=121.7
+[00:00:37.123] Processed: BPM=120.48
+[00:00:37.618] Processed: BPM=119.28
+[00:00:38.141] Processed: BPM=117.96
+[00:00:38.659] Processed: BPM=117.19
+[00:00:39.174] Processed: BPM=115.61
+[00:00:39.685] Processed: BPM=116.88
+[00:00:40.238] Processed: BPM=114.0
+[00:00:40.758] Processed: BPM=113.92
+[00:00:41.273] Processed: BPM=113.07
+[00:00:41.771] Processed: BPM=117.49
+[00:00:42.273] Processed: BPM=118.5
+[00:00:42.796] Processed: BPM=118.58
+[00:00:43.316] Processed: BPM=116.58
+[00:00:43.842] Processed: BPM=114.72
+[00:00:44.370] Processed: BPM=114.0
+[00:00:44.981] Processed: BPM=107.98
+[00:00:45.618] Processed: BPM=101.41
+[00:00:46.211] Processed: BPM=97.77
+[00:00:46.836] Processed: BPM=97.14
+[00:00:47.376] Processed: BPM=102.39
+[00:00:47.944] Processed: BPM=103.93
+[00:00:48.556] Processed: BPM=104.53
+[00:00:49.185] Processed: BPM=99.5
+[00:00:49.783] Processed: BPM=97.83
+[00:00:50.343] Processed: BPM=100.73
+[00:00:50.925] Processed: BPM=103.57
+[00:00:51.558] Processed: BPM=101.52
+[00:00:52.125] Processed: BPM=101.58
+[00:00:52.730] Processed: BPM=99.67
+[00:00:53.280] Processed: BPM=104.41
+[00:00:53.787] Processed: BPM=107.66
+[00:00:54.273] Processed: BPM=116.66
+[00:00:54.747] Processed: BPM=122.87
+[00:00:55.217] Processed: BPM=126.32
+[00:00:55.646] Processed: BPM=131.0
+[00:00:56.046] Processed: BPM=138.67
+[00:00:56.435] Processed: BPM=147.06
+[00:00:56.819] Processed: BPM=153.58
+[00:00:57.182] Processed: BPM=158.31
+[00:00:57.552] Processed: BPM=161.73
+[00:00:57.920] Processed: BPM=163.19
+[00:00:58.330] Processed: BPM=156.52
+[00:00:58.697] Processed: BPM=156.79
+[00:00:59.042] Processed: BPM=160.57
+[00:00:59.360] Processed: BPM=174.93
+[00:00:59.716] Processed: BPM=176.64
+[00:01:00.116] Processed: BPM=167.75
+[00:01:00.520] Processed: BPM=155.44
+[00:01:00.882] Processed: BPM=154.51
+[00:01:01.242] Processed: BPM=160.28
+[00:01:01.555] Processed: BPM=173.91
+[00:01:01.903] Processed: BPM=176.3
+[00:01:02.363] Processed: BPM=160.43
+[00:01:02.744] Processed: BPM=151.13
+[00:01:03.116] Processed: BPM=148.15
+[00:01:03.450] Processed: BPM=165.29
+[00:01:03.899] Processed: BPM=155.71
+[00:01:05.325] Processed: BPM=81.52
+[00:01:06.096] Processed: BPM=68.0
+[00:01:06.876] Processed: BPM=60.48
+[00:01:07.778] Processed: BPM=73.44
+[00:01:08.740] Processed: BPM=68.05
+[00:01:09.627] Processed: BPM=65.5
+[00:01:10.505] Processed: BPM=65.96
+[00:01:11.426] Processed: BPM=67.11
+[00:01:12.408] Processed: BPM=64.7
+[00:01:13.263] Processed: BPM=65.24
+[00:01:14.217] Processed: BPM=64.49
+[00:01:15.135] Processed: BPM=65.98
+[00:01:15.722] Processed: BPM=73.29
+[00:01:16.133] Processed: BPM=93.9
+[00:01:16.555] Processed: BPM=126.76
+[00:01:16.944] Processed: BPM=147.42
+[00:01:17.287] Processed: BPM=155.57
+[00:01:17.639] Processed: BPM=166.05
+[00:01:17.974] Processed: BPM=174.42
+[00:01:18.270] Processed: BPM=183.49
+[00:01:18.604] Processed: BPM=186.34
+[00:01:18.915] Processed: BPM=191.08
+[00:01:19.263] Processed: BPM=182.56
+[00:01:19.580] Processed: BPM=184.62
+[00:01:19.942] Processed: BPM=175.1
+[00:01:20.266] Processed: BPM=178.39
+[00:01:20.649] Processed: BPM=168.54
+[00:01:21.002] Processed: BPM=169.97
+[00:01:21.400] Processed: BPM=158.59
+[00:01:21.785] Processed: BPM=158.31
+[00:01:22.187] Processed: BPM=151.9
+[00:01:22.597] Processed: BPM=151.13
+[00:01:22.996] Processed: BPM=148.51
+[00:01:23.406] Processed: BPM=147.66
+[00:01:23.828] Processed: BPM=145.4
+[00:01:24.288] Processed: BPM=139.43
+[00:01:24.706] Processed: BPM=138.57
+[00:01:25.151] Processed: BPM=136.05
+[00:01:25.612] Processed: BPM=136.16
+[00:01:26.039] Processed: BPM=135.03
+[00:01:26.533] Processed: BPM=131.1
+[00:01:26.954] Processed: BPM=135.03
+[00:01:27.411] Processed: BPM=131.29
+[00:01:27.850] Processed: BPM=135.95
+[00:01:28.300] Processed: BPM=132.55
+[00:01:28.743] Processed: BPM=134.83
+[00:01:29.212] Processed: BPM=131.96
+[00:01:29.691] Processed: BPM=129.31
+[00:01:30.171] Processed: BPM=126.23
+[00:01:30.598] Processed: BPM=129.87
+[00:01:31.092] Processed: BPM=128.76
+[00:01:31.587] Processed: BPM=127.03
+[00:01:32.031] Processed: BPM=125.52
+[00:01:33.065] Processed: BPM=91.23
+[00:01:33.455] Processed: BPM=96.41
+[00:01:34.240] Processed: BPM=81.48
+[00:01:35.031] Processed: BPM=91.6
+[00:01:35.555] Processed: BPM=85.67
+[00:01:36.405] Processed: BPM=83.22
+[00:01:37.033] Processed: BPM=89.82
+[00:01:37.620] Processed: BPM=87.17
+[00:01:38.423] Processed: BPM=89.15
+[00:01:39.060] Processed: BPM=88.8
+[00:01:39.752] Processed: BPM=84.39
+[00:01:40.356] Processed: BPM=93.12
+[00:01:41.077] Processed: BPM=89.24
+[00:01:41.605] Processed: BPM=97.24
+[00:01:42.154] Processed: BPM=100.22
+[00:01:42.597] Processed: BPM=118.34
+[00:01:43.080] Processed: BPM=122.03
+[00:01:43.545] Processed: BPM=129.59
+[00:01:44.036] Processed: BPM=125.35
+[00:01:44.516] Processed: BPM=125.7
+[00:01:45.040] Processed: BPM=120.16
+[00:01:45.561] Processed: BPM=117.8
+[00:01:46.075] Processed: BPM=115.16
+[00:01:46.602] Processed: BPM=115.61
+[00:01:47.116] Processed: BPM=116.13
+[00:01:47.552] Processed: BPM=122.03
+[00:01:48.051] Processed: BPM=123.88
+[00:01:48.581] Processed: BPM=122.45
+[00:01:49.069] Processed: BPM=118.42
+[00:01:49.590] Processed: BPM=116.96
+[00:01:50.118] Processed: BPM=117.34
+[00:01:50.572] Processed: BPM=119.76
+[00:01:51.139] Processed: BPM=116.13
+[00:01:51.698] Processed: BPM=113.71
+[00:01:52.191] Processed: BPM=111.25
+[00:01:52.422] Processed: BPM=140.52
+[00:01:52.647] Processed: BPM=190.07
+[00:01:52.930] Processed: BPM=243.24
+[00:01:53.193] Processed: BPM=233.46
+[00:01:53.431] Processed: BPM=229.59
+[00:01:53.660] Processed: BPM=246.91
+[00:01:53.862] Processed: BPM=269.06
+[00:01:54.096] Processed: BPM=270.27
+[00:01:54.325] Processed: BPM=270.27
+[00:01:54.576] Processed: BPM=251.05
+[00:01:54.795] Processed: BPM=258.99
+[00:01:55.024] Processed: BPM=258.25
+[00:01:55.203] Processed: BPM=287.54
+[00:01:55.415] Processed: BPM=288.0
+[00:01:55.613] Processed: BPM=308.22
+[00:01:55.823] Processed: BPM=291.26
+[00:01:55.982] Processed: BPM=317.46
+[00:01:56.442] Processed: BPM=215.31
+[00:01:56.945] Processed: BPM=160.57
+[00:01:57.530] Processed: BPM=116.28
+[00:01:58.016] Processed: BPM=114.36
+[00:01:58.645] Processed: BPM=105.7
+[00:01:59.160] Processed: BPM=110.5
+[00:01:59.817] Processed: BPM=100.06
+[00:02:00.228] Processed: BPM=113.71
+[00:02:00.554] Processed: BPM=129.22
+[00:02:00.867] Processed: BPM=171.59
+[00:02:01.169] Processed: BPM=191.29
+[00:02:01.419] Processed: BPM=208.09
+[00:02:01.683] Processed: BPM=220.86
+[00:02:01.918] Processed: BPM=240.32

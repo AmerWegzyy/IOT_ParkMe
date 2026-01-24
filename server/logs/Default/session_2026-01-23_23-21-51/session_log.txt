@@ -1,0 +1,528 @@
+Session log started at 2026-01-23_23-21-51 (t=0.000)
+[00:00:00.000] DEBUG: Attempting to initialize MidiBeatSync...
+[00:00:00.000] DEBUG: MidiBeatSync initialized successfully.
+[00:00:00.000] Starting in MANUAL MODE.
+[00:00:00.000] Setting fixed BPM to 400.0
+[00:00:00.000] Run type: manual
+[00:00:00.000] Prediction model enabled: lgbm_model.joblib
+[00:00:00.000] MANUAL: Target set to 240.0
+[00:00:00.000] Mode Activated: ManualMode
+[00:00:00.000] Session started
+[00:00:00.000] DEBUG: Attempting to open serial port COM6...
+[00:00:00.000] DEBUG: Serial port COM6 opened successfully.
+[00:00:00.000] Setting update stride to 1
+[00:00:00.000] Update stride set response: ACK,STRIDE,1
+[00:00:00.000] ACK,RESET received
+[00:00:00.000] ACK,START received
+[00:00:00.000] Session handshake completed
+[00:00:00.000] Running main loop...
+[00:00:00.000] Session timer started - music is now playing
+[00:00:01.141] Processed: BPM=240
+[00:00:01.386] Processed: BPM=232.56
+[00:00:01.735] Processed: BPM=197.37
+[00:00:01.942] Processed: BPM=220.59
+[00:00:02.230] Processed: BPM=218.18
+[00:00:02.445] Processed: BPM=254.6
+[00:00:02.662] Processed: BPM=250.7
+[00:00:02.827] Processed: BPM=292.21
+[00:00:03.040] Processed: BPM=301.51
+[00:00:03.286] Processed: BPM=288.46
+[00:00:03.493] Processed: BPM=270.27
+[00:00:03.740] Processed: BPM=257.88
+[00:00:03.977] Processed: BPM=260.49
+[00:00:04.225] Processed: BPM=247.59
+[00:00:04.461] Processed: BPM=248.96
+[00:00:04.744] Processed: BPM=234.68
+[00:00:04.976] Processed: BPM=238.73
+[00:00:05.229] Processed: BPM=234.68
+[00:00:05.477] Processed: BPM=246.24
+[00:00:05.733] Processed: BPM=237.47
+[00:00:05.980] Processed: BPM=240.0
+[00:00:06.227] Processed: BPM=239.36
+[00:00:06.523] Processed: BPM=228.14
+[00:00:06.745] Processed: BPM=234.07
+[00:00:06.970] Processed: BPM=242.26
+[00:00:07.248] Processed: BPM=247.59
+[00:00:07.384] MANUAL: Target set to 240.0
+[00:00:07.384] Config: Manual BPM set to 393.1740614334471
+[00:00:07.487] Processed: BPM=243.24
+[00:00:07.490] MANUAL: Target set to 240.0
+[00:00:07.491] Config: Manual BPM set to 391.80887372013655
+[00:00:07.749] Processed: BPM=232.56
+[00:00:08.042] Processed: BPM=226.42
+[00:00:08.202] Processed: BPM=251.75
+[00:00:08.444] Processed: BPM=258.25
+[00:00:08.690] Processed: BPM=278.21
+[00:00:08.901] Processed: BPM=257.14
+[00:00:09.144] Processed: BPM=256.05
+[00:00:09.371] Processed: BPM=264.32
+[00:00:09.453] MANUAL: Target set to 240.0
+[00:00:09.453] Config: Manual BPM set to 394.5392491467577
+[00:00:09.537] MANUAL: Target set to 240.0
+[00:00:09.537] Config: Manual BPM set to 400.0
+[00:00:09.550] MANUAL: Target set to 240.0
+[00:00:09.550] Config: Manual BPM set to 400.0
+[00:00:09.613] Processed: BPM=253.16
+[00:00:09.884] Processed: BPM=243.24
+[00:00:10.123] Processed: BPM=239.68
+[00:00:10.349] Processed: BPM=244.57
+[00:00:10.377] MANUAL: Target set to 240.0
+[00:00:10.378] Config: Manual BPM set to 379.5221843003413
+[00:00:10.476] MANUAL: Target set to 240.0
+[00:00:10.476] Config: Manual BPM set to 372.6962457337884
+[00:00:10.569] MANUAL: Target set to 240.0
+[00:00:10.569] Config: Manual BPM set to 371.3310580204778
+[00:00:10.598] MANUAL: Target set to 240.0
+[00:00:10.599] Config: Manual BPM set to 369.9658703071672
+[00:00:10.635] Processed: BPM=240.96
+[00:00:10.861] Processed: BPM=243.57
+[00:00:11.128] Processed: BPM=230.77
+[00:00:11.292] MANUAL: Target set to 240.0
+[00:00:11.292] Config: Manual BPM set to 346.7576791808874
+[00:00:11.381] MANUAL: Target set to 240.0
+[00:00:11.381] Config: Manual BPM set to 307.1672354948805
+[00:00:11.427] Processed: BPM=226.42
+[00:00:11.496] MANUAL: Target set to 240.0
+[00:00:11.497] Config: Manual BPM set to 289.419795221843
+[00:00:11.507] MANUAL: Target set to 240.0
+[00:00:11.507] Config: Manual BPM set to 285.32423208191125
+[00:00:11.704] Processed: BPM=213.27
+[00:00:11.951] Processed: BPM=219.78
+[00:00:12.162] Processed: BPM=244.23
+[00:00:12.264] MANUAL: Target set to 240.0
+[00:00:12.265] Config: Manual BPM set to 282.5938566552901
+[00:00:12.361] Processed: BPM=275.65
+[00:00:12.388] MANUAL: Target set to 240.0
+[00:00:12.388] Config: Manual BPM set to 263.481228668942
+[00:00:12.491] MANUAL: Target set to 238.9
+[00:00:12.491] Config: Manual BPM set to 238.90784982935153
+[00:00:12.500] MANUAL: Target set to 236.2
+[00:00:12.500] Config: Manual BPM set to 236.17747440273038
+[00:00:12.629] Processed: BPM=265.1
+[00:00:12.835] Processed: BPM=267.46
+[00:00:13.089] Processed: BPM=246.91
+[00:00:13.290] MANUAL: Target set to 223.9
+[00:00:13.290] Config: Manual BPM set to 223.89078498293514
+[00:00:13.319] Processed: BPM=259.74
+[00:00:13.419] MANUAL: Target set to 191.1
+[00:00:13.419] Config: Manual BPM set to 191.12627986348122
+[00:00:13.520] MANUAL: Target set to 173.4
+[00:00:13.520] Config: Manual BPM set to 173.3788395904437
+[00:00:13.580] Processed: BPM=243.24
+[00:00:13.812] Processed: BPM=247.59
+[00:00:14.094] Processed: BPM=232.26
+[00:00:14.325] Processed: BPM=240.32
+[00:00:14.545] Processed: BPM=246.24
+[00:00:14.821] Processed: BPM=247.59
+[00:00:15.016] Processed: BPM=261.25
+[00:00:15.127] MANUAL: Target set to 196.6
+[00:00:15.127] Config: Manual BPM set to 196.58703071672355
+[00:00:15.213] MANUAL: Target set to 215.7
+[00:00:15.214] Config: Manual BPM set to 215.6996587030717
+[00:00:15.271] Processed: BPM=247.93
+[00:00:15.332] MANUAL: Target set to 226.6
+[00:00:15.332] Config: Manual BPM set to 226.6211604095563
+[00:00:15.426] MANUAL: Target set to 240.0
+[00:00:15.426] Config: Manual BPM set to 243.0034129692833
+[00:00:15.632] MANUAL: Target set to 240.0
+[00:00:15.633] Config: Manual BPM set to 247.09897610921502
+[00:00:15.775] MANUAL: Target set to 240.0
+[00:00:15.775] Config: Manual BPM set to 251.19453924914677
+[00:00:15.882] MANUAL: Target set to 240.0
+[00:00:15.882] Config: Manual BPM set to 260.75085324232083
+[00:00:16.058] MANUAL: Target set to 240.0
+[00:00:16.059] Config: Manual BPM set to 270.3071672354949
+[00:00:16.252] MANUAL: Target set to 240.0
+[00:00:16.253] Config: Manual BPM set to 288.05460750853246
+[00:00:16.385] MANUAL: Target set to 240.0
+[00:00:16.386] Config: Manual BPM set to 304.43686006825936
+[00:00:16.499] MANUAL: Target set to 240.0
+[00:00:16.500] Config: Manual BPM set to 313.9931740614335
+[00:00:16.664] Processed: BPM=97.77
+[00:00:16.673] MANUAL: Target set to 240.0
+[00:00:16.674] Config: Manual BPM set to 326.2798634812287
+[00:00:16.796] MANUAL: Target set to 240.0
+[00:00:16.796] Config: Manual BPM set to 335.8361774744027
+[00:00:16.827] Processed: BPM=99.23
+[00:00:16.906] MANUAL: Target set to 240.0
+[00:00:16.906] Config: Manual BPM set to 339.93174061433444
+[00:00:17.006] MANUAL: Target set to 240.0
+[00:00:17.006] Config: Manual BPM set to 342.6621160409556
+[00:00:17.087] Processed: BPM=99.17
+[00:00:17.198] MANUAL: Target set to 240.0
+[00:00:17.198] Config: Manual BPM set to 345.3924914675768
+[00:00:17.293] MANUAL: Target set to 240.0
+[00:00:17.294] Config: Manual BPM set to 350.8532423208191
+[00:00:17.369] Processed: BPM=255.68
+[00:00:17.482] MANUAL: Target set to 240.0
+[00:00:17.482] Config: Manual BPM set to 352.2184300341297
+[00:00:17.619] Processed: BPM=228.43
+[00:00:17.621] MANUAL: Target set to 240.0
+[00:00:17.623] Config: Manual BPM set to 360.40955631399316
+[00:00:17.745] MANUAL: Target set to 240.0
+[00:00:17.745] Config: Manual BPM set to 367.23549488054607
+[00:00:17.813] Processed: BPM=247.25
+[00:00:17.832] MANUAL: Target set to 240.0
+[00:00:17.832] Config: Manual BPM set to 374.061433447099
+[00:00:17.947] MANUAL: Target set to 240.0
+[00:00:17.947] Config: Manual BPM set to 380.8873720136519
+[00:00:18.044] MANUAL: Target set to 240.0
+[00:00:18.044] Config: Manual BPM set to 386.34812286689424
+[00:00:18.084] Processed: BPM=251.4
+[00:00:18.168] MANUAL: Target set to 240.0
+[00:00:18.169] Config: Manual BPM set to 393.1740614334471
+[00:00:18.252] MANUAL: Target set to 240.0
+[00:00:18.252] Config: Manual BPM set to 400.0
+[00:00:18.339] Processed: BPM=250.35
+[00:00:18.451] MANUAL: Target set to 240.0
+[00:00:18.451] Config: Manual BPM set to 400.0
+[00:00:18.531] MANUAL: Target set to 240.0
+[00:00:18.531] Config: Manual BPM set to 400.0
+[00:00:18.604] Processed: BPM=228.72
+[00:00:18.684] MANUAL: Target set to 240.0
+[00:00:18.685] Config: Manual BPM set to 400.0
+[00:00:18.785] MANUAL: Target set to 240.0
+[00:00:18.785] Config: Manual BPM set to 400.0
+[00:00:18.798] MANUAL: Target set to 240.0
+[00:00:18.798] Config: Manual BPM set to 400.0
+[00:00:18.804] MANUAL: Target set to 240.0
+[00:00:18.804] Config: Manual BPM set to 400.0
+[00:00:18.862] Processed: BPM=231.96
+[00:00:18.981] MANUAL: Target set to 240.0
+[00:00:18.981] Config: Manual BPM set to 400.0
+[00:00:19.074] MANUAL: Target set to 240.0
+[00:00:19.074] Config: Manual BPM set to 400.0
+[00:00:19.098] Processed: BPM=236.53
+[00:00:19.278] MANUAL: Target set to 240.0
+[00:00:19.279] Config: Manual BPM set to 400.0
+[00:00:19.331] MANUAL: Target set to 240.0
+[00:00:19.331] Config: Manual BPM set to 400.0
+[00:00:19.386] Processed: BPM=229.59
+[00:00:19.622] MANUAL: Target set to 240.0
+[00:00:19.623] Config: Manual BPM set to 400.0
+[00:00:19.646] Processed: BPM=229.3
+[00:00:19.768] MANUAL: Target set to 240.0
+[00:00:19.768] Config: Manual BPM set to 400.0
+[00:00:19.860] MANUAL: Target set to 240.0
+[00:00:19.860] Config: Manual BPM set to 400.0
+[00:00:19.872] Processed: BPM=232.26
+[00:00:19.987] MANUAL: Target set to 240.0
+[00:00:19.987] Config: Manual BPM set to 374.061433447099
+[00:00:20.071] MANUAL: Target set to 240.0
+[00:00:20.072] Config: Manual BPM set to 337.2013651877133
+[00:00:20.159] Processed: BPM=233.16
+[00:00:20.257] MANUAL: Target set to 240.0
+[00:00:20.257] Config: Manual BPM set to 323.54948805460754
+[00:00:20.352] MANUAL: Target set to 240.0
+[00:00:20.352] Config: Manual BPM set to 288.05460750853246
+[00:00:20.362] MANUAL: Target set to 240.0
+[00:00:20.362] Config: Manual BPM set to 273.03754266211604
+[00:00:20.382] Processed: BPM=244.57
+[00:00:20.481] MANUAL: Target set to 240.0
+[00:00:20.482] Config: Manual BPM set to 271.67235494880543
+[00:00:20.575] MANUAL: Target set to 240.0
+[00:00:20.575] Config: Manual BPM set to 262.1160409556314
+[00:00:20.689] Processed: BPM=221.13
+[00:00:20.744] MANUAL: Target set to 240.0
+[00:00:20.745] Config: Manual BPM set to 255.29010238907847
+[00:00:20.884] Processed: BPM=247.59
+[00:00:21.187] Processed: BPM=223.88
+[00:00:21.428] Processed: BPM=241.94
+[00:00:21.704] Processed: BPM=219.24
+[00:00:21.895] Processed: BPM=253.52
+[00:00:22.220] Processed: BPM=227.27
+[00:00:22.241] MANUAL: Target set to 240.0
+[00:00:22.241] Config: Manual BPM set to 245.73378839590444
+[00:00:22.349] MANUAL: Target set to 234.8
+[00:00:22.349] Config: Manual BPM set to 234.81228668941978
+[00:00:22.441] MANUAL: Target set to 222.5
+[00:00:22.441] Config: Manual BPM set to 222.52559726962454
+[00:00:22.477] Processed: BPM=233.16
+[00:00:22.583] MANUAL: Target set to 218.4
+[00:00:22.583] Config: Manual BPM set to 218.43003412969284
+[00:00:22.793] Processed: BPM=200.45
+[00:00:22.893] MANUAL: Target set to 217.1
+[00:00:22.894] Config: Manual BPM set to 217.06484641638224
+[00:00:22.980] MANUAL: Target set to 217.1
+[00:00:22.980] Config: Manual BPM set to 217.06484641638224
+[00:00:23.031] Processed: BPM=222.22
+[00:00:23.309] Processed: BPM=216.61
+[00:00:23.416] MANUAL: Target set to 210.2
+[00:00:23.416] Config: Manual BPM set to 210.23890784982936
+[00:00:23.539] Processed: BPM=241.61
+[00:00:23.640] MANUAL: Target set to 200.7
+[00:00:23.640] Config: Manual BPM set to 200.6825938566553
+[00:00:23.729] MANUAL: Target set to 189.8
+[00:00:23.729] Config: Manual BPM set to 189.76109215017064
+[00:00:23.751] MANUAL: Target set to 178.8
+[00:00:23.751] Config: Manual BPM set to 178.839590443686
+[00:00:23.791] MANUAL: Target set to 177.5
+[00:00:23.792] Config: Manual BPM set to 177.47440273037543
+[00:00:23.826] Processed: BPM=227.27
+[00:00:23.946] MANUAL: Target set to 170.6
+[00:00:23.947] Config: Manual BPM set to 170.64846416382252
+[00:00:24.053] Processed: BPM=242.26
+[00:00:24.059] MANUAL: Target set to 163.8
+[00:00:24.059] Config: Manual BPM set to 163.82252559726962
+[00:00:24.251] MANUAL: Target set to 161.1
+[00:00:24.251] Config: Manual BPM set to 161.09215017064847
+[00:00:24.279] Processed: BPM=243.24
+[00:00:24.473] MANUAL: Target set to 157.0
+[00:00:24.474] Config: Manual BPM set to 156.99658703071674
+[00:00:24.554] Processed: BPM=246.58
+[00:00:24.673] MANUAL: Target set to 146.1
+[00:00:24.673] Config: Manual BPM set to 146.07508532423208
+[00:00:24.769] MANUAL: Target set to 133.8
+[00:00:24.769] Config: Manual BPM set to 133.78839590443684
+[00:00:24.855] Processed: BPM=223.88
+[00:00:24.866] MANUAL: Target set to 129.7
+[00:00:24.866] Config: Manual BPM set to 129.6928327645051
+[00:00:24.976] MANUAL: Target set to 127.0
+[00:00:24.976] Config: Manual BPM set to 126.96245733788396
+[00:00:25.060] MANUAL: Target set to 121.5
+[00:00:25.060] Config: Manual BPM set to 121.50170648464164
+[00:00:25.118] Processed: BPM=214.29
+[00:00:25.219] MANUAL: Target set to 118.8
+[00:00:25.219] Config: Manual BPM set to 118.77133105802046
+[00:00:25.441] Processed: BPM=202.7
+[00:00:25.499] MANUAL: Target set to 116.0
+[00:00:25.499] Config: Manual BPM set to 116.04095563139931
+[00:00:25.599] MANUAL: Target set to 113.3
+[00:00:25.599] Config: Manual BPM set to 113.31058020477815
+[00:00:25.734] MANUAL: Target set to 111.9
+[00:00:25.735] Config: Manual BPM set to 111.94539249146757
+[00:00:25.753] Processed: BPM=201.12
+[00:00:25.950] MANUAL: Target set to 110.6
+[00:00:25.950] Config: Manual BPM set to 110.580204778157
+[00:00:26.092] Processed: BPM=184.43
+[00:00:26.131] MANUAL: Target set to 107.8
+[00:00:26.131] Config: Manual BPM set to 107.84982935153585
+[00:00:26.233] MANUAL: Target set to 102.4
+[00:00:26.233] Config: Manual BPM set to 102.3890784982935
+[00:00:26.355] MANUAL: Target set to 96.9
+[00:00:26.355] Config: Manual BPM set to 96.9283276450512
+[00:00:26.486] MANUAL: Target set to 88.7
+[00:00:26.486] Config: Manual BPM set to 88.73720136518772
+[00:00:26.543] Processed: BPM=163.93
+[00:00:26.645] MANUAL: Target set to 86.0
+[00:00:26.645] Config: Manual BPM set to 86.00682593856655
+[00:00:26.737] MANUAL: Target set to 81.9
+[00:00:26.737] Config: Manual BPM set to 81.91126279863481
+[00:00:26.921] MANUAL: Target set to 80.5
+[00:00:26.922] Config: Manual BPM set to 80.54607508532423
+[00:00:27.096] MANUAL: Target set to 79.2
+[00:00:27.097] Config: Manual BPM set to 79.18088737201366
+[00:00:27.164] Processed: BPM=127.57
+[00:00:27.196] MANUAL: Target set to 77.8
+[00:00:27.197] Config: Manual BPM set to 77.81569965870307
+[00:00:27.676] Processed: BPM=114.0
+[00:00:28.328] Processed: BPM=100.61
+[00:00:28.845] Processed: BPM=106.89
+[00:00:29.760] Processed: BPM=86.25
+[00:00:30.237] Processed: BPM=94.69
+[00:00:31.332] Processed: BPM=72.43
+[00:00:31.351] MANUAL: Target set to 90.1
+[00:00:31.351] Config: Manual BPM set to 90.10238907849829
+[00:00:31.458] MANUAL: Target set to 102.4
+[00:00:31.458] Config: Manual BPM set to 102.3890784982935
+[00:00:31.557] MANUAL: Target set to 106.5
+[00:00:31.557] Config: Manual BPM set to 106.48464163822527
+[00:00:31.734] MANUAL: Target set to 109.2
+[00:00:31.734] Config: Manual BPM set to 109.21501706484642
+[00:00:31.874] MANUAL: Target set to 117.4
+[00:00:31.874] Config: Manual BPM set to 117.40614334470989
+[00:00:31.918] Processed: BPM=83.37
+[00:00:32.004] MANUAL: Target set to 122.9
+[00:00:32.004] Config: Manual BPM set to 122.86689419795222
+[00:00:32.107] MANUAL: Target set to 127.0
+[00:00:32.107] Config: Manual BPM set to 126.96245733788396
+[00:00:32.260] MANUAL: Target set to 129.7
+[00:00:32.262] Config: Manual BPM set to 129.6928327645051
+[00:00:32.453] MANUAL: Target set to 137.9
+[00:00:32.454] Config: Manual BPM set to 137.88395904436862
+[00:00:32.633] MANUAL: Target set to 144.7
+[00:00:32.634] Config: Manual BPM set to 144.7098976109215
+[00:00:32.818] MANUAL: Target set to 147.4
+[00:00:32.818] Config: Manual BPM set to 147.44027303754265
+[00:00:32.987] Processed: BPM=65.26
+[00:00:33.095] MANUAL: Target set to 148.8
+[00:00:33.095] Config: Manual BPM set to 148.80546075085323
+[00:00:33.516] Processed: BPM=82.57
+[00:00:33.719] MANUAL: Target set to 150.2
+[00:00:33.720] Config: Manual BPM set to 150.1706484641638
+[00:00:33.731] MANUAL: Target set to 151.5
+[00:00:33.731] Config: Manual BPM set to 151.53583617747438
+[00:00:33.863] Processed: BPM=92.5
+[00:00:34.236] Processed: BPM=144.12
+[00:00:34.306] MANUAL: Target set to 152.9
+[00:00:34.306] Config: Manual BPM set to 152.90102389078498
+[00:00:34.538] MANUAL: Target set to 154.3
+[00:00:34.539] Config: Manual BPM set to 154.26621160409556
+[00:00:34.611] Processed: BPM=163.49
+[00:00:34.840] MANUAL: Target set to 158.4
+[00:00:34.840] Config: Manual BPM set to 158.36177474402731
+[00:00:34.942] MANUAL: Target set to 159.7
+[00:00:34.942] Config: Manual BPM set to 159.7269624573379
+[00:00:35.033] Processed: BPM=153.98
+[00:00:35.051] MANUAL: Target set to 161.1
+[00:00:35.051] Config: Manual BPM set to 161.09215017064847
+[00:00:35.168] MANUAL: Target set to 161.1
+[00:00:35.168] Config: Manual BPM set to 161.09215017064847
+[00:00:35.403] Processed: BPM=154.24
+[00:00:35.766] Processed: BPM=156.11
+[00:00:36.073] Processed: BPM=174.08
+[00:00:36.386] MANUAL: Target set to 162.5
+[00:00:36.386] Config: Manual BPM set to 162.45733788395904
+[00:00:36.550] Processed: BPM=156.79
+[00:00:36.666] MANUAL: Target set to 163.8
+[00:00:36.667] Config: Manual BPM set to 163.82252559726962
+[00:00:36.772] MANUAL: Target set to 166.6
+[00:00:36.773] Config: Manual BPM set to 166.55290102389077
+[00:00:36.789] Processed: BPM=176.13
+[00:00:36.916] MANUAL: Target set to 170.6
+[00:00:36.916] Config: Manual BPM set to 170.64846416382252
+[00:00:37.018] MANUAL: Target set to 176.1
+[00:00:37.018] Config: Manual BPM set to 176.10921501706486
+[00:00:37.166] MANUAL: Target set to 178.8
+[00:00:37.167] Config: Manual BPM set to 178.839590443686
+[00:00:37.211] Processed: BPM=157.62
+[00:00:37.313] MANUAL: Target set to 182.9
+[00:00:37.313] Config: Manual BPM set to 182.93515358361773
+[00:00:37.424] MANUAL: Target set to 191.1
+[00:00:37.424] Config: Manual BPM set to 191.12627986348122
+[00:00:37.597] MANUAL: Target set to 193.9
+[00:00:37.598] Config: Manual BPM set to 193.8566552901024
+[00:00:37.623] Processed: BPM=168.38
+[00:00:37.737] MANUAL: Target set to 200.7
+[00:00:37.737] Config: Manual BPM set to 200.6825938566553
+[00:00:37.829] MANUAL: Target set to 202.0
+[00:00:37.829] Config: Manual BPM set to 202.04778156996585
+[00:00:38.035] Processed: BPM=144.23
+[00:00:38.408] Processed: BPM=150.13
+[00:00:38.626] MANUAL: Target set to 203.4
+[00:00:38.626] Config: Manual BPM set to 203.41296928327645
+[00:00:38.739] Processed: BPM=161.15
+[00:00:39.000] Processed: BPM=186.34
+[00:00:39.293] Processed: BPM=204.55
+[00:00:39.538] Processed: BPM=225.28
+[00:00:39.851] Processed: BPM=211.52
+[00:00:40.138] Processed: BPM=212.26
+[00:00:40.476] Processed: BPM=192.93
+[00:00:40.759] Processed: BPM=198.9
+[00:00:41.062] Processed: BPM=194.38
+[00:00:41.133] MANUAL: Target set to 203.4
+[00:00:41.133] Config: Manual BPM set to 203.41296928327645
+[00:00:41.340] Processed: BPM=206.9
+[00:00:41.342] MANUAL: Target set to 202.0
+[00:00:41.343] Config: Manual BPM set to 202.04778156996585
+[00:00:41.483] MANUAL: Target set to 199.3
+[00:00:41.483] Config: Manual BPM set to 199.3174061433447
+[00:00:41.682] Processed: BPM=194.59
+[00:00:41.958] Processed: BPM=202.25
+[00:00:42.055] MANUAL: Target set to 195.2
+[00:00:42.055] Config: Manual BPM set to 195.22184300341297
+[00:00:42.148] MANUAL: Target set to 189.8
+[00:00:42.149] Config: Manual BPM set to 189.76109215017064
+[00:00:42.311] Processed: BPM=185.95
+[00:00:42.335] MANUAL: Target set to 182.9
+[00:00:42.336] Config: Manual BPM set to 182.93515358361773
+[00:00:42.453] MANUAL: Target set to 169.3
+[00:00:42.454] Config: Manual BPM set to 169.28327645051195
+[00:00:42.548] Processed: BPM=208.09
+[00:00:42.570] MANUAL: Target set to 162.5
+[00:00:42.571] Config: Manual BPM set to 162.45733788395904
+[00:00:42.679] MANUAL: Target set to 157.0
+[00:00:42.679] Config: Manual BPM set to 156.99658703071674
+[00:00:42.882] Processed: BPM=193.97
+[00:00:42.898] MANUAL: Target set to 154.3
+[00:00:42.899] Config: Manual BPM set to 154.26621160409556
+[00:00:43.106] MANUAL: Target set to 152.9
+[00:00:43.106] Config: Manual BPM set to 152.90102389078498
+[00:00:43.155] Processed: BPM=212.26
+[00:00:43.237] MANUAL: Target set to 150.2
+[00:00:43.237] Config: Manual BPM set to 150.1706484641638
+[00:00:43.520] Processed: BPM=184.99
+[00:00:43.569] MANUAL: Target set to 147.4
+[00:00:43.569] Config: Manual BPM set to 147.44027303754265
+[00:00:43.677] MANUAL: Target set to 146.1
+[00:00:43.677] Config: Manual BPM set to 146.07508532423208
+[00:00:43.783] MANUAL: Target set to 143.3
+[00:00:43.784] Config: Manual BPM set to 143.34470989761093
+[00:00:43.805] Processed: BPM=195.23
+[00:00:43.910] MANUAL: Target set to 139.2
+[00:00:43.910] Config: Manual BPM set to 139.2491467576792
+[00:00:44.017] MANUAL: Target set to 137.9
+[00:00:44.017] Config: Manual BPM set to 137.88395904436862
+[00:00:44.164] MANUAL: Target set to 136.5
+[00:00:44.164] Config: Manual BPM set to 136.51877133105802
+[00:00:44.234] Processed: BPM=166.82
+[00:00:44.284] MANUAL: Target set to 133.8
+[00:00:44.284] Config: Manual BPM set to 133.78839590443684
+[00:00:44.393] MANUAL: Target set to 131.1
+[00:00:44.393] Config: Manual BPM set to 131.0580204778157
+[00:00:44.493] MANUAL: Target set to 128.3
+[00:00:44.493] Config: Manual BPM set to 128.32764505119454
+[00:00:44.534] Processed: BPM=177.87
+[00:00:44.658] MANUAL: Target set to 125.6
+[00:00:44.659] Config: Manual BPM set to 125.59726962457339
+[00:00:44.773] MANUAL: Target set to 120.1
+[00:00:44.774] Config: Manual BPM set to 120.13651877133107
+[00:00:44.935] MANUAL: Target set to 117.4
+[00:00:44.936] Config: Manual BPM set to 117.40614334470989
+[00:00:45.064] MANUAL: Target set to 116.0
+[00:00:45.064] Config: Manual BPM set to 116.04095563139931
+[00:00:45.074] Processed: BPM=141.73
+[00:00:45.493] Processed: BPM=143.66
+[00:00:45.787] MANUAL: Target set to 113.3
+[00:00:45.788] Config: Manual BPM set to 113.31058020477815
+[00:00:45.925] MANUAL: Target set to 111.9
+[00:00:45.925] Config: Manual BPM set to 111.94539249146757
+[00:00:46.083] Processed: BPM=116.28
+[00:00:46.307] MANUAL: Target set to 110.6
+[00:00:46.307] Config: Manual BPM set to 110.580204778157
+[00:00:46.471] MANUAL: Target set to 109.2
+[00:00:46.471] Config: Manual BPM set to 109.21501706484642
+[00:00:46.588] Processed: BPM=118.73
+[00:00:46.637] MANUAL: Target set to 107.8
+[00:00:46.637] Config: Manual BPM set to 107.84982935153585
+[00:00:46.742] MANUAL: Target set to 106.5
+[00:00:46.742] Config: Manual BPM set to 106.48464163822527
+[00:00:47.119] Processed: BPM=110.29
+[00:00:47.172] MANUAL: Target set to 105.1
+[00:00:47.172] Config: Manual BPM set to 105.11945392491468
+[00:00:47.280] MANUAL: Target set to 98.3
+[00:00:47.280] Config: Manual BPM set to 98.29351535836177
+[00:00:47.485] MANUAL: Target set to 95.6
+[00:00:47.485] Config: Manual BPM set to 95.56313993174061
+[00:00:47.595] Processed: BPM=118.97
+[00:00:47.730] MANUAL: Target set to 94.2
+[00:00:47.731] Config: Manual BPM set to 94.19795221843003
+[00:00:47.828] MANUAL: Target set to 84.6
+[00:00:47.828] Config: Manual BPM set to 84.64163822525597
+[00:00:47.941] MANUAL: Target set to 80.5
+[00:00:47.941] Config: Manual BPM set to 80.54607508532423
+[00:00:48.189] Processed: BPM=112.71
+[00:00:48.679] Processed: BPM=115.31
+[00:00:49.166] Processed: BPM=114.5
+[00:00:49.636] Processed: BPM=124.14
+[00:00:50.224] Processed: BPM=116.81
+[00:00:50.745] Processed: BPM=113.78
+[00:00:51.289] Processed: BPM=109.22
+[00:00:51.759] Processed: BPM=117.34
+[00:00:52.272] Processed: BPM=118.03
+[00:00:52.749] Processed: BPM=122.78
+[00:00:53.288] Processed: BPM=117.49
+[00:00:53.716] Processed: BPM=124.83
+[00:00:54.309] Processed: BPM=115.46
+[00:00:54.825] Processed: BPM=117.11
+[00:00:55.258] Processed: BPM=116.58
+[00:00:55.695] Processed: BPM=129.87
+[00:00:56.215] Processed: BPM=129.59
+[00:00:56.696] Processed: BPM=125.52
+[00:01:00.260] Processed: BPM=39.47
+[00:01:00.684] Processed: BPM=40.27
+[00:01:01.045] Processed: BPM=41.37
+[00:01:01.652] Processed: BPM=129.03
+[00:01:02.191] Processed: BPM=119.44
+[00:01:02.859] Processed: BPM=99.12
+[00:01:03.404] Processed: BPM=102.68

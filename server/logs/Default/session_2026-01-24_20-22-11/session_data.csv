@@ -1,0 +1,3 @@
+# meta: {"smoothing_window": 3, "stride": 1, "run_type": "random"}
+time,song_bpm,walking_bpm,step_event,instant_bpm
+00:00:00.000,0,120.0,True,0.0

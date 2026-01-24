@@ -1,4 +1,0 @@
-Session log started at 2025-12-14_22-10-11 (t=0.000)
-[00:00:00.199] Starting in DYNAMIC MODE
-[00:00:00.199] Session started
-[00:00:00.201] Failed to open serial port COM3: could not open port 'COM3': PermissionError(13, 'Access is denied.', None, 5)

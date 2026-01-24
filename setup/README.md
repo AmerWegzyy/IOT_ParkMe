@@ -415,10 +415,10 @@ The standalone application includes:
 - ✅ Live BPM visualization
 
 **External (writable after deployment):**
-- 📝 User session logs (`server/logs/`)
-- 🧠 Trained models (`research/LightGBM/results/models/`)
-- 📊 Training plots (`research/LightGBM/results/plots/`)
-- 🎵 MIDI files (can be added/modified)
+- User session logs (`server/logs/`)
+- Trained models (`server/utils/prediction_model/results/models/`)
+- Training plots (`server/utils/prediction_model/results/plots/`)
+- MIDI files (can be added/modified)
 
 ---
 

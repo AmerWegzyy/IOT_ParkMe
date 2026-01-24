@@ -1,4 +1,0 @@
-Session log started at 2025-12-22_22-33-31 (t=0.000)
-[00:00:00.002] DEBUG: Attempting to initialize MidiBeatSync...
-[00:00:00.114] DEBUG: MidiBeatSync initialized successfully.
-[00:00:00.115] Starting in DYNAMIC MODE
