@@ -1,0 +1,98 @@
+Session log started at 2026-01-25_02-16-00 (t=0.000)
+[00:00:00.000] DEBUG: Attempting to initialize MidiBeatSync...
+[00:00:00.000] DEBUG: MidiBeatSync initialized successfully.
+[00:00:00.000] Starting in DYNAMIC MODE
+[00:00:00.000] Run type: hybrid
+[00:00:00.000] Prediction model enabled: lgbm_model.joblib
+[00:00:00.000] HYBRID: Lock steps set to 5
+[00:00:00.000] HYBRID: Unlock time set to 1.5s
+[00:00:00.000] HYBRID: Stability threshold set to 5.0 BPM
+[00:00:00.000] HYBRID: Unlock threshold set to 10.0 BPM
+[00:00:00.000] Mode Activated: HybridMode
+[00:00:00.000] Session started
+[00:00:00.000] DEBUG: Attempting to open serial port COM3...
+[00:00:00.000] DEBUG: Serial port COM3 opened successfully.
+[00:00:00.000] Setting update stride to 1
+[00:00:00.000] Update stride set response: ACK,STRIDE,1
+[00:00:00.000] ACK,RESET received
+[00:00:00.000] ACK,START received
+[00:00:00.000] Session handshake completed
+[00:00:00.000] Running main loop...
+[00:00:00.001] Session timer started - music is now playing
+[00:00:01.789] Processed: BPM=80.0
+[00:00:02.323] Processed: BPM=112.57
+[00:00:02.837] Processed: BPM=114.61
+[00:00:03.416] Processed: BPM=110.77
+[00:00:04.096] Processed: BPM=109.36
+[00:00:04.538] Processed: BPM=106.07
+[00:00:05.057] Processed: BPM=109.89
+[00:00:05.555] HYBRID: Locked at 110.4 BPM (stability range: 4.4 BPM)
+[00:00:05.558] Processed: BPM=113.78
+[00:00:06.093] Processed: BPM=115.83
+[00:00:06.608] Processed: BPM=115.98
+[00:00:07.133] Processed: BPM=114.14
+[00:00:07.621] Processed: BPM=117.8
+[00:00:08.179] Processed: BPM=114.65
+[00:00:08.594] HYBRID: Unlocking! Walker 122.3 vs Locked 110.4 (deviation: 11.9 > threshold: 10.0)
+[00:00:08.597] Processed: BPM=123.03
+[00:00:09.118] Processed: BPM=120.16
+[00:00:09.623] Processed: BPM=124.65
+[00:00:10.111] Processed: BPM=118.58
+[00:00:10.591] Processed: BPM=122.2
+[00:00:11.087] Processed: BPM=122.95
+[00:00:11.579] HYBRID: Locked at 121.4 BPM (stability range: 3.5 BPM)
+[00:00:11.582] Processed: BPM=122.7
+[00:00:12.064] Processed: BPM=122.28
+[00:00:12.566] Processed: BPM=121.7
+[00:00:13.028] Processed: BPM=124.48
+[00:00:13.531] Processed: BPM=122.53
+[00:00:14.034] Processed: BPM=122.62
+[00:00:14.508] Processed: BPM=121.54
+[00:00:14.963] Processed: BPM=125.96
+[00:00:15.472] Processed: BPM=125.26
+[00:00:15.949] Processed: BPM=124.83
+[00:00:16.455] Processed: BPM=120.48
+[00:00:16.945] Processed: BPM=122.03
+[00:00:17.395] Processed: BPM=124.48
+[00:00:17.914] Processed: BPM=123.29
+[00:00:18.397] Processed: BPM=124.14
+[00:00:18.864] Processed: BPM=122.45
+[00:00:19.369] Processed: BPM=123.8
+[00:00:19.837] Processed: BPM=124.83
+[00:00:20.358] Processed: BPM=120.56
+[00:00:20.872] Processed: BPM=120.0
+[00:00:21.344] Processed: BPM=119.52
+[00:00:21.849] Processed: BPM=120.72
+[00:00:22.318] Processed: BPM=124.4
+[00:00:22.815] Processed: BPM=122.62
+[00:00:23.291] Processed: BPM=124.83
+[00:00:23.794] Processed: BPM=121.62
+[00:00:24.296] Processed: BPM=121.21
+[00:00:24.801] Processed: BPM=119.13
+[00:00:25.310] Processed: BPM=118.89
+[00:00:25.804] Processed: BPM=119.36
+[00:00:26.297] Processed: BPM=120.48
+[00:00:26.790] Processed: BPM=121.7
+[00:00:27.274] Processed: BPM=122.62
+[00:00:27.733] Processed: BPM=125.44
+[00:00:28.633] HYBRID: Unlocking! Walker 100.9 vs Locked 121.4 (deviation: 20.5 > threshold: 10.0)
+[00:00:28.635] Processed: BPM=97.61
+[00:00:29.135] Processed: BPM=96.72
+[00:00:29.636] Processed: BPM=94.69
+[00:00:30.103] Processed: BPM=122.37
+[00:00:30.580] Processed: BPM=124.65
+[00:00:31.080] Processed: BPM=124.31
+[00:00:31.532] Processed: BPM=126.05
+[00:00:32.013] Processed: BPM=125.44
+[00:00:32.478] HYBRID: Locked at 124.5 BPM (stability range: 4.2 BPM)
+[00:00:32.481] Processed: BPM=128.57
+[00:00:32.953] Processed: BPM=126.94
+[00:00:33.419] Processed: BPM=127.84
+[00:00:33.897] Processed: BPM=126.94
+[00:00:34.362] Processed: BPM=127.57
+[00:00:34.862] Processed: BPM=125.0
+[00:00:35.335] Processed: BPM=125.26
+[00:00:35.768] Processed: BPM=128.11
+[00:00:36.246] Processed: BPM=130.06
+[00:00:36.742] Processed: BPM=128.02
+[00:00:37.236] Processed: BPM=122.7

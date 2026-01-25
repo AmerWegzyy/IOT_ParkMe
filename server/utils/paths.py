@@ -63,6 +63,35 @@ def get_research_dir():
     return prediction_model
 
 
+def get_source_scripts_dir():
+    """
+    Get the directory containing Python source scripts for training/augmentation.
+    In frozen mode, returns the actual source location (not dist folder).
+    In development mode, returns the same as get_research_dir().
+    """
+    if getattr(sys, 'frozen', False):
+        # In frozen mode, look for scripts in the source directory
+        # The user should run the compiled app from the project root or keep source alongside
+        exe_dir = Path(sys.executable).parent
+        
+        # Try to find the source directory relative to the executable
+        # Case 1: Executable is in dist/BrainMusicSync/, source is at ../../server/utils/prediction_model/
+        source_path = exe_dir.parent.parent / "server" / "utils" / "prediction_model"
+        if source_path.exists():
+            return source_path
+        
+        # Case 2: Executable is at project root, source is at server/utils/prediction_model/
+        source_path = exe_dir / "server" / "utils" / "prediction_model"
+        if source_path.exists():
+            return source_path
+        
+        # Case 3: Fall back to app_root (might not have scripts, but at least consistent)
+        return get_research_dir()
+    else:
+        # Development mode: same as get_research_dir()
+        return get_research_dir()
+
+
 def get_project_root():
     """Alias for get_app_root() for backwards compatibility."""
     return get_app_root()

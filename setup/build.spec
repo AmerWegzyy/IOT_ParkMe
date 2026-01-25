@@ -74,6 +74,7 @@ a = Analysis(
         'threading',
         'subprocess',
         'json',
+        'shutil',  # For get_python_executable
     ],
     hookspath=[],
     hooksconfig={},
