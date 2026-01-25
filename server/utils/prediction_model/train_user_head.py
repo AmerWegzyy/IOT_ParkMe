@@ -19,8 +19,8 @@ from train_lgbm import (
     BASE_DIR,
 )
 
-# Import load_all_sessions from local analyze_data.py
-from analyze_data import load_all_sessions
+# Import load_all_sessions and _read_session from local analyze_data.py
+from analyze_data import load_all_sessions, _read_session
 
 
 def _load_sessions_from_file(filepath: str) -> list[str]:
@@ -72,14 +72,14 @@ def main():
 
     # Load data from specified sources
     if session_paths:
-        # Load specific session CSVs
+        # Load specific session CSVs using _read_session to properly parse metadata
         print(f"Loading {len(session_paths)} specified session(s)...")
         dfs = []
         for csv_path in session_paths:
             if Path(csv_path).exists():
-                df_sess = pd.read_csv(csv_path)
-                df_sess["session_id"] = Path(csv_path).parent.name
-                dfs.append(df_sess)
+                df_sess = _read_session(csv_path)
+                if df_sess is not None:
+                    dfs.append(df_sess)
         if not dfs:
             raise ValueError("No valid session files found.")
         df = pd.concat(dfs, ignore_index=True)

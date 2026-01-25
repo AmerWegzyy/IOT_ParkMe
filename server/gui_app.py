@@ -4,15 +4,38 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import time
+import sys
+import shutil
 
 import pandas as pd
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
+def get_python_executable():
+    """Get Python executable path - handles compiled (frozen) apps."""
+    # Check if running as compiled PyInstaller app
+    if getattr(sys, 'frozen', False):
+        # In frozen mode, sys.executable is the .exe - find system Python instead
+        python_path = shutil.which('python') or shutil.which('python3')
+        if python_path:
+            return python_path
+        # Fallback: try common locations
+        import os
+        for path in ['python', 'python3', 'py']:
+            found = shutil.which(path)
+            if found:
+                return found
+        # Last resort - user needs Python installed
+        return None
+    else:
+        # Running from source - use current Python
+        return sys.executable
+
+
 # --- Mock imports for context ---
 try:
-    from utils.paths import get_logs_dir, get_models_dir, get_plots_dir, get_midi_dir, get_research_dir, get_app_root
+    from utils.paths import get_logs_dir, get_models_dir, get_plots_dir, get_midi_dir, get_research_dir, get_app_root, get_source_scripts_dir
     from utils.session.plotter import _elapsed_to_seconds, LivePlotter, generate_post_session_plot
     from utils.engine.process_manager import SubprocessManager
     from utils.hardware.comms import send_calibration_command
@@ -1782,15 +1805,19 @@ class GuiApp:
 
     def _generate_augmented_data(self):
         """Generate augmented data from selected sessions."""
-        import threading
         import subprocess
-        import sys
         from pathlib import Path
         
         # Get selected items
         selected = self.session_tree.selection()
         if not selected:
             self.log("Select sessions or user folders to augment.")
+            return
+        
+        # Check if Python is available
+        python_exe = get_python_executable()
+        if not python_exe:
+            self.log("ERROR: Python not found. Please install Python to use augmentation features.")
             return
         
         # Parse selection to determine mode
@@ -1814,8 +1841,7 @@ class GuiApp:
                     selected_users.append(user_name)
         
         # Build command
-        base_dir = Path(__file__).resolve().parent
-        script_path = base_dir / "utils" / "prediction_model" / "generate_augmented_data.py"
+        script_path = get_source_scripts_dir() / "generate_augmented_data.py"
         
         if not script_path.exists():
             self.log(f"ERROR: Augmentation script not found at {script_path}")
@@ -1826,11 +1852,11 @@ class GuiApp:
             # User folder(s) selected - augment first user only for simplicity
             # (Could be extended to support multiple users)
             mode = f"user folder '{selected_users[0]}'"
-            cmd = [sys.executable, str(script_path), "--user", selected_users[0]]
+            cmd = [python_exe, str(script_path), "--user", selected_users[0]]
         elif selected_sessions:
             # Specific sessions selected
             mode = f"{len(selected_sessions)} specific session(s)"
-            cmd = [sys.executable, str(script_path), "--sessions"] + selected_sessions
+            cmd = [python_exe, str(script_path), "--sessions"] + selected_sessions
         else:
             self.log("Select sessions or user folders to augment.")
             return
@@ -1849,7 +1875,7 @@ class GuiApp:
             try:
                 result = subprocess.run(
                     cmd,
-                    cwd=str(base_dir),
+                    cwd=str(get_app_root()),
                     capture_output=True,
                     text=True,
                     timeout=600  # 10 minute timeout
@@ -2050,6 +2076,13 @@ class GuiApp:
             print("[DEBUG] Missing user name for user_head training")
             return
         
+        # Check if Python is available (needed for subprocess training)
+        python_exe = get_python_executable()
+        if not python_exe:
+            self.log("ERROR: Python not found. Please install Python to use training features.")
+            self.log("The compiled app requires Python to be installed on the system for training.")
+            return
+        
         print("[DEBUG] Starting training worker thread...")
 
         # Lock UI
@@ -2068,7 +2101,6 @@ class GuiApp:
         # Run training in background thread
         def _worker():
             import subprocess
-            import sys
             try:
                 # Write sessions to a temp file to avoid command-line length limits on Windows
                 import tempfile
@@ -2079,16 +2111,16 @@ class GuiApp:
                 
                 if train_type == "base":
                     # Run train_lgbm.py with selected sessions
-                    script = get_research_dir() / "train_lgbm.py"
-                    cmd = [sys.executable, str(script), "--sessions-file", sessions_file.name]
+                    script = get_source_scripts_dir() / "train_lgbm.py"
+                    cmd = [python_exe, str(script), "--sessions-file", sessions_file.name]
                     # Add Optuna optimization if enabled
                     if use_optuna:
                         cmd.append("--optimize")
                         cmd.extend(["--trials", str(optuna_trials)])
                 else:
                     # Run train_user_head.py with selected sessions
-                    script = get_research_dir() / "train_user_head.py"
-                    cmd = [sys.executable, str(script), "--sessions-file", sessions_file.name, "--suffix", user_head_name.replace(" ", "_")]
+                    script = get_source_scripts_dir() / "train_user_head.py"
+                    cmd = [python_exe, str(script), "--sessions-file", sessions_file.name, "--suffix", user_head_name.replace(" ", "_")]
 
                 self.root.after(0, lambda: self._log_training(f"Running: {' '.join(cmd)}"))
 
