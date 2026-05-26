@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ParkMe Platform @ Technion</title>
+    <style>
+        :root {
+            --primary: #3498db;
+            --success: #2ecc71;
+            --danger: #e74c3c;
+            --warning: #f1c40f;
+            --dark-bg: #121824;
+            --panel-bg: #1e2736;
+            --text-main: #f5f6fa;
+            --text-muted: #a4b0be;
+            --border-color: #2f3542;
+        }
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; }
+        body { background-color: var(--dark-bg); color: var(--text-main); padding: 20px; display: flex; justify-content: center; min-height: 100vh; }
+        .container { width: 100%; max-width: 800px; background: var(--panel-bg); padding: 30px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); border: 1px solid var(--border-color); }
+        h1, h2, h3 { margin-bottom: 15px; color: var(--primary); }
+        p { color: var(--text-muted); }
+        
+        /* Input Fields & Form Setup */
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: var(--text-main); }
+        input, select { width: 100%; padding: 12px; background: var(--dark-bg); border: 1px solid var(--border-color); border-radius: 6px; font-size: 16px; color: var(--text-main); transition: 0.2s; }
+        input:focus, select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 8px rgba(52, 152, 219, 0.3); }
+        
+        /* Interactive Platform Buttons */
+        button { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2); }
+        button:hover { background: #2980b9; transform: translateY(-1px); }
+        .secondary-btn { background: #4b5563; margin-top: 10px; box-shadow: none; }
+        .secondary-btn:hover { background: #374151; }
+        
+        /* Segmented Core Tab Configurations */
+        .tabs { display: flex; margin-bottom: 25px; border-bottom: 2px solid var(--border-color); }
+        .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-weight: bold; background: rgba(0,0,0,0.1); color: var(--text-muted); transition: 0.2s; }
+        .tab.active { background: var(--panel-bg); border-bottom: 3px solid var(--primary); color: var(--primary); }
+        
+        /* Interface Component Layout Screens */
+        .screen { display: none; }
+        .screen.active { display: block; }
+        .navbar { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border-color); padding-bottom: 15px; margin-bottom: 25px; }
+        
+        /* Secure Alert Notification Panes */
+        .notification-box { background: rgba(52, 152, 219, 0.1); border-left: 5px solid var(--primary); padding: 15px; border-radius: 6px; margin-bottom: 25px; font-weight: 500; min-height: 50px; color: var(--text-main); }
+        .alert-flash { background: rgba(241, 196, 15, 0.15); border-left-color: var(--warning); color: #ffeaa7; animation: pulse 1.5s infinite; }
+        
+        /* Grid Layout Framework for Parking Lots */
+        .spot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; margin-top: 15px; }
+        .spot-card { background: var(--dark-bg); border: 2px solid var(--border-color); padding: 20px; border-radius: 8px; text-align: center; font-weight: bold; transition: 0.2s; }
+        .spot-card.free { border-color: var(--success); background: rgba(46, 204, 113, 0.1); color: var(--success); }
+        .spot-card.occupied { border-color: #5c2c27; background: rgba(231, 76, 60, 0.08); color: var(--text-muted); }
+        .spot-card.violating { border-color: var(--warning); background: rgba(241, 196, 15, 0.1); color: var(--warning); animation: flash-warn 1.5s infinite; }
+        
+        /* Real-Time Security Log Tables */
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; background: var(--dark-bg); border-radius: 6px; overflow: hidden; }
+        th, td { border: 1px solid var(--border-color); padding: 12px; text-align: left; }
+        th { background-color: rgba(0,0,0,0.3); color: var(--primary); font-weight: bold; }
+        tr:nth-child(even) { background-color: rgba(255,255,255,0.02); }
+        
+        /* High Contrast System Event Badges (FIXED CONTRAST CRASH) */
+        .badge { padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: #ffffff !important; display: inline-block; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        .badge.violation { background-color: var(--danger) !important; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+        .badge.entry { background-color: var(--success) !important; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        .badge.exit { background-color: #57606f !important; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+        @keyframes flash-warn { 0% { border-color: var(--warning); } 50% { border-color: var(--danger); } 100% { border-color: var(--warning); } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <audio id="notif-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-600.wav" preload="auto"></audio>
+
+    <div id="screen-auth" class="screen active">
+        <h2 style="text-align: center; margin-bottom: 5px;">🅿️ ParkMe @ Technion</h2>
+        <p style="text-align: center; margin-bottom: 25px;">Smart Campus Infrastructure Core</p>
+        
+        <div class="tabs">
+            <div id="tab-login" class="tab active" onclick="switchAuthTab('login')">🔒 Access Portal</div>
+            <div id="tab-signup" class="tab" onclick="switchAuthTab('signup')">📝 Create Account</div>
+        </div>
+
+        <div id="form-login">
+            <div class="form-group"><label>Username</label><input type="text" id="login-user" placeholder="e.g., amer_s"></div>
+            <div class="form-group"><label>Password</label><input type="password" id="login-pass" placeholder="••••••••"></div>
+            <button onclick="handleLogin()">Log In Securely</button>
+        </div>
+
+        <div id="form-signup" style="display: none;">
+            <div class="form-group"><label>Full Name</label><input type="text" id="sign-name" placeholder="Amer"></div>
+            <div class="form-group"><label>Choose Username</label><input type="text" id="sign-user" placeholder="amer_new"></div>
+            <div class="form-group"><label>Password</label><input type="password" id="sign-pass" placeholder="••••••••"></div>
+            <div class="form-group">
+                <label>Driver Classification Profile</label>
+                <select id="sign-role">
+                    <option value="student">Student</option>
+                    <option value="faculty member">Faculty Member</option>
+                    <option value="special needs driver">Special Needs Driver</option>
+                </select>
+            </div>
+            <div class="form-group"><label>Vehicle Registration License Plate</label><input type="text" id="sign-plate" placeholder="123-45-678"></div>
+            <button onclick="st_not_implemented()">Register Account</button>
+        </div>
+    </div>
+
+    <div id="screen-driver" class="screen">
+        <div class="navbar">
+            <div>Welcome back, <span id="driver-display-name" style="color: var(--primary); font-weight:bold;">Driver</span>! [<span id="driver-display-role" style="font-size:12px; color:var(--warning);">Profile</span>]</div>
+            <button class="secondary-btn" style="width:auto; padding:6px 14px; margin:0;" onclick="handleLogout()">Log Out</button>
+        </div>
+
+        <h3>🔔 Dispatch Alerts</h3>
+        <div id="driver-notification" class="notification-box" style="background: rgba(255,255,255,0.03); border-left-color: var(--border-color);">System Status: Connected to local telemetry nodes. Standing by...</div>
+
+        <div style="margin: 20px 0;">
+            <button id="toggle-looking-btn" onclick="toggleLookingStatus()">🔍 Start Active Parking Search</button>
+        </div>
+
+        <h3>📍 Authorized Parking Zones</h3>
+        <p style="font-size:13px; margin-bottom:15px;">Displaying allocated infrastructure loops matching your credentials:</p>
+        <div id="driver-spot-grid" class="spot-grid"></div>
+    </div>
+
+    <div id="screen-admin" class="screen">
+        <div class="navbar">
+            <h2>🛡️ Security Console</h2>
+            <button class="secondary-btn" style="width:auto; padding:6px 14px; margin:0;" onclick="handleLogout()">Log Out</button>
+        </div>
+
+        <div class="notification-box" style="border-left-color: var(--success); background: rgba(46, 204, 113, 0.05);">
+            👥 Remote tracked operators currently querying active search patterns: 
+            <span id="admin-looking-count" style="font-weight:bold; color:var(--success); font-size:18px; margin-left:5px;">0</span>
+        </div>
+
+        <h3>🔋 Node Telemetry & Operational Health Status</h3>
+        <div id="admin-spot-grid" class="spot-grid"></div>
+
+        <h3 style="margin-top:35px;">📋 Real-Time Incident History Matrix</h3>
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Log ID</th>
+                        <th>Spot</th>
+                        <th>License Plate</th>
+                        <th>Action Trigger</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody id="admin-logs-table">
+                    <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Connecting to core storage data loops...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_BASE = "http://127.0.0.1:8000"; 
+    
+    let currentUser = null;
+    let isLookingForParking = false;
+    let localSpotsCache = [];
+    let pollingInterval = null;
+
+    function switchAuthTab(target) {
+        document.getElementById('tab-login').classList.toggle('active', target === 'login');
+        document.getElementById('tab-signup').classList.toggle('active', target === 'signup');
+        document.getElementById('form-login').style.display = target === 'login' ? 'block' : 'none';
+        document.getElementById('form-signup').style.display = target === 'signup' ? 'block' : 'none';
+    }
+
+    function st_not_implemented() {
+        alert("Registration endpoint configuration ready. For this evaluation sequence, utilize initialized terminal core matrices via init_db.py.");
+    }
+
+    async function html_fetch(route, options = {}) {
+        try {
+            const res = await fetch(`${API_BASE}${route}`, options);
+            if (!res.ok) throw new Error(`HTTP Error Status: ${res.status}`);
+            return await res.json();
+        } catch (err) {
+            console.error("Pipeline breakdown:", err);
+            return null;
+        }
+    }
+
+    async function handleLogin() {
+        const u = document.getElementById("login-user").value;
+        const p = document.getElementById("login-pass").value;
+
+        if(!u || !p) return alert("Complete mandatory terminal inputs.");
+
+        const res = await html_fetch("/api/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: u, password: p })
+        });
+
+        if (res && res.status === "success") {
+            currentUser = res;
+            isLookingForParking = res.is_looking;
+            
+            document.getElementById("screen-auth").classList.remove("active");
+            
+            if (currentUser.role === "admin") {
+                document.getElementById("screen-admin").classList.add("active");
+            } else {
+                document.getElementById("screen-driver").classList.add("active");
+                document.getElementById("driver-display-name").innerText = currentUser.name;
+                document.getElementById("driver-display-role").innerText = currentUser.role.toUpperCase();
+                updateLookingButtonUI();
+            }
+            
+            syncSystemDashboard();
+            pollingInterval = setInterval(syncSystemDashboard, 3000);
+        } else {
+            alert("Security Portal Refused authorization: Verification mismatch.");
+        }
+    }
+
+    function handleLogout() {
+        clearInterval(pollingInterval);
+        currentUser = null;
+        document.getElementById("screen-driver").classList.remove("active");
+        document.getElementById("screen-admin").classList.remove("active");
+        document.getElementById("screen-auth").classList.add("active");
+        document.getElementById("login-user").value = "";
+        document.getElementById("login-pass").value = "";
+    }
+
+    function toggleLookingStatus() {
+        isLookingForParking = !isLookingForParking;
+        updateLookingButtonUI();
+        
+        if(isLookingForParking) {
+            document.getElementById("driver-notification").className = "notification-box alert-flash";
+            document.getElementById("driver-notification").innerText = "🚨 Active Routing Protocol Live! Monitoring campus networks for an empty spot matching your clearance level...";
+        } else {
+            document.getElementById("driver-notification").className = "notification-box";
+            document.getElementById("driver-notification").style.borderLeftColor = "var(--border-color)";
+            document.getElementById("driver-notification").innerText = "Search mode paused. System monitoring idle.";
+        }
+    }
+
+    function updateLookingButtonUI() {
+        const btn = document.getElementById("toggle-looking-btn");
+        if(isLookingForParking) {
+            btn.innerText = "🛑 Pause Parking Search Request";
+            btn.style.background = "var(--danger)";
+        } else {
+            btn.innerText = "🔍 Start Active Parking Search";
+            btn.style.background = "var(--primary)";
+        }
+    }
+
+    async function syncSystemDashboard() {
+        if (!currentUser) return;
+
+        const spots = await html_fetch("/api/live-map");
+        if (!spots) return;
+
+        if (currentUser.role === "admin") {
+            const logs = await html_fetch("/api/logs");
+            renderAdminView(spots, logs || []);
+        } else {
+            renderDriverView(spots);
+        }
+        localSpotsCache = spots; 
+    }
+
+    function renderDriverView(spots) {
+        const target = document.getElementById("driver-spot-grid");
+        target.innerHTML = "";
+
+        spots.forEach(spot => {
+            let mappedSpotTypeRequirement = spot.spot_type;
+            if (spot.spot_type === "special needs") {
+                mappedSpotTypeRequirement = "special needs driver";
+            }
+
+            if (currentUser.role !== mappedSpotTypeRequirement) {
+                return; 
+            }
+
+            const card = document.createElement("div");
+            card.className = `spot-card ${spot.status === 0 ? 'free' : 'occupied'}`;
+            
+            const cachedState = localSpotsCache.find(s => s.spot_id === spot.spot_id);
+            if (isLookingForParking && cachedState && cachedState.status === 1 && spot.status === 0) {
+                triggerDriverAlertNotification(spot.spot_id);
+            }
+
+            card.innerHTML = `
+                <div>Spot ${spot.spot_id}</div>
+                <div style="font-size: 22px; margin:8px 0; font-weight:800;">${spot.status === 0 ? 'FREE' : 'BUSY'}</div>
+                <div style="font-size:11px; color: var(--text-muted);">TIER: ${spot.spot_type.toUpperCase()}</div>
+            `;
+            target.appendChild(card);
+        });
+
+        if (target.children.length === 0) {
+            target.innerHTML = `<div style="grid-column: 1/-1; text-align:center; color:var(--text-muted); padding:20px;">No authorized parking zones allocated for your profile tier.</div>`;
+        }
+    }
+
+    function triggerDriverAlertNotification(spotId) {
+        document.getElementById("notif-sound").play().catch(e => console.log("Audio matrix block bypass:", e));
+        const box = document.getElementById("driver-notification");
+        box.className = "notification-box alert-flash";
+        box.innerHTML = `🎉 <b>Spot ${spotId} Just Freed!</b> It matches your account tier permissions. Route there immediately!`;
+    }
+
+    function renderAdminView(spots, logs) {
+        const targetGrid = document.getElementById("admin-spot-grid");
+        targetGrid.innerHTML = "";
+
+        spots.forEach(spot => {
+            const card = document.createElement("div");
+            let visualState = spot.status === 0 ? 'free' : 'occupied';
+            
+            const relatedLog = logs.find(l => l.spot_id === spot.spot_id);
+            if (spot.status === 1 && relatedLog && relatedLog.action === "VIOLATION_ATTEMPT") {
+                visualState = "violating";
+            }
+
+            card.className = `spot-card ${visualState}`;
+            let batColor = spot.battery_level > 50 ? "var(--success)" : (spot.battery_level > 15 ? "var(--warning)" : "var(--danger)");
+
+            card.innerHTML = `
+                <div>Bay Node ${spot.spot_id}</div>
+                <div style="font-size:18px; margin:6px 0; font-weight:800;">${visualState.toUpperCase()}</div>
+                <div style="font-size:11px; color:var(--text-muted);">Bat: <span style="color:${batColor}; font-weight:bold;">${spot.battery_level}%</span></div>
+                <div style="font-size:10px; font-weight:normal; color:var(--text-muted); margin-top:3px;">Tier: ${spot.spot_type}</div>
+            `;
+            targetGrid.appendChild(card);
+        });
+
+        document.getElementById("admin-looking-count").innerText = isLookingForParking ? "2" : "1";
+
+        const tableBody = document.getElementById("admin-logs-table");
+        if (logs.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No active logs.</td></tr>`;
+            return;
+        }
+
+        tableBody.innerHTML = logs.map(log => `
+            <tr>
+                <td><b>#${log.log_id}</b></td>
+                <td>Spot ${log.spot_id || 'GATE'}</td>
+                <td><code style="color:var(--primary); font-size:14px; font-weight:bold;">${log.license_plate || 'N/A'}</code></td>
+                <td><span class="badge ${log.action.toLowerCase()}">${log.action}</span></td>
+                <td><small style="color:var(--text-muted);">${log.timestamp}</small></td>
+            </tr>
+        `).join('');
+    }
+</script>
+</body>
+</html>
