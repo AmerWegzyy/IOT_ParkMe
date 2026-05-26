@@ -8,7 +8,7 @@ import re
 print("[SYSTEM] Loading EasyOCR AI models into memory... (This may take a moment)")
 reader = easyocr.Reader(['en'], gpu=False)
 print("[SYSTEM] AI Model loaded successfully!")
-
+aaaaaaaaaaaaaaaaaaaaaa
 def extract_license_plate(image_bytes: bytes) -> str:
     """
     Takes raw image bytes received from the ESP32-CAM, applies image processing,
