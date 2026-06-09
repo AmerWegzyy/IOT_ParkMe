@@ -34,10 +34,26 @@ ParkMeLcd lcd(PARKME_GATE_LCD_ADDRESS,
               PARKME_GATE_LCD_COLUMNS,
               PARKME_GATE_LCD_ROWS);
 
-unsigned long lastButtonEventAtMs = 0;
 unsigned long lastWifiAttemptAtMs = 0;
+bool carPresent = false;
 
 }  // namespace
+
+float readDistanceCm() {
+  digitalWrite(PARKME_GATE_TRIG_PIN, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(PARKME_GATE_TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(PARKME_GATE_TRIG_PIN, LOW);
+
+  long durationUs = pulseIn(PARKME_GATE_ECHO_PIN, HIGH, 30000);
+  if (durationUs == 0) {
+    return -1.0f;
+  }
+
+  return (durationUs * 0.0343f) / 2.0f;
+}
 
 void showScreen(const String &line1, const String &line2) {
   lcd.printAt(0, fitForLcd(line1, PARKME_GATE_LCD_COLUMNS));
@@ -213,7 +229,7 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
   return true;
 }
 
-void handleServerDecision(const String &responseBody) {
+GateAction handleServerDecision(const String &responseBody) {
   GateAction action = parseGateAction(responseBody.c_str());
   String message = extractJsonStringField(responseBody, "message");
 
@@ -237,15 +253,14 @@ void handleServerDecision(const String &responseBody) {
       break;
   }
 
-  showScreen("Ready to scan", "Press button");
+  return action;
 }
 
-void performGateScan() {
+GateAction performGateScan() {
   if (WiFi.status() != WL_CONNECTED) {
     showScreen("WiFi offline", "Cannot scan");
     delay(1500);
-    showScreen("Ready to scan", "Press button");
-    return;
+    return ACTION_UNKNOWN;
   }
 
   showScreen("Capturing...", "Hold still");
@@ -256,33 +271,32 @@ void performGateScan() {
   if (!captureAndUpload(responseBody, httpStatusCode)) {
     showScreen("Upload failed", "Try again");
     delay(2000);
-    showScreen("Ready to scan", "Press button");
-    return;
+    return ACTION_RETRY;
   }
 
   if (httpStatusCode < 200 || httpStatusCode >= 300) {
     showScreen("Server rejected", "Check backend");
     delay(2000);
-    showScreen("Ready to scan", "Press button");
-    return;
+    return ACTION_RETRY;
   }
 
-  handleServerDecision(responseBody);
+  return handleServerDecision(responseBody);
 }
 
-bool scanButtonPressed() {
-  if (PARKME_GATE_BUTTON_PIN < 0) {
-    return false;
-  }
-  return digitalRead(PARKME_GATE_BUTTON_PIN) == LOW;
+bool isCarAtGate() {
+  float distanceCm = readDistanceCm();
+  return (distanceCm > 0 && distanceCm < 50.0f);
 }
 
 void setup() {
   Serial.begin(115200);
   delay(200);
 
-  if (PARKME_GATE_BUTTON_PIN >= 0) {
-    pinMode(PARKME_GATE_BUTTON_PIN, INPUT_PULLUP);
+  if (PARKME_GATE_TRIG_PIN >= 0) {
+    pinMode(PARKME_GATE_TRIG_PIN, OUTPUT);
+  }
+  if (PARKME_GATE_ECHO_PIN >= 0) {
+    pinMode(PARKME_GATE_ECHO_PIN, INPUT);
   }
 
   if (PARKME_GATE_FLASH_LED_PIN >= 0) {
@@ -307,21 +321,37 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   connectWiFi();
-  showScreen("Ready to scan", "Press button");
+  showScreen("Ready to scan", "Approach gate");
 }
 
 void loop() {
   maintainWiFi();
 
-  if (!scanButtonPressed()) {
-    return;
-  }
+  bool carCurrentlyDetected = isCarAtGate();
 
-  unsigned long nowMs = millis();
-  if (nowMs - lastButtonEventAtMs < PARKME_GATE_DEBOUNCE_MS) {
-    return;
+  if (carCurrentlyDetected && !carPresent) {
+    carPresent = true;
+    int retries = 0;
+    
+    while (retries < 3) {
+      GateAction result = performGateScan();
+      
+      if (result == ACTION_WELCOME || result == ACTION_DENIED) {
+        break; 
+      }
+      
+      if (result == ACTION_RETRY || result == ACTION_UNKNOWN) {
+        retries++;
+        if (retries < 3) {
+          showScreen("Retrying...", String(retries) + "/3");
+          delay(1000); // brief pause before retry
+        }
+      }
+    }
+    
+    showScreen("Please", "Clear gate");
+  } else if (!carCurrentlyDetected && carPresent) {
+    carPresent = false;
+    showScreen("Ready to scan", "Approach gate");
   }
-
-  lastButtonEventAtMs = nowMs;
-  performGateScan();
 }
