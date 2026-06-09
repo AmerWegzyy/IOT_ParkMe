@@ -7,8 +7,9 @@ Backend/newDiagram.png
 Backend/olderDiagram.png
 Backend/=2.8.0
 ESP32/SECRETS.h
+ESP32/compiled_program.bin
 settings.json
 .agents/
 skill-creator/
 *.png
-docs/
+.DS_Store
