@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ParkMe | Smart Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="login-screen" class="screen glass-panel active">
+        <div class="login-box">
+            <h1>ParkMe</h1>
+            <p>Smart Campus Parking</p>
+            <form id="login-form">
+                <div class="input-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" required placeholder="name@technion.ac.il">
+                </div>
+                <div class="input-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn-primary">Authenticate</button>
+            </form>
+            <div id="login-error" class="error-msg hidden">Invalid credentials</div>
+        </div>
+    </div>
+
+    <!-- Dashboard Screen -->
+    <div id="dashboard-screen" class="screen hidden">
+        <header class="glass-header">
+            <div class="brand">
+                <h2>ParkMe</h2>
+                <span id="connection-status" class="status-indicator"></span>
+            </div>
+            <div class="user-info">
+                <span id="user-greeting">Welcome, User</span>
+                <span id="user-role-badge" class="role-badge">Student</span>
+                <button id="logout-btn" class="btn-secondary">Logout</button>
+            </div>
+        </header>
+
+        <main class="dashboard-layout">
+            <section class="spots-section">
+                <h3>Live Parking Status</h3>
+                <div id="spots-grid" class="spots-grid">
+                    <!-- Spots will be injected here via JS -->
+                </div>
+            </section>
+
+            <section id="admin-panel" class="admin-panel hidden">
+                <h3>Admin Security Logs</h3>
+                <div class="logs-container glass-panel">
+                    <ul id="security-logs">
+                        <!-- Logs injected via JS -->
+                    </ul>
+                </div>
+            </section>
+        </main>
+    </div>
+    
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
