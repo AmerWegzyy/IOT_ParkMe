@@ -12,6 +12,7 @@ def get_il_time():
 from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException, status, Request, UploadFile, File, Form, Header
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
@@ -411,7 +412,7 @@ async def get_recent_logs(current_user: dict = Depends(get_current_user), db: Se
     return {"logs": result}
 @app.post("/api/v1/auth/login")
 async def login(payload: LoginPayload, db: Session = Depends(get_db)):
-    user = db.execute(text("SELECT id, name, email, role, is_special_needs FROM users WHERE email = :email"), {"email": payload.email}).fetchone()
+    user = db.execute(text("SELECT id, name, email, role FROM users WHERE email = :email"), {"email": payload.email}).fetchone()
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
@@ -419,7 +420,7 @@ async def login(payload: LoginPayload, db: Session = Depends(get_db)):
         "sub": user.email,
         "name": user.name,
         "role": user.role,
-        "is_special_needs": bool(user.is_special_needs),
+        "is_special_needs": user.role == "special-needs-driver",
         "exp": datetime.utcnow() + timedelta(days=1)
     }
     token = jwt.encode(token_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -495,3 +496,7 @@ async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_c
 async def receive_bulk_data(payload: BulkPayload, db: Session = Depends(get_db)):
     logger.info(f"Received {len(payload.data)} cached events from {payload.mac_address}")
     return {"status": "bulk_processed", "events": len(payload.data)}
+
+import os
+frontend_dir = os.path.join(os.path.dirname(__file__), "../Frontend")
+app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
