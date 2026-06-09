@@ -1,4 +1,14 @@
 Backend/parkme.db
 Backend/__pycache__/
+Backend/venv/
+Backend/.env
+Backend/latestDiagram.png
+Backend/newDiagram.png
+Backend/olderDiagram.png
+Backend/=2.8.0
 ESP32/SECRETS.h
 settings.json
+.agents/
+skill-creator/
+*.png
+docs/
