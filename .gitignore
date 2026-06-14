@@ -2,6 +2,7 @@ Backend/parkme.db
 Backend/__pycache__/
 Backend/venv/
 Backend/.env
+Backend/serviceAccountKey.json
 Backend/latestDiagram.png
 Backend/newDiagram.png
 Backend/olderDiagram.png

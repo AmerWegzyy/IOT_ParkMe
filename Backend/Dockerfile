@@ -7,9 +7,9 @@ ENV PYTHONUNBUFFERED 1
 
 WORKDIR /app
 
-# Install system dependencies (required for psycopg2 and OpenCV/Tesseract OCR)
+# Install system dependencies (required for OpenCV/Tesseract OCR)
 RUN apt-get update && apt-get install -y \
-    libpq-dev gcc \
+    gcc \
     tesseract-ocr \
     libtesseract-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -24,5 +24,5 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
-# Start server
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start server — Cloud Run injects $PORT at runtime
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}

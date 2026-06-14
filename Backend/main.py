@@ -14,8 +14,9 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
+import firebase_admin
+from firebase_admin import credentials, firestore
+from google.cloud.firestore_v1 import FieldFilter
 import cv2
 import numpy as np
 import pytesseract
@@ -28,14 +29,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Environment Variables
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./parkme.db")
 ESP32_HMAC_SECRET = os.environ.get("ESP32_HMAC_SECRET", "super_secret_hmac_key_replace_me_in_production")
 JWT_SECRET = os.environ.get("JWT_SECRET", "super_secret_jwt_key_replace_me_in_production")
 JWT_ALGORITHM = "HS256"
+FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "")
 
-# Database Setup
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Firebase Setup
+# Uses GOOGLE_APPLICATION_CREDENTIALS env var for service account JSON path
+if not firebase_admin._apps:
+    cred = credentials.ApplicationDefault()
+    firebase_admin.initialize_app(cred, {"projectId": FIREBASE_PROJECT_ID})
+
+firestore_client = firestore.client()
 
 app = FastAPI(title="ParkMe API", description="IoT Backend for Smart Parking System")
 
@@ -69,8 +74,6 @@ class HeartbeatPayload(BaseModel):
     is_occupied: bool = Field(..., description="Current physical occupancy state")
     battery_level: float = Field(..., ge=0, le=100, description="Battery percentage")
 
-# LPRPayload is removed since we now use Form data and File uploads for LPR
-
 class BulkTelemetryItem(BaseModel):
     t: int = Field(..., description="Unix timestamp of the event")
     v: bool = Field(..., description="Occupancy value")
@@ -92,12 +95,9 @@ LPR_DEDUP_CACHE = {}
 # ==========================================
 # DEPENDENCIES & MIDDLEWARE
 # ==========================================
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def get_firestore_db():
+    """Returns the Firestore client instance."""
+    return firestore_client
 
 async def verify_hmac_signature(request: Request):
     """Verifies the HMAC-SHA256 signature to secure the endpoint against spoofing."""
@@ -105,8 +105,6 @@ async def verify_hmac_signature(request: Request):
     timestamp = request.headers.get("X-Timestamp")
     
     if not signature or not timestamp:
-        # Relaxed for development, uncomment for production
-        # raise HTTPException(status_code=401, detail="Missing HMAC signature or timestamp")
         return
         
     req_time = datetime.fromtimestamp(int(timestamp))
@@ -124,33 +122,20 @@ async def verify_hmac_signature(request: Request):
 # LPR PROCESSING (SERVER-SIDE)
 # ==========================================
 def extract_license_plate(image_bytes: bytes) -> str:
-    """Extracts license plate string from image bytes using OpenCV and Tesseract."""
-    # 1. Convert bytes to numpy array
     np_arr = np.frombuffer(image_bytes, np.uint8)
-    # 2. Decode image
     img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if img is None:
         logger.error("Failed to decode image bytes")
         return ""
-        
-    # Crop the image sides slightly to remove the blue 'IL' sidebars
     h, w = img.shape[:2]
-    crop_margin = int(w * 0.05)  # Crop 5% off both sides
+    crop_margin = int(w * 0.05)
     img = img[:, crop_margin:w-crop_margin]
-    
-    # Scale up the image (Tesseract needs characters to be at least 30px high)
     img = cv2.resize(img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-    
-    # 3. Preprocess image for OCR (Grayscale, blur, threshold)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5,5), 0)
     _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    
-    # 4. Run Tesseract OCR (config forces ONLY digits for Israeli plates)
     custom_config = r'--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789'
     text_extracted = pytesseract.image_to_string(thresh, config=custom_config)
-    
-    # Clean up extracted text
     plate = "".join(e for e in text_extracted if e.isdigit())
     return plate
 
@@ -160,74 +145,110 @@ def extract_license_plate(image_bytes: bytes) -> str:
 @app.post("/api/v1/sensors/heartbeat", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_hmac_signature)])
 async def receive_heartbeat_data(
     payload: HeartbeatPayload, 
-    db: Session = Depends(get_db)
+    db = Depends(get_firestore_db)
 ):
     server_time = get_il_time()
     
-    # Always update the hardware telemetry
-    db.execute(
-        text("UPDATE parking_spots SET last_seen = :now, battery_level = :batt, is_occupied = :occ WHERE mac_address = :mac"),
-        {"now": server_time, "batt": payload.battery_level, "occ": payload.is_occupied, "mac": payload.mac_address}
-    )
-    db.commit()
+    # Find the parking spot by mac_address
+    spots_ref = db.collection("parking_spots")
+    spot_query = spots_ref.where(filter=FieldFilter("mac_address", "==", payload.mac_address)).limit(1).get()
     
-    # State-Sync Logic
-    spot = db.execute(text("SELECT id FROM parking_spots WHERE mac_address = :mac"), {"mac": payload.mac_address}).fetchone()
-    if spot:
-        # Find the currently active session (no exit_time)
-        active_log = db.execute(
-            text("SELECT id, entry_time FROM parking_logs WHERE spot_id = :spot_id AND exit_time IS NULL ORDER BY entry_time DESC LIMIT 1"),
-            {"spot_id": spot.id}
-        ).fetchone()
+    spot_doc = None
+    for doc in spot_query:
+        spot_doc = doc
+        break
+    
+    if spot_doc:
+        # Update the parking spot
+        spot_doc.reference.update({
+            "last_seen": server_time,
+            "battery_level": payload.battery_level,
+            "is_occupied": payload.is_occupied
+        })
         
-        if payload.is_occupied and not active_log:
-            # 2. "Broken Camera" Recovery: Spot is physically occupied, but no camera POST arrived.
-            db.execute(
-                text("INSERT INTO parking_logs (spot_id, license_plate, entry_time, is_violation) VALUES (:spot_id, 'UNIDENTIFIED', :now, TRUE)"),
-                {"spot_id": spot.id, "now": server_time}
-            )
-            db.commit()
+        spot_id = spot_doc.id
+        
+        # Find active parking log for this spot (no exit_time)
+        logs_ref = db.collection("parking_logs")
+        active_log_query = (
+            logs_ref
+            .where(filter=FieldFilter("spot_id", "==", spot_id))
+            .where(filter=FieldFilter("exit_time", "==", None))
+            .order_by("entry_time", direction=firestore.Query.DESCENDING)
+            .limit(1)
+            .get()
+        )
+        
+        active_log_doc = None
+        for doc in active_log_query:
+            active_log_doc = doc
+            break
+        
+        if payload.is_occupied and not active_log_doc:
+            # Create a new parking log for unidentified occupancy
+            logs_ref.add({
+                "spot_id": spot_id,
+                "license_plate": "UNIDENTIFIED",
+                "entry_time": server_time,
+                "exit_time": None,
+                "is_violation": True,
+                "user_id": None,
+                "snapshot_role": None
+            })
             
-        elif not payload.is_occupied and active_log:
-            # 1. Vehicle Departure: State transitioned to False.
-            # 3. Bouncing Driver: If departure is < 60 seconds from arrival, flag as ABORTED.
-            db.execute(
-                text("""
-                UPDATE parking_logs 
-                SET exit_time = :now, 
-                    is_violation = CASE 
-                        WHEN (strftime('%s', :now) - strftime('%s', entry_time)) < 60 THEN FALSE 
-                        ELSE is_violation 
-                    END,
-                    license_plate = CASE
-                        WHEN (strftime('%s', :now) - strftime('%s', entry_time)) < 60 THEN 'ABORTED'
-                        ELSE license_plate
-                    END
-                WHERE id = :id
-                """),
-                {"now": server_time, "id": active_log.id}
-            )
-            db.commit()
-    # Fetch updated spot state to broadcast
-    if spot:
-        updated_spot = db.execute(
-            text("""
-                SELECT p.id, p.category, p.is_occupied, l.license_plate, l.is_violation
-                FROM parking_spots p
-                LEFT JOIN parking_logs l ON l.spot_id = p.id AND l.exit_time IS NULL
-                WHERE p.id = :spot_id
-            """),
-            {"spot_id": spot.id}
-        ).fetchone()
-        if updated_spot:
-            spot_data = {
-                "id": updated_spot[0],
-                "category": updated_spot[1],
-                "is_occupied": updated_spot[2],
-                "license_plate": updated_spot[3],
-                "is_violation": updated_spot[4]
-            }
-            await broadcast_event("spot_update", {"spot": spot_data})
+        elif not payload.is_occupied and active_log_doc:
+            # Compute time difference in Python instead of SQL strftime
+            log_data = active_log_doc.to_dict()
+            entry_time = log_data.get("entry_time")
+            
+            # Handle Firestore timestamp conversion
+            if hasattr(entry_time, 'timestamp'):
+                # entry_time is a datetime-like object from Firestore
+                duration_seconds = (server_time - entry_time.replace(tzinfo=server_time.tzinfo)).total_seconds()
+            else:
+                duration_seconds = 60  # Default to >= 60 if we can't compute
+            
+            update_data = {"exit_time": server_time}
+            
+            if duration_seconds < 60:
+                update_data["is_violation"] = False
+                update_data["license_plate"] = "ABORTED"
+            
+            active_log_doc.reference.update(update_data)
+        
+        # Build updated spot data for SSE broadcast
+        spot_data_dict = spot_doc.to_dict()
+        spot_data_dict.update({
+            "is_occupied": payload.is_occupied,
+            "last_seen": server_time,
+            "battery_level": payload.battery_level
+        })
+        
+        # Get the current active log for broadcast
+        license_plate = None
+        is_violation = False
+        active_log_query2 = (
+            logs_ref
+            .where(filter=FieldFilter("spot_id", "==", spot_id))
+            .where(filter=FieldFilter("exit_time", "==", None))
+            .order_by("entry_time", direction=firestore.Query.DESCENDING)
+            .limit(1)
+            .get()
+        )
+        for doc in active_log_query2:
+            log_d = doc.to_dict()
+            license_plate = log_d.get("license_plate")
+            is_violation = log_d.get("is_violation", False)
+            break
+        
+        broadcast_spot = {
+            "id": spot_id,
+            "category": spot_data_dict.get("category"),
+            "is_occupied": payload.is_occupied,
+            "license_plate": license_plate,
+            "is_violation": is_violation
+        }
+        await broadcast_event("spot_update", {"spot": broadcast_spot})
 
     return {"status": "heartbeat_processed", "timestamp": server_time.isoformat()}
 
@@ -236,11 +257,8 @@ async def receive_heartbeat_data(
 async def receive_park_event(
     spot_id: str = Form(..., description="The parking spot ID this camera monitors"),
     file: UploadFile = File(..., description="Image file from the ESP32-CAM"),
-    db: Session = Depends(get_db)
+    db = Depends(get_firestore_db)
 ):
-    """
-    Edge Sensor Fusion: Receives the camera image on arrival and creates the transaction.
-    """
     server_time = get_il_time()
     
     image_bytes = await file.read()
@@ -251,33 +269,40 @@ async def receive_park_event(
         
     logger.info(f"Extracted plate {license_plate} for spot {spot_id}")
     
-    # Deduplication (5-second window)
     last_seen = LPR_DEDUP_CACHE.get(license_plate)
     if last_seen and (server_time - last_seen).total_seconds() < 5:
         return {"status": "dropped", "reason": "duplicate_within_5s"}
     LPR_DEDUP_CACHE[license_plate] = server_time
     
-    # Single-Post Logic: Identify spot rules and vehicle owner
-    spot = db.execute(
-        text("SELECT category FROM parking_spots WHERE id = :spot_id"),
-        {"spot_id": spot_id}
-    ).fetchone()
+    # Get the parking spot document
+    spot_ref = db.collection("parking_spots").document(spot_id)
+    spot_doc = spot_ref.get()
     
-    if not spot:
+    if not spot_doc.exists:
         return {"status": "failed", "reason": "invalid_spot_id"}
         
-    spot_category = spot.category
+    spot_data = spot_doc.to_dict()
+    spot_category = spot_data.get("category")
     
-    # Look up the vehicle and user
-    vehicle_user = db.execute(
-        text("""
-            SELECT u.id as user_id, u.name, u.role 
-            FROM vehicles v 
-            JOIN users u ON v.user_id = u.id 
-            WHERE v.license_plate = :plate
-        """),
-        {"plate": license_plate}
-    ).fetchone()
+    # Look up the vehicle by license_plate (document ID = license_plate)
+    vehicle_ref = db.collection("vehicles").document(license_plate)
+    vehicle_doc = vehicle_ref.get()
+    
+    vehicle_user = None
+    if vehicle_doc.exists:
+        vehicle_data = vehicle_doc.to_dict()
+        user_id = vehicle_data.get("user_id")
+        if user_id:
+            # Look up the user
+            user_ref = db.collection("users").document(user_id)
+            user_doc = user_ref.get()
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                vehicle_user = {
+                    "user_id": user_id,
+                    "name": user_data.get("name"),
+                    "role": user_data.get("role")
+                }
 
     is_violation = False
     display_message = ""
@@ -285,16 +310,14 @@ async def receive_park_event(
     snapshot_role = None
 
     if not vehicle_user:
-        # Unregistered vehicle
         is_violation = True
         display_message = "access denied"
         logger.warning(f"Unregistered vehicle {license_plate} parked in {spot_id}")
     else:
-        user_id = vehicle_user.user_id
-        snapshot_role = vehicle_user.role
-        driver_name = vehicle_user.name
+        user_id = vehicle_user["user_id"]
+        snapshot_role = vehicle_user["role"]
+        driver_name = vehicle_user["name"]
         
-        # Rule: Admin can park anywhere. Otherwise, user role must match spot category.
         if snapshot_role == "admin" or snapshot_role == spot_category:
             is_violation = False
             display_message = f"welcome {driver_name}"
@@ -303,35 +326,31 @@ async def receive_park_event(
             display_message = "access denied"
             logger.warning(f"Role mismatch: {snapshot_role} user {driver_name} parked in {spot_category} spot {spot_id}")
 
-    # Create transaction and mark spot as occupied instantly
-    db.execute(
-        text("""
-            INSERT INTO parking_logs (spot_id, license_plate, user_id, snapshot_role, entry_time, is_violation) 
-            VALUES (:spot_id, :plate, :user_id, :role, :now, :is_violation)
-        """),
-        {
-            "spot_id": spot_id, 
-            "plate": license_plate, 
-            "user_id": user_id, 
-            "role": snapshot_role,
-            "now": server_time,
-            "is_violation": is_violation
-        }
-    )
-    db.execute(
-        text("UPDATE parking_spots SET is_occupied = TRUE, last_seen = :now WHERE id = :spot_id"),
-        {"spot_id": spot_id, "now": server_time}
-    )
-    db.commit()
+    # Create a new parking log
+    db.collection("parking_logs").add({
+        "spot_id": spot_id,
+        "license_plate": license_plate,
+        "user_id": user_id,
+        "snapshot_role": snapshot_role,
+        "entry_time": server_time,
+        "exit_time": None,
+        "is_violation": is_violation
+    })
+    
+    # Update the parking spot
+    spot_ref.update({
+        "is_occupied": True,
+        "last_seen": server_time
+    })
 
-    spot_data = {
+    broadcast_spot_data = {
         "id": spot_id,
         "category": spot_category,
         "is_occupied": True,
         "license_plate": license_plate,
         "is_violation": is_violation
     }
-    await broadcast_event("spot_update", {"spot": spot_data})
+    await broadcast_event("spot_update", {"spot": broadcast_spot_data})
 
     if is_violation:
         await broadcast_event("log_event", {"log": {
@@ -358,69 +377,140 @@ def get_current_user(authorization: str = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 @app.get("/api/v1/spots")
-async def get_all_spots(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    spots = db.execute(text("""
-        SELECT p.id, p.category, p.is_occupied, l.license_plate, l.is_violation, p.battery_level, p.last_seen
-        FROM parking_spots p
-        LEFT JOIN parking_logs l ON l.spot_id = p.id AND l.exit_time IS NULL
-    """)).fetchall()
+async def get_all_spots(current_user: dict = Depends(get_current_user), db = Depends(get_firestore_db)):
+    # Get all parking spots
+    spots_docs = db.collection("parking_spots").get()
+    
+    # Get all active parking logs (exit_time is None)
+    active_logs_query = (
+        db.collection("parking_logs")
+        .where(filter=FieldFilter("exit_time", "==", None))
+        .get()
+    )
+    
+    # Build a lookup: spot_id -> active log data
+    active_logs_by_spot = {}
+    for log_doc in active_logs_query:
+        log_data = log_doc.to_dict()
+        log_spot_id = log_data.get("spot_id")
+        # Keep the most recent one if multiple exist
+        if log_spot_id not in active_logs_by_spot:
+            active_logs_by_spot[log_spot_id] = log_data
     
     result = []
     user_role = current_user.get("role")
     
-    for s in spots:
+    for spot_doc in spots_docs:
+        s = spot_doc.to_dict()
+        spot_id = spot_doc.id
+        category = s.get("category")
+        is_occupied = s.get("is_occupied", False)
+        battery_level = s.get("battery_level")
+        last_seen = s.get("last_seen")
+        
+        active_log = active_logs_by_spot.get(spot_id)
+        license_plate = active_log.get("license_plate") if active_log else None
+        is_violation = active_log.get("is_violation", False) if active_log else False
+        
         if user_role == "admin":
             result.append({
-                "id": s[0],
-                "category": s[1],
-                "is_occupied": s[2],
-                "license_plate": s[3] if s[2] else None,
-                "is_violation": s[4] if s[2] else False,
-                "battery_level": s[5],
-                "last_seen": s[6].isoformat() if hasattr(s[6], 'isoformat') else str(s[6]) if s[6] else None
+                "id": spot_id,
+                "category": category,
+                "is_occupied": is_occupied,
+                "license_plate": license_plate if is_occupied else None,
+                "is_violation": is_violation if is_occupied else False,
+                "battery_level": battery_level,
+                "last_seen": last_seen.isoformat() if hasattr(last_seen, 'isoformat') else str(last_seen) if last_seen else None
             })
-        elif s[1] == user_role or (current_user.get("is_special_needs") and s[1] == "special-needs-driver"):
+        elif category == user_role or (current_user.get("is_special_needs") and category == "special-needs-driver"):
             result.append({
-                "id": s[0],
-                "category": s[1],
-                "is_occupied": s[2],
+                "id": spot_id,
+                "category": category,
+                "is_occupied": is_occupied,
                 "license_plate": None,
                 "is_violation": False
             })
     return {"spots": result}
 
 @app.get("/api/v1/logs")
-async def get_recent_logs(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_recent_logs(current_user: dict = Depends(get_current_user), db = Depends(get_firestore_db)):
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin privileges required")
-    logs = db.execute(text("""
-        SELECT entry_time, spot_id, license_plate, is_violation, exit_time
-        FROM parking_logs
-        WHERE is_violation = TRUE OR license_plate = 'UNIDENTIFIED'
-        ORDER BY entry_time DESC LIMIT 50
-    """)).fetchall()
+    
+    # Firestore doesn't support OR queries across different fields natively,
+    # so we run two queries and merge/deduplicate the results.
+    logs_ref = db.collection("parking_logs")
+    
+    # Query 1: is_violation == True
+    violation_query = (
+        logs_ref
+        .where(filter=FieldFilter("is_violation", "==", True))
+        .order_by("entry_time", direction=firestore.Query.DESCENDING)
+        .limit(50)
+        .get()
+    )
+    
+    # Query 2: license_plate == 'UNIDENTIFIED'
+    unidentified_query = (
+        logs_ref
+        .where(filter=FieldFilter("license_plate", "==", "UNIDENTIFIED"))
+        .order_by("entry_time", direction=firestore.Query.DESCENDING)
+        .limit(50)
+        .get()
+    )
+    
+    # Merge and deduplicate by document ID
+    seen_ids = set()
+    all_logs = []
+    for doc in list(violation_query) + list(unidentified_query):
+        if doc.id not in seen_ids:
+            seen_ids.add(doc.id)
+            all_logs.append(doc.to_dict())
+    
+    # Sort by entry_time descending and limit to 50
+    all_logs.sort(key=lambda x: x.get("entry_time", datetime.min), reverse=True)
+    all_logs = all_logs[:50]
     
     result = []
-    for l in logs:
-        msg_type = "unidentified" if l[2] == 'UNIDENTIFIED' else "violation"
-        msg = f"Camera failure detected at Spot {l[1]}." if msg_type == "unidentified" else f"Unauthorized access at Spot {l[1]} (Plate: {l[2]})"
+    for l in all_logs:
+        entry_time = l.get("entry_time")
+        spot_id = l.get("spot_id")
+        license_plate = l.get("license_plate")
+        
+        msg_type = "unidentified" if license_plate == "UNIDENTIFIED" else "violation"
+        msg = f"Camera failure detected at Spot {spot_id}." if msg_type == "unidentified" else f"Unauthorized access at Spot {spot_id} (Plate: {license_plate})"
         result.append({
-            "timestamp": l[0].isoformat() if hasattr(l[0], 'isoformat') else str(l[0]) if l[0] else None,
+            "timestamp": entry_time.isoformat() if hasattr(entry_time, 'isoformat') else str(entry_time) if entry_time else None,
             "type": msg_type,
             "message": msg
         })
     return {"logs": result}
+
 @app.post("/api/v1/auth/login")
-async def login(payload: LoginPayload, db: Session = Depends(get_db)):
-    user = db.execute(text("SELECT id, name, email, role FROM users WHERE email = :email"), {"email": payload.email}).fetchone()
-    if not user:
+async def login(payload: LoginPayload, db = Depends(get_firestore_db)):
+    # Query users collection by email
+    users_query = (
+        db.collection("users")
+        .where(filter=FieldFilter("email", "==", payload.email))
+        .limit(1)
+        .get()
+    )
+    
+    user_doc = None
+    for doc in users_query:
+        user_doc = doc
+        break
+    
+    if not user_doc:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
+    user_data = user_doc.to_dict()
+    
     token_payload = {
-        "sub": user.email,
-        "name": user.name,
-        "role": user.role,
-        "is_special_needs": user.role == "special-needs-driver",
+        "sub": user_data.get("email"),
+        "name": user_data.get("name"),
+        "role": user_data.get("role"),
+        "is_special_needs": user_data.get("role") == "special-needs-driver",
         "exp": datetime.utcnow() + timedelta(days=1)
     }
     token = jwt.encode(token_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -463,27 +553,37 @@ def get_current_admin(authorization: str = Header(...)):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 @app.put("/api/v1/sensors/resolve")
-async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
-    db.execute(
-        text("""
-            UPDATE parking_logs 
-            SET is_violation = FALSE, license_plate = 'RESOLVED'
-            WHERE spot_id = :spot_id AND license_plate = 'UNIDENTIFIED' AND exit_time IS NULL
-        """),
-        {"spot_id": payload.spot_id}
+async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_current_admin), db = Depends(get_firestore_db)):
+    # Find active logs for this spot with license_plate == 'UNIDENTIFIED'
+    logs_ref = db.collection("parking_logs")
+    active_logs_query = (
+        logs_ref
+        .where(filter=FieldFilter("spot_id", "==", payload.spot_id))
+        .where(filter=FieldFilter("license_plate", "==", "UNIDENTIFIED"))
+        .where(filter=FieldFilter("exit_time", "==", None))
+        .get()
     )
-    db.commit()
     
-    spot = db.execute(text("SELECT id, category, is_occupied FROM parking_spots WHERE id = :spot_id"), {"spot_id": payload.spot_id}).fetchone()
-    if spot:
-        spot_data = {
-            "id": spot[0],
-            "category": spot[1],
-            "is_occupied": spot[2],
+    for log_doc in active_logs_query:
+        log_doc.reference.update({
+            "is_violation": False,
+            "license_plate": "RESOLVED"
+        })
+    
+    # Get the spot for broadcast
+    spot_ref = db.collection("parking_spots").document(payload.spot_id)
+    spot_doc = spot_ref.get()
+    
+    if spot_doc.exists:
+        spot_data = spot_doc.to_dict()
+        broadcast_spot_data = {
+            "id": spot_doc.id,
+            "category": spot_data.get("category"),
+            "is_occupied": spot_data.get("is_occupied", False),
             "license_plate": "RESOLVED",
             "is_violation": False
         }
-        await broadcast_event("spot_update", {"spot": spot_data})
+        await broadcast_event("spot_update", {"spot": broadcast_spot_data})
         await broadcast_event("log_event", {"log": {
             "timestamp": datetime.now().isoformat(), 
             "type": "info", 
@@ -493,7 +593,7 @@ async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_c
     return {"status": "resolved", "spot_id": payload.spot_id}
 
 @app.post("/api/v1/telemetry/bulk", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_hmac_signature)])
-async def receive_bulk_data(payload: BulkPayload, db: Session = Depends(get_db)):
+async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)):
     logger.info(f"Received {len(payload.data)} cached events from {payload.mac_address}")
     return {"status": "bulk_processed", "events": len(payload.data)}
 
