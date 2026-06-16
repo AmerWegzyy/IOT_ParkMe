@@ -10,12 +10,13 @@ if (typeof firebase !== 'undefined') {
         // Fallback for local development (e.g. running via FastAPI port 8000)
         // Replace with your Firebase Web Config from Project Settings in Firebase Console
         const firebaseConfig = {
-            apiKey: "REPLACE_WITH_YOUR_FIREBASE_API_KEY",
-            authDomain: "parkme-technion.firebaseapp.com",
-            projectId: "parkme-technion",
-            storageBucket: "parkme-technion.appspot.com",
-            messagingSenderId: "REPLACE_WITH_YOUR_MESSAGING_SENDER_ID",
-            appId: "REPLACE_WITH_YOUR_APP_ID"
+            apiKey: "AIzaSyCWJYe7NQ0G9c44XjjXKSGAIEx1bQD2jxI",
+            authDomain: "parkme-technion-f280b.firebaseapp.com",
+            projectId: "parkme-technion-f280b",
+            storageBucket: "parkme-technion-f280b.firebasestorage.app",
+            messagingSenderId: "31114651685",
+            appId: "1:31114651685:web:1281f3fbd87a6fc078f7cc",
+            measurementId: "G-9CLBFRBMD5"
         };
         firebase.initializeApp(firebaseConfig);
     }
