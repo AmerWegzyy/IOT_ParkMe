@@ -10,6 +10,8 @@ Usage:
 import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime, timezone
+from dotenv import load_dotenv
+load_dotenv()
 
 
 def get_firestore_client() -> firestore.firestore.Client:
@@ -48,6 +50,8 @@ def seed_users(db: firestore.firestore.Client) -> dict[str, str]:
     """Seed the users collection. Returns a mapping of email -> document ID."""
     print("⏳ Seeding users …")
     users = [
+        {"name": "Admin User", "email": "admin@technion.ac.il",
+         "role": "admin",                 "points": 999},
         {"name": "John Doe",  "email": "student@technion.ac.il",
          "role": "student",               "points": 10},
         {"name": "Dr. Smith", "email": "lecturer@technion.ac.il",
@@ -58,9 +62,10 @@ def seed_users(db: firestore.firestore.Client) -> dict[str, str]:
     email_to_id: dict[str, str] = {}
     for user in users:
         user["created_at"] = datetime.now(timezone.utc)
-        _, doc_ref = db.collection("users").add(user)
-        email_to_id[user["email"]] = doc_ref.id
-        print(f"  ✅ users/{doc_ref.id}  ({user['name']})")
+        doc_id = user["email"]
+        db.collection("users").document(doc_id).set(user)
+        email_to_id[user["email"]] = doc_id
+        print(f"  ✅ users/{doc_id}  ({user['name']})")
     return email_to_id
 
 
