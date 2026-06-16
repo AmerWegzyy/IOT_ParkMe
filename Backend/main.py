@@ -18,7 +18,6 @@ import firebase_admin
 from firebase_admin import credentials, firestore, auth
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud import vision
-import jwt
 import asyncio
 import json
 
@@ -28,8 +27,6 @@ logger = logging.getLogger(__name__)
 
 # Environment Variables
 ESP32_HMAC_SECRET = os.environ.get("ESP32_HMAC_SECRET", "super_secret_hmac_key_replace_me_in_production")
-JWT_SECRET = os.environ.get("JWT_SECRET", "super_secret_jwt_key_replace_me_in_production")
-JWT_ALGORITHM = "HS256"
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "")
 
 # Firebase Setup
