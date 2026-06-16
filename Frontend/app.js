@@ -4,6 +4,23 @@ const API_BASE = isLocalhost
     ? 'http://localhost:8000/api/v1' 
     : 'https://YOUR_CLOUD_RUN_URL/api/v1';
 
+// Initialize Firebase
+if (typeof firebase !== 'undefined') {
+    if (firebase.apps.length === 0) {
+        // Fallback for local development (e.g. running via FastAPI port 8000)
+        // Replace with your Firebase Web Config from Project Settings in Firebase Console
+        const firebaseConfig = {
+            apiKey: "REPLACE_WITH_YOUR_FIREBASE_API_KEY",
+            authDomain: "parkme-technion.firebaseapp.com",
+            projectId: "parkme-technion",
+            storageBucket: "parkme-technion.appspot.com",
+            messagingSenderId: "REPLACE_WITH_YOUR_MESSAGING_SENDER_ID",
+            appId: "REPLACE_WITH_YOUR_APP_ID"
+        };
+        firebase.initializeApp(firebaseConfig);
+    }
+}
+
 // DOM Elements
 const loginScreen = document.getElementById('login-screen');
 const dashboardScreen = document.getElementById('dashboard-screen');
@@ -49,22 +66,17 @@ loginForm.addEventListener('submit', async (e) => {
     const password = document.getElementById('password').value;
 
     try {
-        const res = await fetch(`${API_BASE}/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-        });
-
-        if (!res.ok) {
-            throw new Error('Invalid credentials');
+        if (typeof firebase === 'undefined' || !firebase.auth) {
+            throw new Error('Firebase Auth SDK not loaded. If running locally, make sure you configure your Firebase credentials.');
         }
 
-        const data = await res.json();
-        localStorage.setItem('parkme_token', data.access_token);
+        // Authenticate directly with Firebase Auth
+        const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
+        const token = await userCredential.user.getIdToken();
         
+        localStorage.setItem('parkme_token', token);
         loginError.classList.add('hidden');
         initDashboard();
-        
     } catch (error) {
         loginError.classList.remove('hidden');
         loginError.textContent = error.message;
@@ -72,6 +84,9 @@ loginForm.addEventListener('submit', async (e) => {
 });
 
 logoutBtn.addEventListener('click', () => {
+    if (typeof firebase !== 'undefined' && firebase.auth) {
+        firebase.auth().signOut().catch(console.error);
+    }
     localStorage.removeItem('parkme_token');
     if (eventSource) eventSource.close();
     dashboardScreen.classList.add('hidden');
@@ -79,38 +94,52 @@ logoutBtn.addEventListener('click', () => {
 });
 
 // Initialize Dashboard
-function initDashboard() {
+async function initDashboard() {
     const token = localStorage.getItem('parkme_token');
     if (!token) return;
 
-    const payload = parseJwt(token);
-    if (!payload) return;
+    try {
+        // Fetch current user details from backend using Firebase token
+        const res = await fetch(`${API_BASE}/users/me`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) {
+            throw new Error('Failed to fetch user profile');
+        }
+        const profile = await res.json();
 
-    // UI Updates
-    document.getElementById('user-greeting').textContent = `Welcome, ${payload.name}`;
-    let roleText = payload.role;
-    if (payload.is_special_needs) {
-        roleText += ' (Special Needs)';
+        // UI Updates
+        document.getElementById('user-greeting').textContent = `Welcome, ${profile.name}`;
+        let roleText = profile.role;
+        if (profile.is_special_needs) {
+            roleText += ' (Special Needs)';
+        }
+        document.getElementById('user-role-badge').textContent = roleText;
+
+        loginScreen.classList.add('hidden');
+        dashboardScreen.classList.remove('hidden');
+
+        if (profile.role === 'admin') {
+            adminPanel.classList.remove('hidden');
+            dashboardLayout.classList.add('has-admin');
+            fetchLogs();
+        } else {
+            adminPanel.classList.add('hidden');
+            dashboardLayout.classList.remove('has-admin');
+        }
+
+        // Connect SSE
+        connectSSE(token);
+        
+        // Fetch spots
+        fetchSpots();
+    } catch (e) {
+        console.error("Dashboard initialization failed:", e);
+        // Clean up token and show login screen if authentication fails
+        localStorage.removeItem('parkme_token');
+        loginScreen.classList.remove('hidden');
+        dashboardScreen.classList.add('hidden');
     }
-    document.getElementById('user-role-badge').textContent = roleText;
-
-    loginScreen.classList.add('hidden');
-    dashboardScreen.classList.remove('hidden');
-
-    if (payload.role === 'admin') {
-        adminPanel.classList.remove('hidden');
-        dashboardLayout.classList.add('has-admin');
-        fetchLogs();
-    } else {
-        adminPanel.classList.add('hidden');
-        dashboardLayout.classList.remove('has-admin');
-    }
-
-    // Connect SSE
-    connectSSE(token);
-    
-    // Fetch initial spots (MOCK FOR NOW until backend route is ready)
-    fetchSpots();
 }
 
 function connectSSE(token) {

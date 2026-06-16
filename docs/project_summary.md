@@ -6,12 +6,12 @@ Here is the definitive, unambiguous summary of everything we have built for the 
 ### 1. The Core Architecture
 Instead of using a heavy, constantly-polling architecture, we implemented **Edge Sensor Fusion** combined with **Server-Sent Events (SSE)**. 
 * **The Edge (ESP32)** is the source of truth. It pushes data to the server only when necessary.
-* **The Server (FastAPI)** acts as the brain. It receives hardware data, runs OpenCV/Tesseract OCR to extract license plates, writes to the SQLite database, and instantly pipes the new data out to active HTTP streams.
+* **The Server (FastAPI)** acts as the brain. It receives hardware data, queries Google Cloud Vision API to extract license plates, writes to the Firestore database, and instantly pipes the new data out to active HTTP streams.
 * **The Client (Vanilla JS)** maintains a single, open persistent connection to the server. When the server pushes JSON down the pipe, the browser dynamically updates the DOM without ever needing to refresh the page.
 
 ### 2. Identity & Role-Based Access Control (RBAC)
-We implemented strict Cryptographic Authentication using **JSON Web Tokens (JWT)**.
-* **Users** log in via `/api/v1/auth/login` and receive a token containing their role (`student`, `admin`, `staff`).
+We implemented strict Cryptographic Authentication using **Firebase ID Tokens (JWT)**.
+* **Users** authenticate directly with Firebase Auth and the frontend fetches their profile via `/api/v1/users/me` to determine their role (`student`, `admin`, `staff`).
 * **The "Need-to-Know" Filter**: If a student requests the list of spots (`/api/v1/spots`), the backend mathematically drops all `staff` and `special-needs` spots from the response. Furthermore, if a student spot is occupied, the backend strips the `license_plate` from the JSON entirely to protect privacy, leaving the frontend to just render it as "TAKEN".
 * **Admin God-Mode**: Admins bypass all filters. They receive the exact license plates, violation statuses, hardware battery levels, and last-ping timestamps for every spot in the facility.
 

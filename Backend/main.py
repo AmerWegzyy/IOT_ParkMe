@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, auth
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud import vision
 import jwt
@@ -374,10 +374,36 @@ def get_current_user(authorization: str = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid auth header")
     token = authorization.split(" ")[1]
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        return payload
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+        decoded_token = auth.verify_id_token(token)
+        uid = decoded_token.get("uid")
+        email = decoded_token.get("email")
+        
+        # Query Firestore users collection by email to find user name and role
+        db = firestore_client
+        users_query = db.collection("users").where(filter=FieldFilter("email", "==", email)).limit(1).get()
+        user_doc = None
+        for doc in users_query:
+            user_doc = doc
+            break
+        
+        if user_doc:
+            user_data = user_doc.to_dict()
+            return {
+                "uid": uid,
+                "user_id": user_doc.id,
+                "email": email,
+                "name": user_data.get("name"),
+                "role": user_data.get("role"),
+                "is_special_needs": user_data.get("role") == "special-needs-driver"
+            }
+        raise HTTPException(status_code=401, detail="User not found in database")
+    except Exception as e:
+        logger.error(f"Token verification failed: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid or expired Firebase token")
+
+@app.get("/api/v1/users/me")
+async def get_user_profile(current_user: dict = Depends(get_current_user)):
+    return current_user
 
 @app.get("/api/v1/spots")
 async def get_all_spots(current_user: dict = Depends(get_current_user), db = Depends(get_firestore_db)):
@@ -488,43 +514,30 @@ async def get_recent_logs(current_user: dict = Depends(get_current_user), db = D
             "message": msg
         })
     return {"logs": result}
-
-@app.post("/api/v1/auth/login")
-async def login(payload: LoginPayload, db = Depends(get_firestore_db)):
-    # Query users collection by email
-    users_query = (
-        db.collection("users")
-        .where(filter=FieldFilter("email", "==", payload.email))
-        .limit(1)
-        .get()
-    )
-    
-    user_doc = None
-    for doc in users_query:
-        user_doc = doc
-        break
-    
-    if not user_doc:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    
-    user_data = user_doc.to_dict()
-    
-    token_payload = {
-        "sub": user_data.get("email"),
-        "name": user_data.get("name"),
-        "role": user_data.get("role"),
-        "is_special_needs": user_data.get("role") == "special-needs-driver",
-        "exp": datetime.utcnow() + timedelta(days=1)
-    }
-    token = jwt.encode(token_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-    return {"access_token": token, "token_type": "bearer"}
-
 @app.get("/api/v1/stream")
 async def stream_events(token: str = None):
     if not token:
         raise HTTPException(status_code=401, detail="Missing token")
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        decoded_token = auth.verify_id_token(token)
+        uid = decoded_token.get("uid")
+        email = decoded_token.get("email")
+        
+        db = firestore_client
+        users_query = db.collection("users").where(filter=FieldFilter("email", "==", email)).limit(1).get()
+        user_doc = None
+        for doc in users_query:
+            user_doc = doc
+            break
+        
+        if not user_doc:
+            raise HTTPException(status_code=401, detail="User not found")
+        
+        user_data = user_doc.to_dict()
+        payload = {
+            "role": user_data.get("role"),
+            "is_special_needs": user_data.get("role") == "special-needs-driver"
+        }
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
@@ -543,17 +556,10 @@ async def stream_events(token: str = None):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-def get_current_admin(authorization: str = Header(...)):
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid auth header")
-    token = authorization.split(" ")[1]
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        if payload.get("role") != "admin":
-            raise HTTPException(status_code=403, detail="Admin privileges required")
-        return payload
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+def get_current_admin(current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+    return current_user
 
 @app.put("/api/v1/sensors/resolve")
 async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_current_admin), db = Depends(get_firestore_db)):

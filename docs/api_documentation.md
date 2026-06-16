@@ -45,11 +45,11 @@ Because we didn't explicitly group our endpoints into custom "tags" (like "Users
   * **Parameters**: Requires an `Authorization` Bearer token.
   * **Responses**: A `200 OK` returns an array of the 50 most recent security alerts (unauthorized plates or camera failures). `403 Forbidden` triggers if a standard driver tries to peek at the logs.
 
-#### 7. `POST /api/v1/auth/login`
-* **What it is**: The gateway. Users submit their credentials here to get their cryptographically signed JWT.
+#### 7. `GET /api/v1/users/me`
+* **What it is**: Fetches the authenticated user's profile and role details.
 * **Inside the dropdown**:
-  * **Request Body**: JSON matching the `LoginPayload` (email and password).
-  * **Responses**: `200 OK` grants the JSON token (`{"access_token": "ey...", "token_type": "bearer"}`). `401 Unauthorized` means the email doesn't exist.
+  * **Parameters**: Requires an `Authorization` Bearer token containing a verified Firebase ID Token.
+  * **Responses**: A `200 OK` returns user data (e.g. `uid`, `user_id`, `email`, `name`, `role`, `is_special_needs`). `401 Unauthorized` triggers if the Firebase ID Token is invalid or expired.
 
 ---
 
@@ -61,11 +61,7 @@ At the very bottom of the page, FastAPI lists all the "Schemas". These are the s
 * **What it is**: The strict blueprint for the ESP32's periodic check-in.
 * **Inside the dropdown**: You'll see it strictly requires `mac_address` (string), `is_occupied` (boolean: true/false), and `battery_level` (integer: 0-100). If the ESP32 forgets to send the battery level, FastAPI rejects it.
 
-#### 2. `LoginPayload`
-* **What it is**: The blueprint for the login form.
-* **Inside the dropdown**: Requires `email` (string) and `password` (string). 
-
-#### 3. `ResolvePayload`
+#### 2. `ResolvePayload`
 * **What it is**: The blueprint for the "Acknowledge & Resolve" button click.
 * **Inside the dropdown**: Requires exactly one field: `spot_id` (integer). 
 

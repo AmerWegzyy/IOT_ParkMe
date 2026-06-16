@@ -68,8 +68,8 @@ graph TD
 
 ### Scenario C: Web Frontend Usage
 
-1.  **Login:** A user logs into the Web App. The frontend calls `POST /api/v1/auth/login`. The backend checks the credentials against Firestore and returns a JWT token.
-2.  **Initial Load:** The frontend calls `GET /api/v1/spots` (with the JWT token). The backend fetches the current state of all spots from Firestore, filtering them based on the user's role (e.g., an admin sees everything, a student only sees student spots).
+1.  **Login:** A user logs into the Web App. The frontend authenticates directly against Firebase Auth and retrieves a Firebase ID token.
+2.  **Initial Load:** The frontend fetches the user's role/profile from `GET /api/v1/users/me` and the spot statuses from `GET /api/v1/spots` (sending the Firebase ID token in the Authorization header). The backend fetches the current state of all spots from Firestore, filtering them based on the user's role (e.g., an admin sees everything, a student only sees student spots).
 3.  **Live Updates:** The frontend opens a persistent connection to `GET /api/v1/stream`. It listens for SSE events. When a car parks or leaves, the backend pushes the update down this stream, and the frontend updates the map/list without needing to refresh the page.
 4.  **Admin Resolution:** If an admin sees an "UNIDENTIFIED" car, they can manually inspect it and call `PUT /api/v1/sensors/resolve`. The backend updates the Firestore log to "RESOLVED" and clears the violation.
 
@@ -78,5 +78,5 @@ graph TD
 ## 4. Security & Authentication
 
 *   **Device-to-Cloud (ESP32 to Backend):** Uses **HMAC-SHA256 signatures**. The ESP32 and the Backend share a secret key (`ESP32_HMAC_SECRET`). Every request from the ESP32 is signed. The backend verifies the signature and checks a timestamp to prevent replay attacks. This ensures no one can spoof fake parking events.
-*   **User-to-Cloud (Web App to Backend):** Uses **JWT (JSON Web Tokens)**. When a user logs in, they receive a signed token containing their role. They send this token in the `Authorization` header for subsequent requests. The backend decodes it to enforce role-based access control (RBAC).
+*   **User-to-Cloud (Web App to Backend):** Uses **Firebase ID Tokens (JWT)**. When a user logs in via the client, they receive a secure token signed by Google. They send this token in the `Authorization` header for subsequent requests. The backend verifies it via the Firebase Admin SDK and retrieves user properties (like roles) from Firestore to enforce role-based access control (RBAC).
 *   **Cloud-to-Database (Backend to Firestore):** Uses **Google Application Default Credentials (ADC)** via the `serviceAccountKey.json`. This provides secure server-to-server authentication within Google's infrastructure.
