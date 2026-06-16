@@ -75,8 +75,9 @@ Both nodes utilize the HC-SR04 ultrasonic sensor.
     To prevent multiple database writes for a single vehicle arrival, `main.py` maintains an in-memory deduplication cache (`LPR_DEDUP_CACHE`). If the same license plate is read again within 5 seconds, the request is dropped.
 3.  **Bouncing Drivers (Aborted Sessions):**
     If a car occupies a spot but departs in under 60 seconds, the backend marks the log exit time and overrides the license plate record to `"ABORTED"`, setting `is_violation = False` to prevent penalty triggers.
-4.  **Ghost Cars (Unidentified Occupancy):**
+4.  **Ghost Cars (Unidentified Occupancy) & OCR Race-Condition Resolution:**
     If the Sensor Node reports `is_occupied: true` but the Camera Node failed to capture or read a license plate, the backend creates an automatic log labeled `"UNIDENTIFIED"` and flags it as a violation.
+    **Self-Healing Logic:** Since the parking spot utilizes a combined sensor/camera architecture, the camera may be executing a 5-second auto-retry loop while the ultrasonic sensor has already triggered the ghost car alarm. If the camera eventually succeeds on a 2nd or 3rd retake, the backend's `receive_park_event` endpoint actively detects the `UNIDENTIFIED` ghost log and overwrites it with the valid driver data. This automatically clears the violation status and removes the "Acknowledge & Resolve" button from the Admin Dashboard.
 
 ---
 
@@ -135,3 +136,17 @@ To align the backend response with the hardware expectations, the return payload
             "message": "Scan again"
         }
 ```
+
+---
+
+## 5. Server Logging Lifecycle & Database Mutations
+
+The backend meticulously tracks the state of every parking session. To preserve an immutable audit trail, the backend **never permanently deletes a parking log** from Firestore. Instead, it relies on state mutations, temporary tags, and overwrites to resolve edge cases.
+
+### A. Immediate / Temporary Log Creation
+*   **`UNIDENTIFIED` (Ghost Car):** Created instantly when the ultrasonic sensor detects a vehicle (`is_occupied: true`) but the camera has not yet sent a successful plate scan. This immediately flags the spot as a violation and summons the "Acknowledge & Resolve" button on the Admin Dashboard.
+
+### B. Mutating / Replacing Pending Logs
+*   **Self-Healing Overwrite (Race Condition):** If the camera is delayed by a 5-second OCR retry loop, the ultrasonic sensor will spawn a temporary `UNIDENTIFIED` log. When the camera finally succeeds on its 2nd or 3rd try, the backend detects this pending ghost log and completely **overwrites** it with the real license plate and user data, silently clearing the Admin alarm.
+*   **Admin Manual Override:** If the hardware completely fails to read the plate, the Admin must manually intervene by clicking "Acknowledge & Resolve". The backend mutates the pending `UNIDENTIFIED` log by changing its license plate string to `"RESOLVED"` and marking `is_violation = False`.
+*   **`ABORTED` (Bouncing Driver):** If a car parks but leaves in under 60 seconds, the backend assumes the driver was just turning around. It closes the session and mutates the license plate field to `"ABORTED"`, preventing any penalties from triggering.

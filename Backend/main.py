@@ -265,13 +265,23 @@ async def receive_park_event(
     license_plate = extract_license_plate(image_bytes)
     
     if not license_plate:
-        return {"status": "failed", "reason": "could_not_read_plate"}
+        return {
+            "status": "failed", 
+            "reason": "could_not_read_plate",
+            "action": "RETRY",
+            "message": "Scan again"
+        }
         
     logger.info(f"Extracted plate {license_plate} for spot {spot_id}")
     
     last_seen = LPR_DEDUP_CACHE.get(license_plate)
     if last_seen and (server_time - last_seen).total_seconds() < 5:
-        return {"status": "dropped", "reason": "duplicate_within_5s"}
+        return {
+            "status": "dropped", 
+            "reason": "duplicate_within_5s",
+            "action": "RETRY",
+            "message": "Processing..."
+        }
     LPR_DEDUP_CACHE[license_plate] = server_time
     
     # Get the parking spot document
@@ -279,7 +289,12 @@ async def receive_park_event(
     spot_doc = spot_ref.get()
     
     if not spot_doc.exists:
-        return {"status": "failed", "reason": "invalid_spot_id"}
+        return {
+            "status": "failed", 
+            "reason": "invalid_spot_id",
+            "action": "RETRY",
+            "message": "Invalid spot"
+        }
         
     spot_data = spot_doc.to_dict()
     spot_category = spot_data.get("category")
@@ -326,16 +341,42 @@ async def receive_park_event(
             display_message = "access denied"
             logger.warning(f"Role mismatch: {snapshot_role} user {driver_name} parked in {spot_category} spot {spot_id}")
 
-    # Create a new parking log
-    db.collection("parking_logs").add({
-        "spot_id": spot_id,
-        "license_plate": license_plate,
-        "user_id": user_id,
-        "snapshot_role": snapshot_role,
-        "entry_time": server_time,
-        "exit_time": None,
-        "is_violation": is_violation
-    })
+    # Check if there's an active UNIDENTIFIED ghost log created by the heartbeat
+    logs_ref = db.collection("parking_logs")
+    unidentified_query = (
+        logs_ref
+        .where(filter=FieldFilter("spot_id", "==", spot_id))
+        .where(filter=FieldFilter("license_plate", "==", "UNIDENTIFIED"))
+        .where(filter=FieldFilter("exit_time", "==", None))
+        .get()
+    )
+    
+    unidentified_doc = None
+    for doc in unidentified_query:
+        unidentified_doc = doc
+        break
+
+    if unidentified_doc:
+        # Overwrite the ghost log to clear the Admin UI "Resolve" button
+        unidentified_doc.reference.update({
+            "license_plate": license_plate,
+            "user_id": user_id,
+            "snapshot_role": snapshot_role,
+            "is_violation": is_violation
+            # Keep original entry_time
+        })
+        logger.info(f"Resolved UNIDENTIFIED ghost log for spot {spot_id} with plate {license_plate}")
+    else:
+        # Create a new parking log
+        logs_ref.add({
+            "spot_id": spot_id,
+            "license_plate": license_plate,
+            "user_id": user_id,
+            "snapshot_role": snapshot_role,
+            "entry_time": server_time,
+            "exit_time": None,
+            "is_violation": is_violation
+        })
     
     # Update the parking spot
     spot_ref.update({
@@ -359,11 +400,13 @@ async def receive_park_event(
             "message": f"Violation at Spot {spot_id} by {license_plate}"
         }})
 
+    action = "DENIED" if is_violation else "WELCOME"
     return {
         "status": "park_recorded", 
         "plate": license_plate, 
         "is_violation": is_violation,
-        "display_message": display_message
+        "action": action,
+        "message": display_message
     }
 
 def get_current_user(authorization: str = Header(None)):
