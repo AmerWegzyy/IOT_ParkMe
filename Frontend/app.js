@@ -1,4 +1,8 @@
-const API_BASE = 'http://localhost:8000/api/v1';
+// Change 'YOUR_CLOUD_RUN_URL' to your actual Cloud Run URL once deployed
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const API_BASE = isLocalhost 
+    ? 'http://localhost:8000/api/v1' 
+    : 'https://YOUR_CLOUD_RUN_URL/api/v1';
 
 // DOM Elements
 const loginScreen = document.getElementById('login-screen');
