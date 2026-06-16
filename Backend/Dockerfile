@@ -7,11 +7,9 @@ ENV PYTHONUNBUFFERED 1
 
 WORKDIR /app
 
-# Install system dependencies (required for OpenCV/Tesseract OCR)
+# Install system dependencies (required for OpenCV)
 RUN apt-get update && apt-get install -y \
     gcc \
-    tesseract-ocr \
-    libtesseract-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies

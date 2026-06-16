@@ -17,9 +17,7 @@ from pydantic import BaseModel, Field
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1 import FieldFilter
-import cv2
-import numpy as np
-import pytesseract
+from google.cloud import vision
 import jwt
 import asyncio
 import json
@@ -122,22 +120,27 @@ async def verify_hmac_signature(request: Request):
 # LPR PROCESSING (SERVER-SIDE)
 # ==========================================
 def extract_license_plate(image_bytes: bytes) -> str:
-    np_arr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    if img is None:
-        logger.error("Failed to decode image bytes")
-        return ""
-    h, w = img.shape[:2]
-    crop_margin = int(w * 0.05)
-    img = img[:, crop_margin:w-crop_margin]
-    img = cv2.resize(img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5,5), 0)
-    _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    custom_config = r'--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789'
-    text_extracted = pytesseract.image_to_string(thresh, config=custom_config)
-    plate = "".join(e for e in text_extracted if e.isdigit())
-    return plate
+    try:
+        client = vision.ImageAnnotatorClient()
+        image = vision.Image(content=image_bytes)
+        response = client.text_detection(image=image)
+        texts = response.text_annotations
+        
+        if response.error.message:
+            logger.error(f"Vision API Error: {response.error.message}")
+            return ""
+            
+        if texts:
+            # texts[0] contains the entire text found
+            full_text = texts[0].description
+            # Extract only digits as the plate number
+            plate = "".join(e for e in full_text if e.isdigit())
+            return plate
+            
+    except Exception as e:
+        logger.error(f"Failed to extract license plate with Vision API: {str(e)}")
+        
+    return ""
 
 # ==========================================
 # ENDPOINTS
