@@ -513,46 +513,40 @@ async def get_recent_logs(current_user: dict = Depends(get_current_user), db = D
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin privileges required")
     
-    # Firestore doesn't support OR queries across different fields natively,
-    # so we run two queries and merge/deduplicate the results.
     logs_ref = db.collection("parking_logs")
     
-    # Query 1: is_violation == True
-    violation_query = (
+    # Fetch all logs, ordered natively by Firestore
+    recent_logs_query = (
         logs_ref
-        .where(filter=FieldFilter("is_violation", "==", True))
+        .order_by("entry_time", direction=firestore.Query.DESCENDING)
         .limit(50)
         .get()
     )
-    
-    # Query 2: license_plate == 'UNIDENTIFIED'
-    unidentified_query = (
-        logs_ref
-        .where(filter=FieldFilter("license_plate", "==", "UNIDENTIFIED"))
-        .limit(50)
-        .get()
-    )
-    
-    # Merge and deduplicate by document ID
-    seen_ids = set()
-    all_logs = []
-    for doc in list(violation_query) + list(unidentified_query):
-        if doc.id not in seen_ids:
-            seen_ids.add(doc.id)
-            all_logs.append(doc.to_dict())
-    
-    # Sort by entry_time descending and limit to 50
-    all_logs.sort(key=lambda x: x.get("entry_time", datetime.min), reverse=True)
-    all_logs = all_logs[:50]
     
     result = []
-    for l in all_logs:
+    for doc in recent_logs_query:
+        l = doc.to_dict()
         entry_time = l.get("entry_time")
         spot_id = l.get("spot_id")
         license_plate = l.get("license_plate")
+        is_violation = l.get("is_violation", False)
         
-        msg_type = "unidentified" if license_plate == "UNIDENTIFIED" else "violation"
-        msg = f"Camera failure detected at Spot {spot_id}." if msg_type == "unidentified" else f"Unauthorized access at Spot {spot_id} (Plate: {license_plate})"
+        if license_plate == "UNIDENTIFIED":
+            msg_type = "unidentified"
+            msg = f"Camera failure detected at Spot {spot_id}."
+        elif license_plate == "RESOLVED":
+            msg_type = "info"
+            msg = f"Admin resolved anomaly at Spot {spot_id}."
+        elif license_plate == "ABORTED":
+            msg_type = "info"
+            msg = f"Driver aborted parking at Spot {spot_id}."
+        elif is_violation:
+            msg_type = "violation"
+            msg = f"Unauthorized access at Spot {spot_id} (Plate: {license_plate})"
+        else:
+            msg_type = "info"
+            msg = f"Valid parking at Spot {spot_id} (Plate: {license_plate})"
+            
         result.append({
             "timestamp": entry_time.isoformat() if hasattr(entry_time, 'isoformat') else str(entry_time) if entry_time else None,
             "type": msg_type,

@@ -81,7 +81,35 @@ The physical world is chaotic. Here is exactly how the current backend and front
 
 ---
 
-## 3. Current Project To-Do List
+## 3. Admin Security Logs & Message Types
+
+The web dashboard provides administrators with a real-time historical ledger of the 50 most recent events across all parking spots, fetched via `GET /api/v1/logs`. This endpoint queries the `parking_logs` Firestore collection natively ordered by `entry_time DESCENDING`.
+
+A log is added to the database anytime the system detects physical occupancy (via the Sensor Node) or processes a license plate (via the Camera Node). Based on the backend's evaluation of the event, the log is classified into one of five UI messages:
+
+1. 🔴 **`Unauthorized access at Spot {X} (Plate: {Y})`**
+   * **Trigger:** The camera successfully read the plate, but the user's role does not match the spot's category (or the vehicle is unregistered).
+   * **UI Styling:** Red text (`violation` CSS class).
+
+2. ⚠️ **`Camera failure detected at Spot {X}.`**
+   * **Trigger:** The Sensor Node detects occupancy and creates a ghost log, but the Camera Node completely fails to send a payload, leaving the plate as `UNIDENTIFIED`.
+   * **UI Styling:** Yellow text (`unidentified` CSS class).
+
+3. ⚪ **`Admin resolved anomaly at Spot {X}.`**
+   * **Trigger:** The administrator manually clicked the "Acknowledge & Resolve" button on an active `UNIDENTIFIED` anomaly. The backend sets `is_violation: False` and updates the plate to `"RESOLVED"`.
+   * **UI Styling:** Default info text.
+
+4. ⚪ **`Driver aborted parking at Spot {X}.`**
+   * **Trigger:** The "Bouncing Driver" scenario. A driver occupied the spot but left within 60 seconds. The backend sets `is_violation: False` and updates the plate to `"ABORTED"`.
+   * **UI Styling:** Default info text.
+
+5. ⚪ **`Valid parking at Spot {X} (Plate: {Y})`**
+   * **Trigger:** Standard, authorized parking. The camera read the plate and the user's role matched the spot's category.
+   * **UI Styling:** Default info text.
+
+---
+
+## 4. Current Project To-Do List
 
 The core application logic, database, and hardware integrations are currently stable and functional. The next phase focuses entirely on **Deployment, Security, and Quality Assurance**.
 
