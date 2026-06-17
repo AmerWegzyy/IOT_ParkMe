@@ -1,6 +1,6 @@
 # ParkMe — Hardware Behavior, Edge Cases & Backend Integration
 
-This document outlines the detailed behaviors, state machines, edge case handling, and network integration of the ParkMe hardware nodes (**Sensor Node** and **Camera/Gate Node**) with the **FastAPI Backend**, including critical API discrepancies discovered between the ESP32 firmware and the server-side code.
+This document outlines the detailed behaviors, state machines, edge case handling, and network integration of the ParkMe hardware nodes (**Sensor Node** and **Camera/Gate Node**) with the **FastAPI Backend**.
 
 ---
 
@@ -51,7 +51,7 @@ Both nodes utilize the HC-SR04 ultrasonic sensor.
 *   **Trigger:** When a car is detected at $\le 50\text{ cm}$ of the gate.
 *   **State Locking:** A simple latch logic (`carPresent` boolean flag) ensures the scan runs exactly once when the vehicle arrives. The scan is locked until the vehicle departs ($>50\text{ cm}$).
 *   **Capture & Flash:** When triggered, the board turns on the high-power onboard white LED (GPIO 4) for 80ms, captures a frame, and turns it off to capture clear license plates even at night.
-*   **Gate Operation:** If the backend responds with a welcome status, the node activates the gate relay (GPIO configuration `PARKME_GATE_RELAY_PIN`) with a high-state pulse of 3,000ms.
+*   **Gate Operation:** If the backend responds with `"action":"WELCOME"`, the node activates the gate relay (GPIO configuration `PARKME_GATE_RELAY_PIN`) with a high-state pulse of 3,000ms.
 
 ---
 
@@ -60,19 +60,23 @@ Both nodes utilize the HC-SR04 ultrasonic sensor.
 ### A. Hardware-Level Resiliency
 1.  **Network Reconnection Routine (`maintainWiFi`):**
     If the Wi-Fi connection drops, the nodes do not block execution. They check the connection asynchronously and try to reconnect every 10 seconds (`PARKME_SENSOR_WIFI_RETRY_INTERVAL_MS`).
-2.  **Offline Telemetry Queueing (Sensor Node):**
+2.  **Offline Telemetry Queueing (Sensor Node Only):**
     If the Sensor Node fails to report state updates to the server (e.g. server is down or network timeout), it writes the failed state, spot ID, and battery percentage to ESP32 Flash memory (`Preferences` key `"pending"`).
     Once Wi-Fi restores, the background loop calls `flushPendingTelemetry()` to upload the queue and clears the memory.
+    > **Note:** The Camera Node does **not** have NVS offline caching. If a camera request fails, it relies on up to 3 retries over raw HTTP/1.1 TCP connections before giving up.
 3.  **Low-Light Image Capture (Gate Node):**
     Synchronizes the flash LED with the camera capture buffer frame retrieval to prevent underexposed OCR attempts.
 4.  **Camera Memory Constraints:**
     The Camera Node detects if PSRAM is present on the ESP32-CAM board. If PSRAM is found, it captures high-resolution VGA images (`FRAMESIZE_VGA` / Quality 10). If no PSRAM is detected, it falls back to QVGA (`FRAMESIZE_QVGA` / Quality 12) to avoid running out of memory.
 
 ### B. Backend-Level Resiliency ([main.py](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Backend/main.py))
-1.  **Replay Attack Prevention (HMAC Security):**
-    When HMAC headers (`X-Signature` and `X-Timestamp`) are supplied, the backend compares the timestamp with server time. If the request is older than 30 seconds, it's rejected as a replay attack.
+1.  **Replay Attack Prevention (HMAC Security — Optional):**
+    HMAC verification in the backend is **optional**. The `verify_hmac_signature()` function silently returns if the `X-Signature` and `X-Timestamp` headers are missing from the request. If the headers *are* present, the backend validates the signature and checks that the request timestamp is within 30 seconds to prevent replay attacks. Currently, **neither hardware node sends HMAC headers**, so all device requests pass through without signature verification. This is a known security gap planned for future hardening.
 2.  **LPR Double-trigger Deduplication:**
-    To prevent multiple database writes for a single vehicle arrival, `main.py` maintains an in-memory deduplication cache (`LPR_DEDUP_CACHE`). If the same license plate is read again within 5 seconds, the request is dropped.
+    To prevent multiple database writes for a single vehicle arrival, `main.py` maintains an in-memory deduplication cache (`LPR_DEDUP_CACHE`). If the same license plate is read again within 5 seconds, the request is dropped with:
+    ```json
+    {"status": "dropped", "reason": "duplicate_within_5s", "action": "RETRY", "message": "Processing..."}
+    ```
 3.  **Bouncing Drivers (Aborted Sessions):**
     If a car occupies a spot but departs in under 60 seconds, the backend marks the log exit time and overrides the license plate record to `"ABORTED"`, setting `is_violation = False` to prevent penalty triggers.
 4.  **Ghost Cars (Unidentified Occupancy) & OCR Race-Condition Resolution:**
@@ -81,61 +85,72 @@ Both nodes utilize the HC-SR04 ultrasonic sensor.
 
 ---
 
-## 4. Communication Protocol & Mismatch Analysis
+## 4. Communication Protocol & Response Alignment
 
-During code analysis, **critical API mismatches** were identified between the ESP32 Camera Node firmware and the FastAPI backend responses for the gate verification endpoint `POST /api/v1/sensors/park`.
+The ESP32 Camera Node firmware communicates with the FastAPI backend via `POST /api/v1/sensors/park` using raw HTTP/1.1 over TCP. The Camera Node retries up to 3 times on failure.
 
-### Discrepancy 1: Response Action Key
-*   **ESP32 Expectation ([ParkMeCommon.h](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/ESP32/ParkMeCommon/ParkMeCommon.h#L91-L99)):**
-    The firmware parses the HTTP response string looking for `"action":"WELCOME"`, `"action":"DENIED"`, or `"action":"RETRY"`.
-*   **FastAPI Backend ([main.py](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Backend/main.py#L362-L367)):**
-    The backend returns a JSON payload without an `action` key:
-    ```json
-    {
-      "status": "park_recorded",
-      "plate": "123456",
-      "is_violation": false,
-      "display_message": "welcome Driver Name"
-    }
-    ```
-*   **Result:** The ESP32's `parseGateAction` returns `ACTION_UNKNOWN`. The camera node falls back to its `default` switch statement, displaying **"Server error / Unexpected data"** on the screen and **refusing to open the gate** (relay is never pulsed).
+### Firmware Expectations ([ParkMeCommon.h](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/ESP32/ParkMeCommon/ParkMeCommon.h#L91-L99))
+The firmware parses the HTTP response string looking for `"action":"WELCOME"`, `"action":"DENIED"`, or `"action":"RETRY"`, and extracts a display string from the `"message"` key to show on the I2C LCD.
 
-### Discrepancy 2: Response Message Key
-*   **ESP32 Expectation ([ParkMeCameraNode.ino](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/ESP32/ParkMeCameraNode/ParkMeCameraNode.ino#L234)):**
-    The firmware extracts the message string from the JSON using `"message"`.
-*   **FastAPI Backend ([main.py](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Backend/main.py#L366)):**
-    The backend returns `"display_message": "..."` instead of `"message": "..."`.
-*   **Result:** The ESP32's parser successfully extracts the message by accident because the substring search `\"message\":\"` matches the end of `\"display_message\":\"`. However, this is an brittle side effect that breaks if the keys are reformatted.
+### Backend Responses ([main.py](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Backend/main.py))
+The backend response payloads are **fully aligned** with the firmware's expected format. All responses include the `action` and `message` keys that the ESP32 parser requires:
 
----
-
-## 5. Recommendations to Fix the Mismatch
-
-To align the backend response with the hardware expectations, the return payload in the backend's `receive_park_event` endpoint inside [main.py](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Backend/main.py) should be modified.
-
-### Proposed Backend JSON Response Fix:
-```python
-    # For a successful check-in
-    action = "WELCOME" if not is_violation else "DENIED"
-    return {
-        "status": "park_recorded", 
-        "plate": license_plate, 
-        "is_violation": is_violation,
-        "action": action,
-        "message": display_message
-    }
+**Successful Park (Welcome):**
+```json
+{
+  "status": "park_recorded",
+  "plate": "1234567",
+  "is_violation": false,
+  "action": "WELCOME",
+  "message": "Welcome Driver Name"
+}
 ```
 
-```python
-    # For a failed OCR attempt
-    if not license_plate:
-        return {
-            "status": "failed", 
-            "reason": "could_not_read_plate",
-            "action": "RETRY",
-            "message": "Scan again"
-        }
+**Violation (Denied):**
+```json
+{
+  "status": "park_recorded",
+  "plate": "1234567",
+  "is_violation": true,
+  "action": "DENIED",
+  "message": "Violation – unauthorized"
+}
 ```
+
+**Failed OCR (Retry):**
+```json
+{
+  "status": "failed",
+  "reason": "could_not_read_plate",
+  "action": "RETRY",
+  "message": "Scan again"
+}
+```
+
+**Deduplication Drop (Retry):**
+```json
+{
+  "status": "dropped",
+  "reason": "duplicate_within_5s",
+  "action": "RETRY",
+  "message": "Processing..."
+}
+```
+
+**Invalid Spot ID (Retry):**
+```json
+{
+  "status": "failed",
+  "reason": "invalid_spot_id",
+  "action": "RETRY",
+  "message": "Invalid spot"
+}
+```
+
+> **Note:** The `action` and `message` keys were added to align backend responses with the firmware parser. The gate opens only when `"action":"WELCOME"` is present; `"DENIED"` displays a warning on the LCD; `"RETRY"` causes the camera node to display the message and keep the gate closed.
+
+### OCR Engine
+The backend performs license plate recognition using the **Google Cloud Vision API** (`google.cloud.vision`). The captured JPEG frame is sent to the Vision API's text detection endpoint, and the response is parsed to extract the license plate string. This replaced earlier local OCR approaches and provides significantly better accuracy, especially under varying lighting conditions.
 
 ---
 

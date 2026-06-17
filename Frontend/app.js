@@ -108,6 +108,7 @@ async function initDashboard() {
             throw new Error('Failed to fetch user profile');
         }
         const profile = await res.json();
+        window.currentUserProfile = profile;
 
         // UI Updates
         document.getElementById('user-greeting').textContent = `Welcome, ${profile.name}`;
@@ -228,8 +229,7 @@ function createSpotCard(spot) {
         </div>
     `;
 
-    const payload = parseJwt(localStorage.getItem('parkme_token'));
-    if (payload && payload.role === 'admin') {
+    if (window.currentUserProfile && window.currentUserProfile.role === 'admin') {
         let batt = spot.battery_level !== undefined && spot.battery_level !== null ? `${spot.battery_level}%` : 'N/A';
         let seen = spot.last_seen ? new Date(spot.last_seen).toLocaleTimeString() : 'N/A';
         html += `
@@ -239,7 +239,42 @@ function createSpotCard(spot) {
             </div>
         `;
         if (statusClass === 'unidentified') {
-            html += `<button class="resolve-btn" onclick="resolveSpot('${spot.id}')" style="margin-top:10px;">Acknowledge & Resolve</button>`;
+            const lastSeenTime = spot.last_seen ? new Date(spot.last_seen).getTime() : 0;
+            const elapsed = Date.now() - lastSeenTime;
+            const cooldown = 45000; // 45 seconds
+
+            if (elapsed < cooldown) {
+                const remaining = Math.ceil((cooldown - elapsed) / 1000);
+                html += `<button id="resolve-btn-${spot.id}" class="resolve-btn" disabled style="margin-top:10px; opacity:0.5; cursor:not-allowed;">Camera Retrying... (${remaining}s)</button>`;
+                
+                // Start a countdown to enable the button
+                setTimeout(() => {
+                    const btn = document.getElementById(`resolve-btn-${spot.id}`);
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.style.opacity = '1';
+                        btn.style.cursor = 'pointer';
+                        btn.innerText = 'Acknowledge & Resolve';
+                        btn.setAttribute('onclick', `resolveSpot('${spot.id}')`);
+                    }
+                }, cooldown - elapsed);
+
+                // Update the countdown text every second
+                const interval = setInterval(() => {
+                    const btn = document.getElementById(`resolve-btn-${spot.id}`);
+                    if (!btn || btn.disabled === false) {
+                        clearInterval(interval);
+                        return;
+                    }
+                    const newElapsed = Date.now() - lastSeenTime;
+                    const newRemaining = Math.ceil((cooldown - newElapsed) / 1000);
+                    if (newRemaining > 0) {
+                        btn.innerText = `Camera Retrying... (${newRemaining}s)`;
+                    }
+                }, 1000);
+            } else {
+                html += `<button id="resolve-btn-${spot.id}" class="resolve-btn" onclick="resolveSpot('${spot.id}')" style="margin-top:10px;">Acknowledge & Resolve</button>`;
+            }
         }
     }
 
@@ -251,14 +286,7 @@ function updateSpotUI(spot) {
     const existing = document.getElementById(`spot-${spot.id}`);
     
     // Check role to enforce strict UI view for drivers
-    let token = localStorage.getItem('parkme_token');
-    let isAdmin = false;
-    if (token) {
-        try {
-            const payload = parseJwt(token);
-            isAdmin = payload.role === 'admin';
-        } catch (e) {}
-    }
+    let isAdmin = window.currentUserProfile && window.currentUserProfile.role === 'admin';
 
     const newCard = createSpotCard(spot);
     if (existing) {

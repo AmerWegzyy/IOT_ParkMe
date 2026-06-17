@@ -249,7 +249,9 @@ async def receive_heartbeat_data(
             "category": spot_data_dict.get("category"),
             "is_occupied": payload.is_occupied,
             "license_plate": license_plate,
-            "is_violation": is_violation
+            "is_violation": is_violation,
+            "battery_level": payload.battery_level,
+            "last_seen": server_time.isoformat()
         }
         await broadcast_event("spot_update", {"spot": broadcast_spot})
 
@@ -392,7 +394,9 @@ async def receive_park_event(
         "category": spot_category,
         "is_occupied": True,
         "license_plate": license_plate,
-        "is_violation": is_violation
+        "is_violation": is_violation,
+        "battery_level": spot_data.get("battery_level"),
+        "last_seen": server_time.isoformat()
     }
     await broadcast_event("spot_update", {"spot": broadcast_spot_data})
 
@@ -517,7 +521,6 @@ async def get_recent_logs(current_user: dict = Depends(get_current_user), db = D
     violation_query = (
         logs_ref
         .where(filter=FieldFilter("is_violation", "==", True))
-        .order_by("entry_time", direction=firestore.Query.DESCENDING)
         .limit(50)
         .get()
     )
@@ -526,7 +529,6 @@ async def get_recent_logs(current_user: dict = Depends(get_current_user), db = D
     unidentified_query = (
         logs_ref
         .where(filter=FieldFilter("license_plate", "==", "UNIDENTIFIED"))
-        .order_by("entry_time", direction=firestore.Query.DESCENDING)
         .limit(50)
         .get()
     )
@@ -628,12 +630,15 @@ async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_c
     
     if spot_doc.exists:
         spot_data = spot_doc.to_dict()
+        last_seen_raw = spot_data.get("last_seen")
         broadcast_spot_data = {
             "id": spot_doc.id,
             "category": spot_data.get("category"),
             "is_occupied": spot_data.get("is_occupied", False),
             "license_plate": "RESOLVED",
-            "is_violation": False
+            "is_violation": False,
+            "battery_level": spot_data.get("battery_level"),
+            "last_seen": last_seen_raw.isoformat() if hasattr(last_seen_raw, 'isoformat') else str(last_seen_raw) if last_seen_raw else None
         }
         await broadcast_event("spot_update", {"spot": broadcast_spot_data})
         await broadcast_event("log_event", {"log": {
