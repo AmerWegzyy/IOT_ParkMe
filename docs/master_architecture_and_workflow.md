@@ -124,6 +124,15 @@ The core application logic, database, and hardware integrations are currently st
 
 Follow these exact steps to take the project from `localhost` to production.
 
+### Step 0: Enabling Google Cloud APIs (Required for OCR)
+The camera OCR relies entirely on the Google Cloud Vision API. Whether running locally or in production, you must manually enable this API in your project, or the backend will crash with a `403 Forbidden` error.
+
+1. **Navigate to the Google Cloud Console:** Go to [console.cloud.google.com](https://console.cloud.google.com).
+2. **Select the Project:** Ensure your active project is `parkme-technion-f280b`.
+3. **Enable the API:** Search for "Cloud Vision API" in the top search bar, or navigate directly to the API Library and click the blue **Enable** button.
+4. **Billing Verification:** Ensure your project has an active Billing Account attached. Cloud Vision offers a generous free tier (1,000 units/month), but Google requires a billing account to prevent abuse.
+5. **Propagation Time:** Wait 2-5 minutes after clicking Enable for the API activation to propagate through Google's servers before testing the camera.
+
 ### Step 1: Deploying the Frontend (Firebase Hosting)
 Since the frontend is pure HTML/JS/CSS, Firebase Hosting is the fastest, globally-distributed CDN for it.
 
