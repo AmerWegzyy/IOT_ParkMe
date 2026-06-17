@@ -65,8 +65,15 @@ The physical world is chaotic. Here is exactly how the current backend and front
    3. Once 45 seconds elapse (guaranteeing the camera has officially given up), the button unlocks. The admin can click it, triggering `PUT /api/v1/sensors/resolve`, which safely clears the violation and marks the plate as `"RESOLVED"`.
 
 ### D. Double Triggers (LPR Deduplication)
-* **The Scenario:** The camera accidentally triggers twice in rapid succession for the same car.
-* **The Handling:** The backend maintains an in-memory `LPR_DEDUP_CACHE`. If the exact same license plate is recognized again within a 5-second window, the backend drops the request and returns `{"status": "dropped"}` to the hardware, preventing duplicate database entries.
+* **The Scenario:** The camera node accidentally captures and sends the same vehicle's license plate multiple times in rapid succession. This typically happens for two reasons:
+   1. **Physical Fluctuation:** The driver creeps forward slowly, causing the ultrasonic sensor's distance reading to bounce back and forth across the 50cm trigger threshold.
+   2. **Network Stutter:** The camera sends the image successfully, but the Wi-Fi drops before the backend's `200 OK` acknowledgment arrives. The camera assumes failure and aggressively retries sending the same image.
+* **The Handling:** 
+   1. To prevent spamming the database with duplicate parking logs and triggering multiple SSE UI broadcasts, the backend maintains an in-memory dictionary called `LPR_DEDUP_CACHE`.
+   2. When a plate is parsed by the Cloud Vision API, the backend checks this cache. If the exact same license plate was processed within the last **5 seconds**, the backend intercepts the request and aborts the database write.
+   3. The backend responds to the camera with:
+      `{"status": "dropped", "reason": "duplicate_within_5s", "action": "RETRY", "message": "Processing..."}`
+   4. The hardware receives the `"RETRY"` action, which tells the camera to pause and try again, effectively pacing the hardware and preventing further spam while the gate logic settles.
 
 ### E. Sensor Node Network Loss (NVS Caching)
 * **The Scenario:** The Sensor Node's Wi-Fi drops exactly as a car leaves.
