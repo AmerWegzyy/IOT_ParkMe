@@ -157,9 +157,9 @@ async def receive_heartbeat_data(
 ):
     server_time = get_il_time()
     
-    # Find the parking spot by mac_address
+    # Find the parking spot by sensor_mac
     spots_ref = db.collection("parking_spots")
-    spot_query = spots_ref.where(filter=FieldFilter("mac_address", "==", payload.mac_address)).limit(1).get()
+    spot_query = spots_ref.where(filter=FieldFilter("sensor_mac", "==", payload.mac_address)).limit(1).get()
     
     spot_doc = None
     for doc in spot_query:
@@ -265,7 +265,7 @@ async def receive_heartbeat_data(
 
 @app.post("/api/v1/sensors/park", status_code=status.HTTP_202_ACCEPTED)
 async def receive_park_event(
-    spot_id: str = Form(..., description="The parking spot ID this camera monitors"),
+    camera_mac: str = Form(..., description="The MAC address of the camera node"),
     file: UploadFile = File(..., description="Image file from the ESP32-CAM"),
     db = Depends(get_firestore_db)
 ):
@@ -282,7 +282,7 @@ async def receive_park_event(
             "message": "Scan again"
         }
         
-    logger.info(f"Extracted plate {license_plate} for spot {spot_id}")
+    logger.info(f"Extracted plate {license_plate} from camera {camera_mac}")
     
     last_seen = LPR_DEDUP_CACHE.get(license_plate)
     if last_seen and (server_time - last_seen).total_seconds() < 5:
@@ -294,20 +294,27 @@ async def receive_park_event(
         }
     LPR_DEDUP_CACHE[license_plate] = server_time
     
-    # Get the parking spot document
-    spot_ref = db.collection("parking_spots").document(spot_id)
-    spot_doc = spot_ref.get()
+    # Get the parking spot document by camera_mac
+    spots_ref = db.collection("parking_spots")
+    spot_query = spots_ref.where(filter=FieldFilter("camera_mac", "==", camera_mac)).limit(1).get()
     
-    if not spot_doc.exists:
+    spot_doc = None
+    for doc in spot_query:
+        spot_doc = doc
+        break
+        
+    if not spot_doc:
         return {
             "status": "failed", 
-            "reason": "invalid_spot_id",
+            "reason": "invalid_camera_mac",
             "action": "RETRY",
-            "message": "Invalid spot"
+            "message": "Invalid camera"
         }
         
+    spot_id = spot_doc.id
     spot_data = spot_doc.to_dict()
     spot_category = spot_data.get("category")
+    spot_ref = spot_doc.reference
     
     # Look up the vehicle by license_plate (document ID = license_plate)
     vehicle_ref = db.collection("vehicles").document(license_plate)
@@ -651,9 +658,9 @@ async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_c
 async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)):
     logger.info(f"Received {len(payload.data)} cached events from {payload.mac_address}")
     
-    # Find the parking spot by mac_address
+    # Find the parking spot by sensor_mac
     spots_ref = db.collection("parking_spots")
-    spot_query = spots_ref.where(filter=FieldFilter("mac_address", "==", payload.mac_address)).limit(1).get()
+    spot_query = spots_ref.where(filter=FieldFilter("sensor_mac", "==", payload.mac_address)).limit(1).get()
     
     spot_doc = None
     for doc in spot_query:

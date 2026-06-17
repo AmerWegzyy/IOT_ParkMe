@@ -22,21 +22,35 @@ def get_firestore_client() -> firestore.firestore.Client:
     return firestore.client()
 
 
+def delete_collection(db: firestore.firestore.Client, coll_name: str, batch_size: int = 500):
+    """Deletes all documents in a collection to prevent duplicates."""
+    print(f"🧹 Wiping existing '{coll_name}' collection...")
+    docs = db.collection(coll_name).limit(batch_size).stream()
+    deleted = 0
+    for doc in docs:
+        doc.reference.delete()
+        deleted += 1
+    if deleted >= batch_size:
+        return delete_collection(db, coll_name, batch_size)
+    print(f"  ✨ Wiped {coll_name} completely.")
+
+
 def seed_parking_spots(db: firestore.firestore.Client) -> None:
     """Seed the parking_spots collection."""
+    delete_collection(db, "parking_spots")
     print("⏳ Seeding parking_spots …")
     spots = [
-        {"id": "A1", "mac_address": "AA:BB:CC:DD:EE:01", "category": "student",
+        {"id": "A1", "sensor_mac": "AA:BB:CC:DD:EE:01", "camera_mac": "FF:EE:DD:CC:BB:01", "category": "student",
          "is_occupied": True,  "battery_level": 95.5},
-        {"id": "A2", "mac_address": "AA:BB:CC:DD:EE:02", "category": "lecturer",
+        {"id": "A2", "sensor_mac": "AA:BB:CC:DD:EE:02", "camera_mac": "FF:EE:DD:CC:BB:02", "category": "lecturer",
          "is_occupied": False, "battery_level": 88.0},
-        {"id": "B1", "mac_address": "AA:BB:CC:DD:EE:03", "category": "special-needs-driver",
+        {"id": "B1", "sensor_mac": "AA:BB:CC:DD:EE:03", "camera_mac": "FF:EE:DD:CC:BB:03", "category": "special-needs-driver",
          "is_occupied": True,  "battery_level": 45.2},
-        {"id": "B2", "mac_address": "AA:BB:CC:DD:EE:04", "category": "staff",
+        {"id": "B2", "sensor_mac": "AA:BB:CC:DD:EE:04", "camera_mac": "FF:EE:DD:CC:BB:04", "category": "staff",
          "is_occupied": False, "battery_level": 99.0},
-        {"id": "C1", "mac_address": "AA:BB:CC:DD:EE:05", "category": "student",
+        {"id": "C1", "sensor_mac": "AA:BB:CC:DD:EE:05", "camera_mac": "FF:EE:DD:CC:BB:05", "category": "student",
          "is_occupied": False, "battery_level": 82.0},
-        {"id": "C2", "mac_address": "AA:BB:CC:DD:EE:06", "category": "lecturer",
+        {"id": "C2", "sensor_mac": "AA:BB:CC:DD:EE:06", "camera_mac": "FF:EE:DD:CC:BB:06", "category": "lecturer",
          "is_occupied": True,  "battery_level": 75.0},
     ]
     for spot in spots:
@@ -86,6 +100,7 @@ def seed_vehicles(db: firestore.firestore.Client, email_to_id: dict[str, str]) -
 
 def seed_parking_logs(db: firestore.firestore.Client, email_to_id: dict[str, str]) -> None:
     """Seed the parking_logs collection."""
+    delete_collection(db, "parking_logs")
     print("⏳ Seeding parking_logs …")
     logs = [
         {

@@ -173,8 +173,8 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
 
   const String boundary = "----ParkMeBoundary7MA4YWxkTrZu0gW";
   String part1 = "--" + boundary +
-                 "\r\nContent-Disposition: form-data; name=\"spot_id\"\r\n\r\n" +
-                 String(PARKME_GATE_SPOT_ID) + "\r\n";
+                 "\r\nContent-Disposition: form-data; name=\"camera_mac\"\r\n\r\n" +
+                 WiFi.macAddress() + "\r\n";
   String part2 = "--" + boundary +
                  "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"capture.jpg\"\r\n"
                  "Content-Type: image/jpeg\r\n\r\n";
