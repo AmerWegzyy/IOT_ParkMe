@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ParkMe System Architecture & Data Model Visualizer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-secondary: #131b2e;
+            --bg-card: rgba(22, 33, 58, 0.6);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-glow: rgba(56, 189, 248, 0.15);
+            
+            --accent-blue: #38bdf8;
+            --accent-teal: #2dd4bf;
+            --accent-orange: #fb923c;
+            --accent-purple: #c084fc;
+            --accent-red: #f87171;
+            
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-dark: #64748b;
+            
+            --font-main: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            
+            --glass-bg: rgba(15, 23, 42, 0.45);
+            --glass-blur: blur(12px);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 5% 10%, rgba(56, 189, 248, 0.08) 0%, transparent 35%),
+                radial-gradient(circle at 95% 85%, rgba(45, 212, 191, 0.06) 0%, transparent 40%),
+                radial-gradient(circle at 50% 50%, rgba(192, 132, 252, 0.03) 0%, transparent 50%);
+        }
+
+        /* HEADER */
+        header {
+            padding: 2rem 2rem 1.5rem;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(11, 15, 25, 0.6);
+            backdrop-filter: blur(8px);
+            position: relative;
+            z-index: 10;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-teal) 50%, var(--accent-purple) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.025em;
+        }
+
+        header p {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .meta-info {
+            display: inline-flex;
+            gap: 1.5rem;
+            margin-top: 0.8rem;
+            font-size: 0.85rem;
+            color: var(--text-dark);
+            font-family: var(--font-mono);
+        }
+
+        .meta-badge {
+            background: rgba(255, 255, 255, 0.04);
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* CONTAINER */
+        .container {
+            max-width: 1280px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        /* TABS NAVIGATION */
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 0.75rem;
+            background: var(--bg-secondary);
+            padding: 0.4rem;
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+            width: fit-content;
+            margin: 0 auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 0.8rem 2.2rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-teal) 100%);
+            color: var(--bg-primary);
+            box-shadow: 0 4px 15px rgba(56, 189, 248, 0.25);
+        }
+
+        /* TAB CONTENT PANELS */
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* GENERIC CARD */
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 2.2rem;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+            position: relative;
+        }
+
+        /* TAB 1: DATA MODEL VIEW */
+        .erd-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .erd-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .erd-title-group h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+        }
+
+        .erd-title-group p {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+        }
+
+        .erd-legend {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .legend-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .legend-normal { background: rgba(56, 189, 248, 0.1); border-color: var(--accent-blue); }
+        .legend-seeded { background: rgba(251, 146, 60, 0.05); border-color: var(--accent-orange); border-style: dashed; }
+        .legend-runtime { background: rgba(192, 132, 252, 0.05); border-color: var(--accent-purple); border-style: dashed; }
+
+        /* INTERACTIVE ERD CANVAS */
+        .erd-canvas-wrapper {
+            position: relative;
+            background: rgba(8, 12, 24, 0.8);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            overflow: auto;
+            min-height: 620px;
+            width: 100%;
+        }
+
+        .erd-container {
+            position: relative;
+            width: 1060px;
+            height: 600px;
+            margin: 0 auto;
+        }
+
+        .erd-svg-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .collection-box {
+            position: absolute;
+            width: 270px;
+            background: #0d1527;
+            border: 2px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+            z-index: 5;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        .collection-box:hover {
+            border-color: rgba(56, 189, 248, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(56, 189, 248, 0.08);
+        }
+
+        .collection-box.highlight {
+            border-color: var(--accent-teal);
+            box-shadow: 0 0 15px rgba(45, 212, 191, 0.2);
+        }
+
+        .collection-header {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .collection-name {
+            font-family: var(--font-mono);
+            font-weight: 700;
+            color: var(--text-main);
+            font-size: 1.05rem;
+        }
+
+        .collection-tag {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            background: rgba(45, 212, 191, 0.15);
+            color: var(--accent-teal);
+            font-weight: 700;
+        }
+
+        .field-list {
+            padding: 0.6rem 0;
+        }
+
+        .field-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.4rem 1rem;
+            font-size: 0.85rem;
+            position: relative;
+            transition: background-color 0.2s;
+        }
+
+        .field-row:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .field-row.mismatch-seeded {
+            background: rgba(251, 146, 60, 0.04);
+            border-left: 3px solid var(--accent-orange);
+        }
+
+        .field-row.mismatch-runtime {
+            background: rgba(192, 132, 252, 0.04);
+            border-left: 3px solid var(--accent-purple);
+        }
+
+        .field-name-group {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .field-name {
+            font-family: var(--font-mono);
+            font-weight: 500;
+            color: var(--text-main);
+        }
+
+        .field-key-badge {
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 0.05rem 0.25rem;
+            border-radius: 3px;
+            background: rgba(251, 146, 60, 0.15);
+            color: var(--accent-orange);
+        }
+
+        .field-ref-badge {
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 0.05rem 0.25rem;
+            border-radius: 3px;
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-blue);
+            cursor: help;
+        }
+
+        .field-status-indicator {
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 0.05rem 0.25rem;
+            border-radius: 3px;
+        }
+        .status-seeded {
+            background: rgba(251, 146, 60, 0.12);
+            color: var(--accent-orange);
+        }
+        .status-runtime {
+            background: rgba(192, 132, 252, 0.12);
+            color: var(--accent-purple);
+        }
+
+        .field-type {
+            font-family: var(--font-mono);
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        /* SVG CONNECTION LINES */
+        .relationship-line {
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            transition: all 0.3s;
+        }
+
+        .relationship-line.inactive {
+            stroke: rgba(255, 255, 255, 0.06);
+            stroke-dasharray: 4, 4;
+        }
+
+        .relationship-line.active {
+            stroke-width: 3;
+            filter: drop-shadow(0 0 4px var(--glow-color));
+        }
+
+        /* TAB 2: HARDWARE FLOW VIEW */
+        .flow-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+
+        @media (min-width: 1024px) {
+            .flow-grid {
+                grid-template-columns: 3fr 2fr;
+            }
+        }
+
+        .simulator-card {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .sim-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+        }
+
+        .sim-title h3 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+        }
+
+        .sim-title p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.1rem;
+        }
+
+        .sim-buttons {
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-sim {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.7rem 1.4rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.25s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-sim:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateY(-1px);
+        }
+
+        .btn-sim.active {
+            box-shadow: 0 4px 12px rgba(255,255,255,0.05);
+        }
+
+        .btn-sim-arrival { border-color: var(--accent-teal); color: var(--accent-teal); }
+        .btn-sim-arrival:hover { background: rgba(45, 212, 191, 0.08); }
+        .btn-sim-arrival.active { background: var(--accent-teal); color: var(--bg-primary); }
+
+        .btn-sim-heartbeat { border-color: var(--accent-blue); color: var(--accent-blue); }
+        .btn-sim-heartbeat:hover { background: rgba(56, 189, 248, 0.08); }
+        .btn-sim-heartbeat.active { background: var(--accent-blue); color: var(--bg-primary); }
+
+        .btn-sim-departure { border-color: var(--accent-orange); color: var(--accent-orange); }
+        .btn-sim-departure:hover { background: rgba(251, 146, 60, 0.08); }
+        .btn-sim-departure.active { background: var(--accent-orange); color: var(--bg-primary); }
+
+        /* SVG CANVAS */
+        .network-viewport {
+            background: rgba(8, 12, 24, 0.9);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            height: 380px;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .network-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .net-node {
+            cursor: pointer;
+        }
+
+        .net-node-bg {
+            fill: #0d1527;
+            stroke: var(--text-dark);
+            stroke-width: 2;
+            transition: all 0.3s;
+        }
+
+        .net-node:hover .net-node-bg,
+        .net-node.active .net-node-bg {
+            stroke: var(--active-color);
+            filter: drop-shadow(0 0 6px var(--active-color));
+        }
+
+        .net-node-icon-circle {
+            fill: rgba(255, 255, 255, 0.04);
+            stroke: rgba(255, 255, 255, 0.08);
+            stroke-width: 1;
+        }
+
+        .net-node-title {
+            font-weight: 700;
+            fill: var(--text-main);
+            font-size: 13px;
+        }
+
+        .net-node-desc {
+            fill: var(--text-muted);
+            font-size: 10px;
+        }
+
+        .net-link-path {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.05);
+            stroke-width: 3;
+            stroke-dasharray: 6, 6;
+        }
+
+        .net-link-path.active-route {
+            stroke: var(--active-color);
+            animation: dashPulse 25s linear infinite;
+        }
+
+        @keyframes dashPulse {
+            to { stroke-dashoffset: -1000; }
+        }
+
+        /* ANIMATED PACKET */
+        .packet-indicator {
+            fill: none;
+            stroke-width: 6;
+            stroke-linecap: round;
+            opacity: 0;
+        }
+
+        .packet-indicator.animating {
+            opacity: 1;
+            animation: movePacket 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        @keyframes movePacket {
+            0% { offset-distance: 0%; }
+            100% { offset-distance: 100%; }
+        }
+
+        /* CONSOLE PANEL */
+        .console-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+        }
+
+        .console-tab-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .console-tab-header h4 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--accent-blue);
+        }
+
+        .http-badge {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+        }
+
+        .badge-post { background: rgba(45, 212, 191, 0.15); color: var(--accent-teal); border: 1px solid rgba(45, 212, 191, 0.3); }
+        .badge-get { background: rgba(56, 189, 248, 0.15); color: var(--accent-blue); border: 1px solid rgba(56, 189, 248, 0.3); }
+
+        .console-desc {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .code-container {
+            background: #060913;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.2rem;
+            overflow-x: auto;
+            max-height: 380px;
+        }
+
+        .code-container pre {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            line-height: 1.45;
+            color: #7dd3fc;
+        }
+
+        /* TAB 3: MISMATCH REPORT VIEW */
+        .mismatch-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .mismatch-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .summary-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .summary-card .label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .summary-card .value {
+            font-size: 2rem;
+            font-weight: 800;
+        }
+
+        .summary-card.alert-card {
+            border-color: rgba(251, 146, 60, 0.25);
+            background: rgba(251, 146, 60, 0.02);
+        }
+        .summary-card.alert-card .value {
+            color: var(--accent-orange);
+        }
+
+        .mismatch-table-wrapper {
+            background: rgba(8, 12, 24, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .mismatch-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+
+        .mismatch-table th {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-main);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .mismatch-table td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            vertical-align: middle;
+        }
+
+        .mismatch-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .mismatch-badge {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .badge-seeder-only {
+            background: rgba(251, 146, 60, 0.15);
+            color: var(--accent-orange);
+            border: 1px solid rgba(251, 146, 60, 0.3);
+        }
+
+        .badge-runtime-only {
+            background: rgba(192, 132, 252, 0.15);
+            color: var(--accent-purple);
+            border: 1px solid rgba(192, 132, 252, 0.3);
+        }
+
+        .path-link {
+            font-family: var(--font-mono);
+            color: var(--accent-blue);
+            text-decoration: none;
+        }
+
+        .path-link:hover {
+            text-decoration: underline;
+        }
+
+        .empty-mismatch-state {
+            padding: 3rem;
+            text-align: center;
+            color: var(--text-muted);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .empty-icon {
+            font-size: 3rem;
+            color: var(--accent-teal);
+        }
+
+        /* FOOTER */
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-dark);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border-color);
+            margin-top: auto;
+            background: rgba(11, 15, 25, 0.4);
+            font-family: var(--font-mono);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>ParkMe System Architecture</h1>
+        <p>Inferred Firestore Data Model & Hardware Communications Flow</p>
+        <div class="meta-info">
+            <span class="meta-badge">Generated: 2026-06-17 14:25:37</span>
+            <span class="meta-badge">Inferred Schema: v1.1</span>
+            <span class="meta-badge">Target: Firestore NoSQL</span>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab(event, 'tab-erd')">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="display:inline-block; vertical-align:middle; margin-right:4px;">
+                    <path d="M13.5 3h-11a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5zm-11-1A1.5 1.5 0 0 0 1 3.5v11A1.5 1.5 0 0 0 2.5 16h11a1.5 1.5 0 0 0 1.5-1.5v-11A1.5 1.5 0 0 0 13.5 2h-11z"/>
+                    <path d="M4 6h8v1H4V6zm0 3h8v1H4V9zm0 3h5v1H4v-1z"/>
+                </svg>
+                Data Model (Firestore)
+            </button>
+            <button class="tab-btn" onclick="switchTab(event, 'tab-flow')">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="display:inline-block; vertical-align:middle; margin-right:4px;">
+                    <path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/>
+                </svg>
+                Hardware Flow
+            </button>
+            <button class="tab-btn" onclick="switchTab(event, 'tab-mismatch')">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="display:inline-block; vertical-align:middle; margin-right:4px;">
+                    <path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/>
+                    <path d="M7.938 1.076a1.219 1.219 0 0 0-1.876 0L.176 9.176a1.219 1.219 0 0 0 .938 1.954h13.77a1.219 1.219 0 0 0 .938-1.954L7.938 1.076z"/>
+                </svg>
+                Mismatch Report
+            </button>
+        </div>
+
+        <!-- TAB 1: DATA MODEL -->
+        <div id="tab-erd" class="tab-content active">
+            <div class="card erd-layout">
+                <div class="erd-controls">
+                    <div class="erd-title-group">
+                        <h2>Firestore Schema Model</h2>
+                        <p>Visualizing collection fields, types, and cross-collection references. Hover on fields to see details.</p>
+                    </div>
+                    <div class="erd-legend">
+                        <div class="legend-item">
+                            <span class="legend-color legend-normal"></span>
+                            <span>Standard / Confirmed</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color legend-seeded"></span>
+                            <span>Seeder-Only (Dead/Legacy)</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color legend-runtime"></span>
+                            <span>Runtime-Only</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="erd-canvas-wrapper">
+                    <div class="erd-container" id="erd-container">
+                        <!-- SVG line connections -->
+                        <svg class="erd-svg-layer" id="erd-svg-canvas">
+                            <defs>
+                                <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+                                </marker>
+                                <marker id="arrow-active" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#2dd4bf" />
+                                </marker>
+                            </defs>
+                        </svg>
+
+                        <!-- users box -->
+                        <div class="collection-box" id="coll-users" style="left: 50px; top: 50px;">
+                            <div class="collection-header">
+                                <span class="collection-name">users</span>
+                                <span class="collection-tag">Collection</span>
+                            </div>
+                            <div class="field-list">
+                                <div class="field-row" id="users-email">
+                                    <div class="field-name-group">
+                                        <span class="field-key-badge">PK</span>
+                                        <span class="field-name">email (doc_id)</span>
+                                    </div>
+                                    <span class="field-type">string</span>
+                                </div>
+                                <div class="field-row" id="users-name">
+                                    <div class="field-name-group">
+                                        <span class="field-name">name</span>
+                                    </div>
+                                    <span class="field-type">string</span>
+                                </div>
+                                <div class="field-row" id="users-role">
+                                    <div class="field-name-group">
+                                        <span class="field-name">role</span>
+                                    </div>
+                                    <span class="field-type">string</span>
+                                </div>
+                                <div class="field-row mismatch-seeded" id="users-points" title="Written by seeder, but never read or updated in main.py">
+                                    <div class="field-name-group">
+                                        <span class="field-name">points</span>
+                                        <span class="field-status-indicator status-seeded">Seeded Only</span>
+                                    </div>
+                                    <span class="field-type">number</span>
+                                </div>
+                                <div class="field-row mismatch-seeded" id="users-created_at" title="Written by seeder, but never read or updated in main.py">
+                                    <div class="field-name-group">
+                                        <span class="field-name">created_at</span>
+                                        <span class="field-status-indicator status-seeded">Seeded Only</span>
+                                    </div>
+                                    <span class="field-type">timestamp</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- vehicles box -->
+                        <div class="collection-box" id="coll-vehicles" style="left: 50px; top: 370px;">
+                            <div class="collection-header">
+                                <span class="collection-name">vehicles</span>
+                                <span class="collection-tag">Collection</span>
+                            </div>
+                            <div class="field-list">
+                                <div class="field-row" id="vehicles-license_plate">
+                                    <div class="field-name-group">
+                                        <span class="field-key-badge">PK</span>
+                                        <span class="field-name">license_plate (doc_id)</span>
+                                    </div>
+                                    <span class="field-type">string</span>
+                                </div>
+                                <div class="field-row" id="vehicles-user_id" data-ref-to="coll-users" title="References email key in users">
+                                    <div class="field-name-group">
+                                        <span class="field-ref-badge">FK</span>
+                                        <span class="field-name">user_id</span>
+                                    </div>
+                                    <span class="field-type">string</span>
+                                </div>
+                                <div class="field-row mismatch-seeded" id="vehicles-created_at" title="Written by seeder, but never read or updated in main.py">
+                                    <div class="field-name-group">
+                                        <span class="field-name">created_at</span>
+                                        <span class="field-status-indicator status-seeded">Seeded Only</span>
+                                    </div>
+                                    <span class="field-type">timestamp</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- parking_spots box -->
+                        <div class="collection-box" id="coll-parking_spots" style="left: 730px; top: 50px;">
+                            <div class="collection-header">
+                                <span class="collection-name">parking_spots</span>
+                                <span class="collection-tag">Collection</span>
+                            </div>
+                            <div class="field-list">
+                                <div class="field-row" id="parking_spots-id">
+                                    <div class="field-name-group">
+                                        <span class="field-key-badge">PK</span>
+                                        <span class="field-name">id (spot_id)</span>
+                                    </div>
+                                    <span class="field-type">string</span>
+                                </div>
+                                <div class="field-row" id="parking_spots-mac_address">
+                                    <div class="field-name-group">
+                                        <span class="field-name">mac_address</span>
+                                    </div>
+                                    <span class="field-type">string</span>
+                                </div>
+                                <div class="field-row" id="parking_spots-category">
+                                    <div class="field-name-group">
+                                        <span class="field-name">category</span>
+                                    </div>
+                                    <span class="field-type">string</span>
+                                </div>
+                                <div class="field-row" id="parking_spots-is_occupied">
+                                    <div class="field-name-group">
+                                        <span class="field-name">is_occupied</span>
+                                    </div>
+                                    <span class="field-type">boolean</span>
+                                </div>
+                                <div class="field-row" id="parking_spots-battery_level">
+                                    <div class="field-name-group">
+                                        <span class="field-name">battery_level</span>
+                                    </div>
+                                    <span class="field-type">number</span>
+                                </div>
+                                <div class="field-row" id="parking_spots-last_seen">
+                                    <div class="field-name-group">
+                                        <span class="field-name">last_seen</span>
+                                    </div>
+                                    <span class="field-type">timestamp</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- parking_logs box -->
+                        <div class="collection-box" id="coll-parking_logs" style="left: 390px; top: 180px;">
+                            <div class="collection-header">
+                                <span class="collection-name">parking_logs</span>
+                                <span class="collection-tag">Collection</span>
+                            </div>
+                            <div class="field-list">
+                                <div class="field-row" id="parking_logs-id">
+                                    <div class="field-name-group">
+                                        <span class="field-key-badge">PK</span>
+                                        <span class="field-name">id (auto-gen)</span>
+                                    </div>
+                                    <span class="field-type">string</span>
+                                </div>
+                                <div class="field-row" id="parking_logs-spot_id" data-ref-to="coll-parking_spots" title="References id key in parking_spots">
+                                    <div class="field-name-group">
+                                        <span class="field-ref-badge">FK</span>
+                                        <span class="field-name">spot_id</span>
+                                    </div>
+                                    <span class="field-type">string</span>
+                                </div>
+                                <div class="field-row" id="parking_logs-license_plate" data-ref-to="coll-vehicles" title="References license_plate key in vehicles (or ABORTED/UNIDENTIFIED)">
+                                    <div class="field-name-group">
+                                        <span class="field-ref-badge">FK</span>
+                                        <span class="field-name">license_plate</span>
+                                    </div>
+                                    <span class="field-type">string</span>
+                                </div>
+                                <div class="field-row" id="parking_logs-user_id" data-ref-to="coll-users" title="References email key in users (or null)">
+                                    <div class="field-name-group">
+                                        <span class="field-ref-badge">FK</span>
+                                        <span class="field-name">user_id</span>
+                                    </div>
+                                    <span class="field-type">string?</span>
+                                </div>
+                                <div class="field-row" id="parking_logs-snapshot_role">
+                                    <div class="field-name-group">
+                                        <span class="field-name">snapshot_role</span>
+                                    </div>
+                                    <span class="field-type">string?</span>
+                                </div>
+                                <div class="field-row" id="parking_logs-entry_time">
+                                    <div class="field-name-group">
+                                        <span class="field-name">entry_time</span>
+                                    </div>
+                                    <span class="field-type">timestamp</span>
+                                </div>
+                                <div class="field-row" id="parking_logs-exit_time">
+                                    <div class="field-name-group">
+                                        <span class="field-name">exit_time</span>
+                                    </div>
+                                    <span class="field-type">timestamp?</span>
+                                </div>
+                                <div class="field-row" id="parking_logs-is_violation">
+                                    <div class="field-name-group">
+                                        <span class="field-name">is_violation</span>
+                                    </div>
+                                    <span class="field-type">boolean</span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div style="font-size:0.85rem; color:var(--text-muted); margin-top:0.5rem; text-align:right; font-style:italic;">
+                    * This data model is programmatically inferred by cross-referencing seed_firestore.py and main.py Firestore operations.
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: HARDWARE FLOW -->
+        <div id="tab-flow" class="tab-content">
+            <div class="card flow-grid">
+                <div class="simulator-card">
+                    <div class="sim-header">
+                        <div class="sim-title">
+                            <h3>Hardware Stream Simulator</h3>
+                            <p>Select an event to view packets routing through nodes and their associated database transaction hooks.</p>
+                        </div>
+                        <div class="sim-buttons">
+                            <button class="btn-sim btn-sim-arrival active" onclick="triggerFlow('arrival')">Arrival Flow</button>
+                            <button class="btn-sim btn-sim-heartbeat" onclick="triggerFlow('heartbeat')">Heartbeat</button>
+                            <button class="btn-sim btn-sim-departure" onclick="triggerFlow('departure')">Departure Flow</button>
+                        </div>
+                    </div>
+
+                    <div class="network-viewport">
+                        <svg class="network-svg" id="net-svg">
+                            <!-- Link paths -->
+                            <!-- ESP32 to FastAPI Server -->
+                            <path id="path-esp32-server" class="net-link-path" d="M 180,110 Q 300,90 440,165" />
+                            
+                            <!-- ESP32-CAM to FastAPI Server -->
+                            <path id="path-cam-server" class="net-link-path" d="M 180,270 Q 300,290 440,215" />
+                            
+                            <!-- FastAPI Server to Admin Dashboard / Clients -->
+                            <path id="path-server-dashboard" class="net-link-path" d="M 580,190 L 760,190" />
+
+                            <!-- Packet animators -->
+                            <circle id="net-packet" class="packet-indicator" r="6" stroke="#2dd4bf" fill="#0b0f19">
+                                <animateMotion id="packet-motion" dur="1.2s" fill="freeze" repeatCount="indefinite" />
+                            </circle>
+
+                            <!-- Nodes -->
+                            <!-- ESP32 Node -->
+                            <g class="net-node" id="node-esp32" transform="translate(60,60)">
+                                <rect class="net-node-bg" width="120" height="70" rx="8" style="--active-color:var(--accent-blue);" />
+                                <circle class="net-node-icon-circle" cx="30" cy="35" r="18" />
+                                <text x="30" y="39" font-family="sans-serif" font-size="16" fill="var(--accent-blue)" text-anchor="middle">📡</text>
+                                <text class="net-node-title" x="55" y="32">ESP32</text>
+                                <text class="net-node-desc" x="55" y="46">Entry Sensor</text>
+                            </g>
+
+                            <!-- ESP32-CAM Node -->
+                            <g class="net-node" id="node-cam" transform="translate(60,220)">
+                                <rect class="net-node-bg" width="120" height="70" rx="8" style="--active-color:var(--accent-teal);" />
+                                <circle class="net-node-icon-circle" cx="30" cy="35" r="18" />
+                                <text x="30" y="39" font-family="sans-serif" font-size="16" fill="var(--accent-teal)" text-anchor="middle">📷</text>
+                                <text class="net-node-title" x="55" y="32">ESP32-CAM</text>
+                                <text class="net-node-desc" x="55" y="46">LPR Camera</text>
+                            </g>
+
+                            <!-- FastAPI Server Node -->
+                            <g class="net-node" id="node-server" transform="translate(440,140)">
+                                <rect class="net-node-bg" width="140" height="90" rx="8" style="--active-color:var(--accent-purple);" />
+                                <circle class="net-node-icon-circle" cx="30" cy="45" r="20" />
+                                <text x="30" y="50" font-family="sans-serif" font-size="18" fill="var(--accent-purple)" text-anchor="middle">⚡</text>
+                                <text class="net-node-title" x="60" y="40">FastAPI</text>
+                                <text class="net-node-desc" x="60" y="55">Cloud Run API</text>
+                                <text class="net-node-desc" x="60" y="68">Backend</text>
+                            </g>
+
+                            <!-- Realtime Client Dashboard Node -->
+                            <g class="net-node" id="node-dashboard" transform="translate(760,150)">
+                                <rect class="net-node-bg" width="130" height="70" rx="8" style="--active-color:var(--accent-orange);" />
+                                <circle class="net-node-icon-circle" cx="30" cy="35" r="18" />
+                                <text x="30" y="39" font-family="sans-serif" font-size="16" fill="var(--accent-orange)" text-anchor="middle">💻</text>
+                                <text class="net-node-title" x="55" y="32">Web App</text>
+                                <text class="net-node-desc" x="55" y="46">Admin UI (SSE)</text>
+                            </g>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="console-panel">
+                    <div class="console-tab-header">
+                        <h4 id="console-title">POST /api/v1/sensors/heartbeat</h4>
+                        <span id="console-badge" class="http-badge badge-post">POST</span>
+                    </div>
+                    <div class="console-desc" id="console-desc">
+                        Initializes the arrival sequence by updating sensor state to occupied.
+                    </div>
+                    <div class="code-container">
+                        <pre><code id="console-code">// JSON API Payload shape</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: MISMATCH REPORT -->
+        <div id="tab-mismatch" class="tab-content">
+            <div class="card mismatch-layout">
+                <div class="erd-title-group">
+                    <h2>Seeder vs. Runtime Mismatch Report</h2>
+                    <p>This report highlights discrepancies between the fields defined in seed_firestore.py and the actual operations invoked inside main.py.</p>
+                </div>
+
+                <div class="mismatch-summary-grid">
+                    <div class="summary-card">
+                        <span class="label">Total Collections Checked</span>
+                        <span class="value" style="color: var(--accent-blue);">4</span>
+                    </div>
+                    <div class="summary-card">
+                        <span class="label">Total Schema Fields</span>
+                        <span class="value" style="color: var(--accent-teal);">24</span>
+                    </div>
+                    <div class="summary-card alert-card">
+                        <span class="label">Mismatches Flagged</span>
+                        <span class="value" id="mismatch-count-badge">3</span>
+                    </div>
+                </div>
+
+                <div class="mismatch-table-wrapper">
+                    <table class="mismatch-table" id="mismatch-table">
+                        <thead>
+                            <tr>
+                                <th>Collection</th>
+                                <th>Field</th>
+                                <th>Mismatch Type</th>
+                                <th>Details & Impact</th>
+                                <th>Location (Seeder vs. Runtime)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Item 1 -->
+                            <tr>
+                                <td style="font-family: var(--font-mono); font-weight: 600;">users</td>
+                                <td style="font-family: var(--font-mono); color: var(--accent-orange);">points</td>
+                                <td><span class="mismatch-badge badge-seeder-only">Seeder-Only</span></td>
+                                <td style="color: var(--text-muted);">
+                                    Field is populated with test numbers (e.g. <code>999</code>, <code>10</code>) during initialization. However, it is never read or updated anywhere in the <code>main.py</code> API endpoints. Represents dead schema bloat or a feature not yet integrated.
+                                </td>
+                                <td>
+                                    <a href="#" class="path-link" onclick="highlightErdField('users', 'users-points')">seed_firestore.py:L54,56,58,60</a>
+                                </td>
+                            </tr>
+                            <!-- Item 2 -->
+                            <tr>
+                                <td style="font-family: var(--font-mono); font-weight: 600;">users</td>
+                                <td style="font-family: var(--font-mono); color: var(--accent-orange);">created_at</td>
+                                <td><span class="mismatch-badge badge-seeder-only">Seeder-Only</span></td>
+                                <td style="color: var(--text-muted);">
+                                    Timestamps are written during seeding for user records. Not referenced or returned in <code>main.py</code>.
+                                </td>
+                                <td>
+                                    <a href="#" class="path-link" onclick="highlightErdField('users', 'users-created_at')">seed_firestore.py:L64</a>
+                                </td>
+                            </tr>
+                            <!-- Item 3 -->
+                            <tr>
+                                <td style="font-family: var(--font-mono); font-weight: 600;">vehicles</td>
+                                <td style="font-family: var(--font-mono); color: var(--accent-orange);">created_at</td>
+                                <td><span class="mismatch-badge badge-seeder-only">Seeder-Only</span></td>
+                                <td style="color: var(--text-muted);">
+                                    Vehicle documentation contains a <code>created_at</code> date field in seeder. The backend retrieves the document and reads <code>user_id</code> to resolve permissions, but ignores <code>created_at</code>.
+                                </td>
+                                <td>
+                                    <a href="#" class="path-link" onclick="highlightErdField('vehicles', 'vehicles-created_at')">seed_firestore.py:L82</a>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        PARKME IoT &middot; ARCHITECTURE DOCUMENTATION &middot; 2026
+    </footer>
+
+    <script>
+        // --- Tab Switching Logic ---
+        function switchTab(evt, tabId) {
+            const tabs = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => tab.classList.remove('active'));
+
+            const tabBtns = document.querySelectorAll('.tab-btn');
+            tabBtns.forEach(btn => btn.classList.remove('active'));
+
+            document.getElementById(tabId).classList.add('active');
+            if (evt) {
+                evt.currentTarget.classList.add('active');
+            } else {
+                // Find tab button by content ID
+                const btns = document.querySelectorAll('.tab-btn');
+                if (tabId === 'tab-erd') btns[0].classList.add('active');
+                if (tabId === 'tab-flow') btns[1].classList.add('active');
+                if (tabId === 'tab-mismatch') btns[2].classList.add('active');
+            }
+
+            if (tabId === 'tab-erd') {
+                // Redraw arrows when the layout becomes visible
+                setTimeout(drawArrows, 50);
+            }
+            if (tabId === 'tab-flow') {
+                // Auto trigger simulator default state
+                setTimeout(() => triggerFlow(activeFlowKey || 'arrival'), 50);
+            }
+        }
+
+        // --- ERD Connections Drawing ---
+        const relationships = [
+            { from: 'vehicles-user_id', to: 'coll-users', label: 'user_id → users/email', color: '#38bdf8' },
+            { from: 'parking_logs-user_id', to: 'coll-users', label: 'user_id → users/email', color: '#38bdf8' },
+            { from: 'parking_logs-spot_id', to: 'coll-parking_spots', label: 'spot_id → parking_spots/id', color: '#2dd4bf' },
+            { from: 'parking_logs-license_plate', to: 'coll-vehicles', label: 'license_plate → vehicles/license_plate', color: '#fb923c' }
+        ];
+
+        function drawArrows() {
+            const container = document.getElementById('erd-container');
+            const svg = document.getElementById('erd-svg-canvas');
+            
+            // Clear old lines
+            const lines = svg.querySelectorAll('.relationship-line');
+            lines.forEach(line => line.remove());
+
+            const containerRect = container.getBoundingClientRect();
+
+            relationships.forEach((rel, index) => {
+                const fromEl = document.getElementById(rel.from);
+                const toEl = document.getElementById(rel.to);
+
+                if (!fromEl || !toEl) return;
+
+                const fromRect = fromEl.getBoundingClientRect();
+                const toRect = toEl.getBoundingClientRect();
+
+                // Compute relative offsets
+                const x1 = (fromRect.left + fromRect.right) / 2 - containerRect.left;
+                const y1 = (fromRect.top + fromRect.bottom) / 2 - containerRect.top;
+
+                // For the destination, let's find the nearest point on its box border
+                const boxX = toRect.left - containerRect.left;
+                const boxY = toRect.top - containerRect.top;
+                const boxW = toRect.width;
+                const boxH = toRect.height;
+
+                let x2, y2;
+                
+                // Simple logic to find side connection points
+                if (x1 < boxX) {
+                    // Left side of destination
+                    x2 = boxX;
+                    y2 = boxY + boxH / 2;
+                } else if (x1 > boxX + boxW) {
+                    // Right side of destination
+                    x2 = boxX + boxW;
+                    y2 = boxY + boxH / 2;
+                } else if (y1 < boxY) {
+                    // Top side
+                    x2 = boxX + boxW / 2;
+                    y2 = boxY;
+                } else {
+                    // Bottom side
+                    x2 = boxX + boxW / 2;
+                    y2 = boxY + boxH;
+                }
+
+                // Create nice curved path
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                
+                // Calculate control points for cubic Bezier curve
+                const dx = Math.abs(x2 - x1);
+                const dy = Math.abs(y2 - y1);
+                
+                let ctrlX1 = x1;
+                let ctrlY1 = y1;
+                let ctrlX2 = x2;
+                let ctrlY2 = y2;
+
+                if (dx > dy) {
+                    ctrlX1 = x1 + (x2 - x1) / 2;
+                    ctrlX2 = x2 - (x2 - x1) / 2;
+                } else {
+                    ctrlY1 = y1 + (y2 - y1) / 2;
+                    ctrlY2 = y2 - (y2 - y1) / 2;
+                }
+
+                const pathData = `M ${x1} ${y1} C ${ctrlX1} ${ctrlY1}, ${ctrlX2} ${ctrlY2}, ${x2} ${y2}`;
+                
+                path.setAttribute('d', pathData);
+                path.setAttribute('class', 'relationship-line inactive');
+                path.setAttribute('id', `rel-line-${index}`);
+                path.setAttribute('style', `--glow-color: ${rel.color};`);
+                path.setAttribute('stroke', 'rgba(255,255,255,0.08)');
+                path.setAttribute('marker-end', 'url(#arrow)');
+                
+                // Add event listeners on the row to highlight the arrow
+                fromEl.addEventListener('mouseenter', () => highlightRel(index, rel.color));
+                fromEl.addEventListener('mouseleave', () => unhighlightRel(index));
+
+                svg.appendChild(path);
+            });
+        }
+
+        function highlightRel(index, color) {
+            const line = document.getElementById(`rel-line-${index}`);
+            if (line) {
+                line.setAttribute('class', 'relationship-line active');
+                line.setAttribute('stroke', color);
+                line.setAttribute('marker-end', 'url(#arrow-active)');
+            }
+            
+            // Highlight the associated box
+            const rel = relationships[index];
+            const targetBox = document.getElementById(rel.to);
+            if (targetBox) {
+                targetBox.classList.add('highlight');
+            }
+        }
+
+        function unhighlightRel(index) {
+            const line = document.getElementById(`rel-line-${index}`);
+            if (line) {
+                line.setAttribute('class', 'relationship-line inactive');
+                line.setAttribute('stroke', 'rgba(255,255,255,0.08)');
+                line.setAttribute('marker-end', 'url(#arrow)');
+            }
+            
+            const rel = relationships[index];
+            const targetBox = document.getElementById(rel.to);
+            if (targetBox) {
+                targetBox.classList.remove('highlight');
+            }
+        }
+
+        function highlightErdField(boxId, fieldId) {
+            switchTab(null, 'tab-erd');
+            
+            // Scroll to container
+            document.getElementById('erd-container').scrollIntoView({ behavior: 'smooth' });
+            
+            const box = document.getElementById(`coll-${boxId}`);
+            const field = document.getElementById(fieldId);
+            
+            if (box && field) {
+                box.classList.add('highlight');
+                field.style.backgroundColor = 'rgba(251, 146, 60, 0.15)';
+                
+                setTimeout(() => {
+                    box.classList.remove('highlight');
+                    field.style.backgroundColor = '';
+                }, 2500);
+            }
+        }
+
+        // --- Hardware Flow Simulator ---
+        let activeFlowKey = 'arrival';
+        let subFlowIndex = 0;
+        let animationTimer = null;
+
+        const flows = {
+            arrival: {
+                title: "Vehicle Arrival flow sequence",
+                desc: "Complete dual-module handshake: <br><strong>Step 1 (ESP32 Entry Sensor):</strong> Detects metal barrier occupancy state change. Fires a heartbeat update of <code>is_occupied: true</code> to FastAPI. FastAPI creates a temporary ghost log with license plate as <code>UNIDENTIFIED</code>.<br><strong>Step 2 (ESP32-CAM Camera):</strong> Fires the license plate photo to <code>/api/v1/sensors/park</code>. FastAPI performs OCR with Google Vision API, retrieves the vehicle's owner, checks permissions, overwrites the unidentified ghost log with the resolved license plate, and returns a greeting.",
+                method: "POST / MULTIPART",
+                badgeClass: "badge-post",
+                steps: [
+                    { pathId: 'path-esp32-server', color: 'var(--accent-blue)', node: 'node-esp32' },
+                    { pathId: 'path-cam-server', color: 'var(--accent-teal)', node: 'node-cam' },
+                    { pathId: 'path-server-dashboard', color: 'var(--accent-purple)', node: 'node-server' }
+                ],
+                payloads: [
+                    // Step 1 Payload
+                    `// 1. ESP32 Entry Sensor Heartbeat (Triggers UNIDENTIFIED parking log)
+// POST https://parkme-api/api/v1/sensors/heartbeat
+// Headers: X-Signature, X-Timestamp
+
+{
+  "mac_address": "AA:BB:CC:DD:EE:01",
+  "is_occupied": true,
+  "battery_level": 95.5
+}
+
+// Server creates:
+// parking_logs/{log_id} -> {
+//   "spot_id": "A1",
+//   "license_plate": "UNIDENTIFIED",
+//   "is_violation": true,
+//   "exit_time": null
+// }`,
+                    // Step 2 Payload
+                    `// 2. ESP32-CAM License Plate Snapshot Upload
+// POST https://parkme-api/api/v1/sensors/park
+// Headers: Content-Type: multipart/form-data
+
+// Multipart Form Fields:
+"spot_id": "A1",
+"file": [Raw Binary JPEG Bytes]
+
+// Server Processes Vision API OCR -> License Plate: "1234567"
+// Server matches plate -> user_id: "student@technion.ac.il", role: "student"
+// Resolves spot permissions: Spot A1 category is "student" (MATCH!)
+// Server updates the UNIDENTIFIED parking log to:
+// parking_logs/{log_id} -> {
+//   "license_plate": "1234567",
+//   "user_id": "student@technion.ac.il",
+//   "snapshot_role": "student",
+//   "is_violation": false
+// }
+
+// HTTP Response back to ESP32-CAM:
+{
+  "status": "park_recorded",
+  "plate": "1234567",
+  "is_violation": false,
+  "action": "WELCOME",
+  "message": "welcome John Doe"
+}`,
+                    // Step 3 Payload
+                    `// 3. Server-Sent Events (SSE) Real-time Update Broadcast
+// Outbound SSE Channel: /api/v1/stream?token=...
+// Sent to connected dashboard clients:
+
+event: spot_update
+data: {
+  "type": "spot_update",
+  "spot": {
+    "id": "A1",
+    "category": "student",
+    "is_occupied": true,
+    "license_plate": "1234567",
+    "is_violation": false,
+    "battery_level": 95.5,
+    "last_seen": "2026-06-17T14:25:37+03:00"
+  }
+}`
+                ]
+            },
+            heartbeat: {
+                title: "Periodic Telemetry Heartbeat",
+                desc: "Every 15-30 seconds, the low-power ESP32 node wakes up to send an updated battery level and verify physical occupancy state. FastAPI updates the <code>last_seen</code> and <code>battery_level</code> properties inside the <code>parking_spots</code> collection directly, then broadcasts the state to dashboard clients.",
+                method: "POST",
+                badgeClass: "badge-post",
+                steps: [
+                    { pathId: 'path-esp32-server', color: 'var(--accent-blue)', node: 'node-esp32' },
+                    { pathId: 'path-server-dashboard', color: 'var(--accent-purple)', node: 'node-server' }
+                ],
+                payloads: [
+                    `// ESP32 Telemetry Status Update
+// POST https://parkme-api/api/v1/sensors/heartbeat
+// Headers: X-Signature, X-Timestamp
+
+{
+  "mac_address": "AA:BB:CC:DD:EE:02",
+  "is_occupied": false,
+  "battery_level": 88.0
+}
+
+// Server updates parking_spots/A2 inside Firestore.
+// HTTP Response:
+{
+  "status": "heartbeat_processed",
+  "timestamp": "2026-06-17T14:25:37+03:00"
+}`,
+                    `// SSE Broadcast to Dashboard Clients:
+event: spot_update
+data: {
+  "type": "spot_update",
+  "spot": {
+    "id": "A2",
+    "category": "lecturer",
+    "is_occupied": false,
+    "license_plate": null,
+    "is_violation": false,
+    "battery_level": 88.0,
+    "last_seen": "2026-06-17T14:25:37+03:00"
+  }
+}`
+                ]
+            },
+            departure: {
+                title: "Vehicle Departure Sequence",
+                desc: "<strong>Step 1:</strong> The ESP32 sensor detects a vacancy state. It sends a heartbeat with <code>is_occupied: false</code>.<br><strong>Step 2:</strong> FastAPI retrieves the active log (with <code>exit_time: None</code>) for this spot, computes the total parking duration, sets <code>exit_time</code> to the current server time, and updates the database.<br><strong>Step 3:</strong> The backend sends an SSE broadcast notifying all clients that the spot is now vacant.",
+                method: "POST",
+                badgeClass: "badge-post",
+                steps: [
+                    { pathId: 'path-esp32-server', color: 'var(--accent-orange)', node: 'node-esp32' },
+                    { pathId: 'path-server-dashboard', color: 'var(--accent-purple)', node: 'node-server' }
+                ],
+                payloads: [
+                    `// ESP32 Heartbeat with occupancy cleared
+// POST https://parkme-api/api/v1/sensors/heartbeat
+
+{
+  "mac_address": "AA:BB:CC:DD:EE:01",
+  "is_occupied": false,
+  "battery_level": 95.0
+}
+
+// Server updates the database:
+// 1. parking_spots/A1 -> { "is_occupied": false, "last_seen": now }
+// 2. Finds active parking_log document.
+// 3. Updates parking_log -> { "exit_time": now }
+// Note: If duration < 60 seconds, license_plate is overwritten with "ABORTED" 
+// and is_violation is cleared.
+
+// HTTP Response:
+{
+  "status": "heartbeat_processed",
+  "timestamp": "2026-06-17T14:26:40+03:00"
+}`,
+                    `// SSE Broadcast to Dashboard Clients:
+event: spot_update
+data: {
+  "type": "spot_update",
+  "spot": {
+    "id": "A1",
+    "category": "student",
+    "is_occupied": false,
+    "license_plate": null,
+    "is_violation": false,
+    "battery_level": 95.0,
+    "last_seen": "2026-06-17T14:26:40+03:00"
+  }
+}`
+                ]
+            }
+        };
+
+        function triggerFlow(flowKey) {
+            activeFlowKey = flowKey;
+            subFlowIndex = 0;
+            
+            // Highlight Buttons
+            document.querySelectorAll('.btn-sim').forEach(btn => btn.classList.remove('active'));
+            if(flowKey === 'arrival') document.querySelector('.btn-sim-arrival').classList.add('active');
+            if(flowKey === 'heartbeat') document.querySelector('.btn-sim-heartbeat').classList.add('active');
+            if(flowKey === 'departure') document.querySelector('.btn-sim-departure').classList.add('active');
+
+            startAnimationLoop();
+        }
+
+        function startAnimationLoop() {
+            if (animationTimer) clearInterval(animationTimer);
+            
+            const flow = flows[activeFlowKey];
+            
+            function animateStep() {
+                const step = flow.steps[subFlowIndex];
+                const payload = flow.payloads[subFlowIndex];
+                
+                // Highlight Nodes in UI
+                document.querySelectorAll('.net-node').forEach(node => node.classList.remove('active'));
+                const activeNode = document.getElementById(step.node);
+                if (activeNode) activeNode.classList.add('active');
+
+                // Set up path for packet
+                const pathEl = document.getElementById(step.pathId);
+                const packet = document.getElementById('net-packet');
+                const motion = document.getElementById('packet-motion');
+                
+                // Set link line active state
+                document.querySelectorAll('.net-link-path').forEach(p => {
+                    p.classList.remove('active-route');
+                    p.style.setProperty('--active-color', 'rgba(255, 255, 255, 0.05)');
+                });
+                
+                pathEl.classList.add('active-route');
+                pathEl.style.setProperty('--active-color', step.color);
+                
+                // Trigger packet motion
+                packet.classList.remove('animating');
+                packet.setAttribute('stroke', step.color);
+                
+                // Force layout reflow
+                void packet.offsetWidth;
+                
+                // Set motion path reference
+                motion.setAttribute('path', pathEl.getAttribute('d'));
+                packet.classList.add('animating');
+
+                // Update console contents
+                let consoleTitleStr = "";
+                if (activeFlowKey === 'arrival') {
+                    if (subFlowIndex === 0) consoleTitleStr = "Step 1: ESP32 Entry Sensor Heartbeat";
+                    else if (subFlowIndex === 1) consoleTitleStr = "Step 2: ESP32-CAM OCR Snapshot";
+                    else consoleTitleStr = "Step 3: Web Dashboard SSE Broadcast";
+                } else if (activeFlowKey === 'heartbeat') {
+                    if (subFlowIndex === 0) consoleTitleStr = "Step 1: Periodic Heartbeat Telemetry";
+                    else consoleTitleStr = "Step 2: Web Dashboard SSE Broadcast";
+                } else {
+                    if (subFlowIndex === 0) consoleTitleStr = "Step 1: Vacancy Detection Heartbeat";
+                    else consoleTitleStr = "Step 2: Web Dashboard SSE Broadcast";
+                }
+                
+                document.getElementById('console-title').textContent = consoleTitleStr;
+                document.getElementById('console-desc').innerHTML = `<strong>Context:</strong> ${flow.desc.split('<br>')[subFlowIndex] || flow.desc}`;
+                
+                // Determine HTTP Method badge
+                let methodLabel = "POST";
+                if (activeFlowKey === 'arrival' && subFlowIndex === 1) methodLabel = "POST (Multipart)";
+                else if (subFlowIndex === flow.steps.length - 1) methodLabel = "SSE EVENT";
+                
+                const badge = document.getElementById('console-badge');
+                badge.textContent = methodLabel;
+                if (methodLabel.includes("POST")) {
+                    badge.className = "http-badge badge-post";
+                } else {
+                    badge.className = "http-badge badge-get";
+                }
+
+                document.getElementById('console-code').textContent = payload;
+
+                // Move to next subflow step
+                subFlowIndex = (subFlowIndex + 1) % flow.steps.length;
+            }
+
+            // Fire initial step instantly
+            animateStep();
+            // Loop step changes
+            animationTimer = setInterval(animateStep, 3500);
+        }
+
+        // --- Init on load ---
+        window.addEventListener('load', () => {
+            setTimeout(drawArrows, 200);
+            window.addEventListener('resize', drawArrows);
+        });
+    </script>
+</body>
+</html>

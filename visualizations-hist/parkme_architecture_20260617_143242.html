@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ParkMe Architecture & Workflow</title>
+<style>
+/* CSS Reset and base styles */
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #1e1e1e; color: #d4d4d4; margin: 0; padding: 20px; }
+h1, h2, h3 { color: #ffffff; }
+.tabs { display: flex; gap: 10px; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
+.tab { padding: 10px 20px; background: #2d2d2d; border: 1px solid #444; border-radius: 4px; cursor: pointer; color: #ccc; }
+.tab.active { background: #007acc; color: white; border-color: #007acc; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Data Model Tab */
+.datamodel-container { display: flex; flex-wrap: wrap; gap: 40px; position: relative; padding: 20px; }
+.collection { background: #252526; border: 1px solid #444; border-radius: 8px; width: 300px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 2; position: relative; }
+.collection-header { background: #333333; padding: 10px; font-weight: bold; border-top-left-radius: 8px; border-top-right-radius: 8px; text-align: center; color: #4ec9b0; }
+.fields { padding: 10px; }
+.field { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #333; font-size: 14px; position: relative; }
+.field:last-child { border-bottom: none; }
+.field-name { color: #9cdcfe; }
+.field-type { color: #ce9178; font-size: 12px; }
+.state-seeder { border-bottom: 1px dashed #d7ba7d; }
+.state-seeder .field-name::after { content: ' (seeded but unused)'; color: #d7ba7d; font-size: 10px; margin-left: 5px; }
+.state-runtime { border-bottom: 1px dashed #c586c0; }
+.state-runtime .field-name::after { content: ' (used but not seeded)'; color: #c586c0; font-size: 10px; margin-left: 5px; }
+.legend { background: #252526; padding: 15px; border: 1px solid #444; border-radius: 8px; margin-bottom: 20px; display: inline-block; }
+
+/* Arrows SVG */
+#svg-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+path { fill: none; stroke: #666; stroke-width: 2; }
+path.arrow-line { stroke: #569cd6; stroke-dasharray: 5, 5; }
+
+/* Hardware Flow Tab */
+.network-container { display: flex; justify-content: space-around; align-items: center; padding: 50px 20px; background: #252526; border-radius: 8px; border: 1px solid #444; position: relative; min-height: 300px;}
+.node { background: #333; padding: 20px; border-radius: 50%; width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; text-align: center; border: 2px solid #007acc; font-weight: bold; position: relative; z-index: 2; }
+.controls { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+.btn { padding: 8px 16px; background: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer; }
+.btn:hover { background: #005999; }
+.btn.edge { background: #b05c36; }
+.btn.edge:hover { background: #8a4526; }
+.anim-packet { width: 15px; height: 15px; background: #ffcc00; border-radius: 50%; position: absolute; display: none; z-index: 3; transition: all 1s ease-in-out; }
+.payload-display { margin-top: 20px; background: #1e1e1e; padding: 15px; border: 1px solid #444; border-radius: 8px; font-family: monospace; white-space: pre-wrap; min-height: 80px; }
+
+/* Tables/Lists */
+table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+th, td { padding: 10px; border: 1px solid #444; text-align: left; }
+th { background: #333; }
+.status-confirmed { color: #4ec9b0; }
+.status-mismatch { color: #f48771; }
+</style>
+</head>
+<body>
+
+<h1>ParkMe Architecture & Workflow</h1>
+<p style="color: #888;">Generated: 20260617_143242 | Note: Data model inferred directly from Python runtime and seeder.</p>
+
+<div class="tabs">
+    <div class="tab active" onclick="showTab('tab-data')">1. Data Model</div>
+    <div class="tab" onclick="showTab('tab-flow')">2. Hardware Flow</div>
+    <div class="tab" onclick="showTab('tab-edge')">3. Edge Case Reference</div>
+    <div class="tab" onclick="showTab('tab-mismatch')">4. Mismatch Report</div>
+</div>
+
+<div id="tab-data" class="tab-content active">
+    <div class="legend">
+        <strong>Legend:</strong><br>
+        <span style="color: #9cdcfe;">Normal Field</span> - Confirmed in both seeder & runtime<br>
+        <span style="color: #d7ba7d; border-bottom: 1px dashed #d7ba7d;">Seeder-only Field</span> - Seeded but never read in main.py<br>
+        <span style="color: #c586c0; border-bottom: 1px dashed #c586c0;">Runtime-only Field</span> - Used but not seeded<br>
+        <span style="color: #569cd6;">- - -></span> Cross-collection reference
+    </div>
+
+    <div class="datamodel-container" id="datamodel-container">
+        <svg id="svg-layer">
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#569cd6" />
+                </marker>
+            </defs>
+            <path id="line-vehicles-users" class="arrow-line" marker-end="url(#arrowhead)" />
+            <path id="line-logs-spots" class="arrow-line" marker-end="url(#arrowhead)" />
+            <path id="line-logs-vehicles" class="arrow-line" marker-end="url(#arrowhead)" />
+            <path id="line-logs-users" class="arrow-line" marker-end="url(#arrowhead)" />
+        </svg>
+
+        <div class="collection" id="col-parking_spots">
+            <div class="collection-header">parking_spots</div>
+            <div class="fields">
+                <div class="field" id="f-spot-id"><span class="field-name">id</span><span class="field-type">string (Doc ID)</span></div>
+                <div class="field"><span class="field-name">mac_address</span><span class="field-type">string</span></div>
+                <div class="field"><span class="field-name">category</span><span class="field-type">string</span></div>
+                <div class="field"><span class="field-name">is_occupied</span><span class="field-type">bool</span></div>
+                <div class="field"><span class="field-name">battery_level</span><span class="field-type">float</span></div>
+                <div class="field"><span class="field-name">last_seen</span><span class="field-type">timestamp</span></div>
+            </div>
+        </div>
+
+        <div class="collection" id="col-users">
+            <div class="collection-header">users</div>
+            <div class="fields">
+                <div class="field" id="f-user-email"><span class="field-name">email</span><span class="field-type">string (Doc ID)</span></div>
+                <div class="field"><span class="field-name">name</span><span class="field-type">string</span></div>
+                <div class="field"><span class="field-name">role</span><span class="field-type">string</span></div>
+                <div class="field state-seeder"><span class="field-name">points</span><span class="field-type">int</span></div>
+                <div class="field state-seeder"><span class="field-name">created_at</span><span class="field-type">timestamp</span></div>
+            </div>
+        </div>
+
+        <div class="collection" id="col-vehicles">
+            <div class="collection-header">vehicles</div>
+            <div class="fields">
+                <div class="field" id="f-veh-plate"><span class="field-name">license_plate</span><span class="field-type">string (Doc ID)</span></div>
+                <div class="field" id="f-veh-user"><span class="field-name">user_id</span><span class="field-type">string (Ref -> users.email)</span></div>
+                <div class="field state-seeder"><span class="field-name">created_at</span><span class="field-type">timestamp</span></div>
+            </div>
+        </div>
+
+        <div class="collection" id="col-parking_logs">
+            <div class="collection-header">parking_logs</div>
+            <div class="fields">
+                <div class="field"><span class="field-name">id</span><span class="field-type">auto-id</span></div>
+                <div class="field" id="f-log-spot"><span class="field-name">spot_id</span><span class="field-type">string (Ref -> spots.id)</span></div>
+                <div class="field" id="f-log-plate"><span class="field-name">license_plate</span><span class="field-type">string (Ref -> vehicles.plate)</span></div>
+                <div class="field" id="f-log-user"><span class="field-name">user_id</span><span class="field-type">string (Ref -> users.email)</span></div>
+                <div class="field"><span class="field-name">snapshot_role</span><span class="field-type">string</span></div>
+                <div class="field"><span class="field-name">entry_time</span><span class="field-type">timestamp</span></div>
+                <div class="field"><span class="field-name">exit_time</span><span class="field-type">timestamp</span></div>
+                <div class="field"><span class="field-name">is_violation</span><span class="field-type">bool</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="tab-flow" class="tab-content">
+    <div class="network-container">
+        <div class="anim-packet" id="packet"></div>
+        <div class="node" id="node-sensor">ESP32<br>(Sensor)</div>
+        <div class="node" id="node-server" style="background:#005999">FastAPI<br>Server</div>
+        <div class="node" id="node-camera">ESP32-CAM<br>(Camera)</div>
+    </div>
+    
+    <div class="controls">
+        <div style="width: 100%;"><strong style="color: #4ec9b0;">Normal Flows:</strong></div>
+        <button class="btn" onclick="animateFlow('arrival')">Arrival (Camera)</button>
+        <button class="btn" onclick="animateFlow('heartbeat')">Heartbeat (Sensor)</button>
+        <button class="btn" onclick="animateFlow('departure')">Departure (Sensor)</button>
+
+        <div style="width: 100%; margin-top: 10px;"><strong style="color: #f48771;">Edge Cases:</strong></div>
+        <button class="btn edge" onclick="animateFlow('edge-bounce')">Bouncing Driver</button>
+        <button class="btn edge" onclick="animateFlow('edge-ghost')">Ghost Car (Race Cond)</button>
+        <button class="btn edge" onclick="animateFlow('edge-camfail')">Camera Failure</button>
+        <button class="btn edge" onclick="animateFlow('edge-dup')">Double Trigger (LPR)</button>
+        <button class="btn edge" onclick="animateFlow('edge-netloss')">Sensor Net Loss</button>
+    </div>
+
+    <div class="payload-display" id="payload-display">Click a button to view the payload and animation...</div>
+</div>
+
+<div id="tab-edge" class="tab-content">
+    <table>
+        <tr>
+            <th>Edge Case</th>
+            <th>Trigger Condition</th>
+            <th>Nodes Involved</th>
+            <th>Expected Behavior</th>
+            <th>Normal Flow Rel.</th>
+            <th>Code Status</th>
+        </tr>
+        <tr>
+            <td>Bouncing Driver</td>
+            <td>Enter & leave < 60s</td>
+            <td>Sensor &rarr; Server</td>
+            <td>Backend intercepts departure, marks "ABORTED", is_violation=False.</td>
+            <td>Departure</td>
+            <td class="status-confirmed">Confirmed in code</td>
+        </tr>
+        <tr>
+            <td>Ghost Cars / Race Condition</td>
+            <td>Sensor heartbeat arrives before Camera JPEG</td>
+            <td>Sensor, Camera, Server</td>
+            <td>Backend creates "UNIDENTIFIED" log, then later overwrites it when camera payload arrives.</td>
+            <td>Arrival</td>
+            <td class="status-confirmed">Confirmed in code</td>
+        </tr>
+        <tr>
+            <td>Camera Failure (45s Freeze)</td>
+            <td>Sensor triggers but Camera drops WiFi</td>
+            <td>Sensor, Camera, Server, UI</td>
+            <td>Camera retries 3x. UI freezes for 45s. Admin manually resolves it to clear violation.</td>
+            <td>Arrival</td>
+            <td class="status-confirmed">Confirmed in code</td>
+        </tr>
+        <tr>
+            <td>Double Triggers (Deduplication)</td>
+            <td>Camera sends same plate multiple times rapidly</td>
+            <td>Camera &rarr; Server</td>
+            <td>Backend caches plate for 5s. Returns "RETRY" (duplicate_within_5s) and drops DB write.</td>
+            <td>Arrival</td>
+            <td class="status-confirmed">Confirmed in code</td>
+        </tr>
+        <tr>
+            <td>Sensor Net Loss (NVS)</td>
+            <td>Sensor drops WiFi on leave, saves to NVS</td>
+            <td>Sensor &rarr; Server</td>
+            <td>Reconnect flushes via Bulk API ensuring no loss.</td>
+            <td>Departure</td>
+            <td class="status-mismatch">Implemented but Undocumented / Dropped (Backend discards data)</td>
+        </tr>
+    </table>
+</div>
+
+<div id="tab-mismatch" class="tab-content">
+    <h3>Data Model Mismatches</h3>
+    <ul>
+        <li><strong style="color: #f48771;">users.points:</strong> Field is written by the seeder, but is never read or used in <code>main.py</code>.</li>
+        <li><strong style="color: #f48771;">users.created_at:</strong> Field is written by the seeder, but is never read or used in <code>main.py</code>.</li>
+        <li><strong style="color: #f48771;">vehicles.created_at:</strong> Field is written by the seeder, but is never read or used in <code>main.py</code>.</li>
+    </ul>
+
+    <h3>Edge Case Mismatches</h3>
+    <ul>
+        <li><strong style="color: #f48771;">Sensor Node Network Loss:</strong> The documentation states the sensor flushes pending telemetry to the backend, "ensuring no events are permanently lost". However, the actual endpoint in <code>main.py</code> (<code>POST /api/v1/telemetry/bulk</code>) simply accepts the payload and logs it, silently discarding all events without writing to Firestore.</li>
+    </ul>
+</div>
+
+<script>
+    function showTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        if(tabId === 'tab-data') setTimeout(drawLines, 50);
+    }
+
+    function drawLine(startEl, endEl, lineId) {
+        if (!startEl || !endEl) return;
+        const svg = document.getElementById('svg-layer');
+        const container = document.getElementById('datamodel-container');
+        const cRect = container.getBoundingClientRect();
+        const sRect = startEl.getBoundingClientRect();
+        const eRect = endEl.getBoundingClientRect();
+
+        const x1 = sRect.right - cRect.left;
+        const y1 = sRect.top + sRect.height/2 - cRect.top;
+        const x2 = eRect.left - cRect.left;
+        const y2 = eRect.top + eRect.height/2 - cRect.top;
+
+        const d = \`M \${x1} \${y1} C \${x1 + 50} \${y1}, \${x2 - 50} \${y2}, \${x2} \${y2}\`;
+        document.getElementById(lineId).setAttribute('d', d);
+    }
+
+    function drawLines() {
+        drawLine(document.getElementById('f-veh-user'), document.getElementById('f-user-email'), 'line-vehicles-users');
+        drawLine(document.getElementById('f-log-spot'), document.getElementById('f-spot-id'), 'line-logs-spots');
+        drawLine(document.getElementById('f-log-plate'), document.getElementById('f-veh-plate'), 'line-logs-vehicles');
+        drawLine(document.getElementById('f-log-user'), document.getElementById('f-user-email'), 'line-logs-users');
+    }
+
+    window.addEventListener('resize', drawLines);
+    setTimeout(drawLines, 500);
+
+    const packet = document.getElementById('packet');
+    const display = document.getElementById('payload-display');
+
+    const flows = {
+        'arrival': {
+            seq: [ {from: 'node-camera', to: 'node-server', time: 1000}, {from: 'node-server', to: 'node-camera', time: 1000} ],
+            msg: \`POST /api/v1/sensors/park (multipart/form-data)
+spot_id: "A1"
+file: [JPEG bytes]
+
+<-- Response
+{
+  "status": "park_recorded",
+  "plate": "1234567",
+  "is_violation": false,
+  "action": "WELCOME",
+  "message": "welcome John Doe"
+}\`
+        },
+        'heartbeat': {
+            seq: [ {from: 'node-sensor', to: 'node-server', time: 1000} ],
+            msg: \`POST /api/v1/sensors/heartbeat (JSON)
+{
+  "mac_address": "AA:BB:CC:DD:EE:01",
+  "is_occupied": true,
+  "battery_level": 95.5
+}
+
+<-- Response
+{
+  "status": "heartbeat_processed",
+  "timestamp": "2026-06-17T12:00:00+00:00"
+}\`
+        },
+        'departure': {
+            seq: [ {from: 'node-sensor', to: 'node-server', time: 1000} ],
+            msg: \`POST /api/v1/sensors/heartbeat (JSON)
+{
+  "mac_address": "AA:BB:CC:DD:EE:01",
+  "is_occupied": false,
+  "battery_level": 95.5
+}\`
+        },
+        'edge-bounce': {
+            seq: [ {from: 'node-sensor', to: 'node-server', time: 1000, label: "Occupied"}, {from: 'node-sensor', to: 'node-server', time: 1000, delay: 1000, label: "Free (<60s)"} ],
+            msg: \`Bouncing Driver (< 60s stay)
+1. Sensor sends OCCUPIED
+2. Sensor sends FREE (duration < 60s)
+Server intercepts, marks parking log 'is_violation: false', 'license_plate: ABORTED'.\`
+        },
+        'edge-ghost': {
+            seq: [ {from: 'node-sensor', to: 'node-server', time: 1000, label: "Heartbeat first"}, {from: 'node-camera', to: 'node-server', time: 1000, delay: 1500, label: "JPEG later"} ],
+            msg: \`Ghost Car / Race Condition
+1. Sensor Heartbeat arrives instantly: Server creates UNIDENTIFIED ghost log.
+2. Camera JPEG arrives 2s later: Server finds active UNIDENTIFIED log and overwrites it with actual plate.\`
+        },
+        'edge-camfail': {
+            seq: [ {from: 'node-sensor', to: 'node-server', time: 1000}, {from: 'node-camera', to: 'node-server', time: 2000, fail: true, delay: 1000} ],
+            msg: \`Camera Failure
+1. Sensor Heartbeat creates UNIDENTIFIED log.
+2. Camera fails to send (drops WiFi).
+3. 45s UI freeze elapses. Admin sends:
+PUT /api/v1/sensors/resolve
+{ "spot_id": "A1" }
+Server marks log as RESOLVED.\`
+        },
+        'edge-dup': {
+            seq: [ {from: 'node-camera', to: 'node-server', time: 500}, {from: 'node-camera', to: 'node-server', time: 500, delay: 1000} ],
+            msg: \`Double Trigger
+Camera sends POST /api/v1/sensors/park twice < 5s.
+Server checks LPR_DEDUP_CACHE.
+<-- Response for 2nd request:
+{
+  "status": "dropped",
+  "reason": "duplicate_within_5s",
+  "action": "RETRY",
+  "message": "Processing..."
+}\`
+        },
+        'edge-netloss': {
+            seq: [ {from: 'node-sensor', to: 'node-server', time: 1000} ],
+            msg: \`Sensor Node Network Loss
+Reconnect triggers:
+POST /api/v1/telemetry/bulk
+{
+  "mac_address": "...",
+  "data": [ { "t": 1600000000, "v": true }, ... ]
+}
+<-- Response:
+{"status": "bulk_processed", "events": 1}
+*(Warning: Server drops this data instead of writing to DB!)*\`
+        }
+    };
+
+    let animTimeout;
+
+    function getCenter(el) {
+        const rect = el.getBoundingClientRect();
+        const container = document.querySelector('.network-container').getBoundingClientRect();
+        return {
+            x: rect.left - container.left + rect.width / 2,
+            y: rect.top - container.top + rect.height / 2
+        };
+    }
+
+    function movePacket(fromId, toId, duration, isFail = false) {
+        return new Promise(resolve => {
+            const start = getCenter(document.getElementById(fromId));
+            const end = getCenter(document.getElementById(toId));
+            
+            packet.style.transition = 'none';
+            packet.style.left = (start.x - 7.5) + 'px';
+            packet.style.top = (start.y - 7.5) + 'px';
+            packet.style.display = 'block';
+            packet.style.backgroundColor = isFail ? '#f48771' : '#ffcc00';
+            
+            packet.offsetWidth;
+
+            packet.style.transition = \`all \${duration}ms linear\`;
+            
+            if (isFail) {
+                packet.style.left = (start.x + (end.x - start.x)/2 - 7.5) + 'px';
+                packet.style.top = (start.y + (end.y - start.y)/2 - 7.5) + 'px';
+                packet.style.opacity = '0';
+            } else {
+                packet.style.left = (end.x - 7.5) + 'px';
+                packet.style.top = (end.y - 7.5) + 'px';
+                packet.style.opacity = '1';
+            }
+
+            animTimeout = setTimeout(() => {
+                packet.style.display = 'none';
+                resolve();
+            }, duration);
+        });
+    }
+
+    async function animateFlow(flowKey) {
+        clearTimeout(animTimeout);
+        packet.style.display = 'none';
+        
+        const flow = flows[flowKey];
+        display.innerText = flow.msg;
+        
+        for(let step of flow.seq) {
+            if (step.delay) {
+                await new Promise(r => setTimeout(r, step.delay));
+            }
+            await movePacket(step.from, step.to, step.time, step.fail);
+        }
+    }
+</script>
+</body>
+</html>
