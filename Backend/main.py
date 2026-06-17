@@ -544,8 +544,7 @@ async def get_recent_logs(current_user: dict = Depends(get_current_user), db = D
             msg_type = "violation"
             msg = f"Unauthorized access at Spot {spot_id} (Plate: {license_plate})"
         else:
-            msg_type = "info"
-            msg = f"Valid parking at Spot {spot_id} (Plate: {license_plate})"
+            continue
             
         result.append({
             "timestamp": entry_time.isoformat() if hasattr(entry_time, 'isoformat') else str(entry_time) if entry_time else None,

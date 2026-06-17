@@ -85,7 +85,7 @@ The physical world is chaotic. Here is exactly how the current backend and front
 
 The web dashboard provides administrators with a real-time historical ledger of the 50 most recent events across all parking spots, fetched via `GET /api/v1/logs`. This endpoint queries the `parking_logs` Firestore collection natively ordered by `entry_time DESCENDING`.
 
-A log is added to the database anytime the system detects physical occupancy (via the Sensor Node) or processes a license plate (via the Camera Node). Based on the backend's evaluation of the event, the log is classified into one of five UI messages:
+A log is added to the database anytime the system detects physical occupancy (via the Sensor Node) or processes a license plate (via the Camera Node). Based on the backend's evaluation of the event, the log is classified into one of four UI messages:
 
 1. 🔴 **`Unauthorized access at Spot {X} (Plate: {Y})`**
    * **Trigger:** The camera successfully read the plate, but the user's role does not match the spot's category (or the vehicle is unregistered).
@@ -103,9 +103,6 @@ A log is added to the database anytime the system detects physical occupancy (vi
    * **Trigger:** The "Bouncing Driver" scenario. A driver occupied the spot but left within 60 seconds. The backend sets `is_violation: False` and updates the plate to `"ABORTED"`.
    * **UI Styling:** Default info text.
 
-5. ⚪ **`Valid parking at Spot {X} (Plate: {Y})`**
-   * **Trigger:** Standard, authorized parking. The camera read the plate and the user's role matched the spot's category.
-   * **UI Styling:** Default info text.
 
 ---
 

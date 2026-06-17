@@ -231,7 +231,7 @@ function createSpotCard(spot) {
 
     if (window.currentUserProfile && window.currentUserProfile.role === 'admin') {
         let batt = spot.battery_level !== undefined && spot.battery_level !== null ? `${spot.battery_level}%` : 'N/A';
-        let seen = spot.last_seen ? new Date(spot.last_seen).toLocaleTimeString() : 'N/A';
+        let seen = spot.last_seen ? new Date(spot.last_seen).toLocaleTimeString('en-US', { timeZone: 'Asia/Jerusalem' }) : 'N/A';
         html += `
             <div style="font-size: 0.8rem; color: #888; margin-top: 10px; border-top: 1px solid #333; padding-top: 5px;">
                 <div>🔋 Battery: ${batt}</div>
@@ -300,7 +300,7 @@ function appendLog(log) {
     const li = document.createElement('li');
     li.className = 'log-item';
     
-    const time = new Date(log.timestamp).toLocaleTimeString();
+    const time = new Date(log.timestamp).toLocaleTimeString('en-US', { timeZone: 'Asia/Jerusalem' });
     let msgClass = '';
     
     if (log.type === 'violation') msgClass = 'violation';
