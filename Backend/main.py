@@ -133,12 +133,17 @@ def extract_license_plate(image_bytes: bytes) -> str:
         if texts:
             # texts[0] contains the entire text found
             full_text = texts[0].description
+            logger.info(f"[DEBUG] Vision API detected raw text:\n{full_text}")
+            
             # Extract only digits as the plate number
             plate = "".join(e for e in full_text if e.isdigit())
+            logger.info(f"[DEBUG] Extracted digits (plate): '{plate}'")
             return plate
+        else:
+            logger.warning("[DEBUG] Vision API returned a successful response, but found NO text in the image.")
             
     except Exception as e:
-        logger.error(f"Failed to extract license plate with Vision API: {str(e)}")
+        logger.error(f"[DEBUG] Failed to extract license plate with Vision API (Likely a credentials/network issue): {str(e)}")
         
     return ""
 

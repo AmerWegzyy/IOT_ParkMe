@@ -110,6 +110,9 @@ A log is added to the database anytime the system detects physical occupancy (vi
 
 The core application logic, database, and hardware integrations are currently stable and functional. The next phase focuses entirely on **Deployment, Security, and Quality Assurance**.
 
+- [ ] **Create Firestore Composite Indexes:** The database requires composite indexes for complex heartbeat and bulk data queries to prevent `500 Internal Server Error (FailedPrecondition)` crashes.
+  * **Required Index:** Collection Group `parking_logs`, indexed on `spot_id` (Ascending) + `exit_time` (Ascending) + `entry_time` (Descending).
+  * **How to fix:** Either click the auto-generated link in the backend server's error log, or manually navigate to the Firebase Console -> Firestore -> Indexes -> Composite, and create the index.
 - [ ] **Write Automated Tests:** Create `pytest` suites to validate backend endpoints, specifically testing the self-healing and bouncing driver edge cases.
 - [ ] **Enforce HMAC Security:** The backend currently has `verify_hmac_signature` logic, but it is marked as *optional* because the ESP32 firmware does not currently hash its requests. The firmware must be updated to compute an HMAC-SHA256 hash using `PARKME_HARDWARE_HMAC_SECRET` and send `X-Signature` headers.
 - [ ] **Deploy Frontend to Firebase Hosting** (See guide below)
