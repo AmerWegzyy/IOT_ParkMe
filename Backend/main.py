@@ -645,6 +645,111 @@ async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_c
 @app.post("/api/v1/telemetry/bulk", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_hmac_signature)])
 async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)):
     logger.info(f"Received {len(payload.data)} cached events from {payload.mac_address}")
+    
+    # Find the parking spot by mac_address
+    spots_ref = db.collection("parking_spots")
+    spot_query = spots_ref.where(filter=FieldFilter("mac_address", "==", payload.mac_address)).limit(1).get()
+    
+    spot_doc = None
+    for doc in spot_query:
+        spot_doc = doc
+        break
+        
+    if not spot_doc:
+        logger.warning(f"Bulk data received for unknown MAC: {payload.mac_address}")
+        return {"status": "failed", "reason": "unknown_mac"}
+        
+    spot_id = spot_doc.id
+    logs_ref = db.collection("parking_logs")
+    
+    events = sorted(payload.data, key=lambda x: x.t)
+    
+    for item in events:
+        event_time = datetime.fromtimestamp(item.t, tz=zoneinfo.ZoneInfo("Asia/Jerusalem"))
+        is_occupied = item.v
+        
+        # Get current active log
+        active_log_query = (
+            logs_ref
+            .where(filter=FieldFilter("spot_id", "==", spot_id))
+            .where(filter=FieldFilter("exit_time", "==", None))
+            .order_by("entry_time", direction=firestore.Query.DESCENDING)
+            .limit(1)
+            .get()
+        )
+        
+        active_log_doc = None
+        for doc in active_log_query:
+            active_log_doc = doc
+            break
+            
+        if is_occupied and not active_log_doc:
+            logs_ref.add({
+                "spot_id": spot_id,
+                "license_plate": "UNIDENTIFIED",
+                "entry_time": event_time,
+                "exit_time": None,
+                "is_violation": True,
+                "user_id": None,
+                "snapshot_role": None
+            })
+        elif not is_occupied and active_log_doc:
+            log_data = active_log_doc.to_dict()
+            entry_time = log_data.get("entry_time")
+            
+            if hasattr(entry_time, 'timestamp'):
+                duration_seconds = (event_time - entry_time.replace(tzinfo=event_time.tzinfo)).total_seconds()
+            else:
+                duration_seconds = 60
+                
+            update_data = {"exit_time": event_time}
+            if duration_seconds < 60:
+                update_data["is_violation"] = False
+                update_data["license_plate"] = "ABORTED"
+                
+            active_log_doc.reference.update(update_data)
+            
+    if events:
+        last_event = events[-1]
+        spot_doc.reference.update({
+            "is_occupied": last_event.v,
+            "last_seen": get_il_time()
+        })
+        
+        # Build updated spot data for SSE broadcast
+        spot_data_dict = spot_doc.to_dict()
+        spot_data_dict.update({
+            "is_occupied": last_event.v,
+            "last_seen": get_il_time()
+        })
+        
+        license_plate = None
+        is_violation = False
+        active_log_query2 = (
+            logs_ref
+            .where(filter=FieldFilter("spot_id", "==", spot_id))
+            .where(filter=FieldFilter("exit_time", "==", None))
+            .order_by("entry_time", direction=firestore.Query.DESCENDING)
+            .limit(1)
+            .get()
+        )
+        for doc in active_log_query2:
+            log_d = doc.to_dict()
+            license_plate = log_d.get("license_plate")
+            is_violation = log_d.get("is_violation", False)
+            break
+        
+        broadcast_spot = {
+            "id": spot_id,
+            "category": spot_data_dict.get("category"),
+            "is_occupied": last_event.v,
+            "license_plate": license_plate,
+            "is_violation": is_violation,
+            "battery_level": spot_data_dict.get("battery_level"),
+            "last_seen": get_il_time().isoformat()
+        }
+        await broadcast_event("spot_update", {"spot": broadcast_spot})
+
     return {"status": "bulk_processed", "events": len(payload.data)}
 
 import os
