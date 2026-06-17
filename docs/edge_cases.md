@@ -26,11 +26,6 @@ The ParkMe system integrates hardware sensors, camera nodes, and a cloud backend
 - **Scenario**: Multiple POST requests arrive for the same vehicle due to camera retries or bouncing frames at the gate.
 - **Handling**: The server maintains an in-memory `LPR_DEDUP_CACHE` with a **5-second window**. If an identical plate is submitted within 5 seconds of the previous submission, the request is dropped and the server responds with `status: "dropped"` and `reason: "duplicate_within_5s"`.
 
-### 5. HMAC / Replay Attack Protection (Optional)
-
-- **Scenario**: A malicious actor intercepts an ESP32 HTTP POST request and resends it later to alter parking states.
-- **Handling**: The `verify_hmac_signature` dependency checks the `X-Signature` and `X-Timestamp` headers. If the timestamp is older than **30 seconds**, the request is rejected as a replay attack.
-- **Current Status**: HMAC verification is **optional**. The ESP32 hardware does **not** send `X-Signature` or `X-Timestamp` headers (`PARKME_HARDWARE_HMAC_SECRET` is empty by default). When these headers are absent, the backend **silently returns** without enforcing verification. This allows the system to operate without HMAC in classroom/demo deployments while remaining ready for production hardening.
 
 ### 6. Unreadable License Plates
 

@@ -33,6 +33,4 @@ The mark of a production-ready IoT system is how it handles physical chaos. Here
 **The Scenario:** A tech-savvy student opens their browser's Network tab and attempts to listen to the SSE `/stream` to find out exactly when security admins arrive or to track staff license plates.
 **The Defense:** The backend maps every single open SSE `asyncio.Queue` connection to the JWT role of the user who opened it. When the backend triggers `await broadcast_event("spot_update", ...)`, the server literally skips the student's network pipe if the update pertains to a staff spot. Security logs are exclusively routed to connections carrying the `admin` role. The student physically cannot receive the packets.
 
-#### Nasty Case D: Replay Attacks (Hardware Spoofing)
-**The Scenario:** A malicious actor captures the WiFi traffic from the ESP32, extracts the JSON, and repeatedly blasts fake `is_occupied = False` requests to the server to confuse the database.
-**The Defense:** The backend's `verify_hmac_signature` middleware expects the ESP32 to cryptographically sign every single heartbeat using a shared secret key (HMAC-SHA256) against a Unix Timestamp (`X-Timestamp`). If the timestamp is older than 30 seconds, or the hash doesn't perfectly match what the server calculates, FastAPI intercepts the payload and drops it with a `401 Unauthorized` before the database is ever touched.
+

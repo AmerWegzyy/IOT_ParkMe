@@ -79,8 +79,8 @@ Below is an explanation of every other file in the project, categorized by folde
 - **`ESP32/how_to_export_compiled_program.txt`**: Instructions on how to compile the Arduino code into a binary file.
 - **`ESP32/compiled_program.bin`**: A pre-compiled binary firmware file ready to be directly flashed to an ESP32.
 - **`ESP32/parameters.h`**: Global parameter configurations for the ESP32 nodes (e.g., timeout durations, thresholds).
-- **`ESP32/SECRETS.example.h`**: A template for Wi-Fi credentials and HMAC secret keys (safe to share).
-- **`ESP32/SECRETS.h`**: The actual file containing sensitive Wi-Fi and HMAC keys (ignored by git).
+- **`ESP32/SECRETS.example.h`**: A template for Wi-Fi credentials (safe to share).
+- **`ESP32/SECRETS.h`**: The actual file containing sensitive Wi-Fi keys (ignored by git).
 - **`ESP32/ParkMeCameraNode/ParkMeCameraNode.ino`**: The main Arduino sketch for the ESP32-CAM nodes, responsible for taking pictures of license plates and transmitting them via HTTP POST.
 - **`ESP32/ParkMeSensorNode/ParkMeSensorNode.ino`**: The main Arduino sketch for standard ESP32 nodes handling proximity sensors and periodic heartbeats.
 - **`ESP32/ParkMeFirmwareCompileTests/ParkMeFirmwareCompileTests.ino`**: A test sketch used to verify that the firmware libraries compile correctly without executing full business logic.

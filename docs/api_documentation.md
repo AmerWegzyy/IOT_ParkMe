@@ -20,7 +20,7 @@ Because we didn't explicitly group our endpoints into custom "tags" (like "Users
 #### 2. `POST /api/v1/sensors/park`
 * **What it is**: The Edge Sensor Fusion endpoint. When the ESP32 camera detects a car entering, it captures a JPEG and fires it here. The backend runs the image through **Google Cloud Vision API** for license-plate recognition (LPR).
 * **Inside the dropdown**:
-  * **Request Body (multipart/form-data)**: It accepts `spot_id` (string, e.g. `"444"`) as a text form field and `file` (a binary JPEG upload).
+  * **Request Body (multipart/form-data)**: It accepts `camera_mac` (string — the MAC address of the ESP32-CAM camera node) as a text form field and `file` (a binary JPEG upload). The backend dynamically resolves the `spot_id` by querying Firestore for the matching `camera_mac`.
   * **Responses**: A `200 OK` returns a JSON object with `status`, `action`, and `message` keys:
     * **Authorized plate**: `{"status": "ok", "action": "WELCOME", "message": "Welcome, <name>!"}`
     * **Unauthorized plate**: `{"status": "ok", "action": "DENIED", "message": "Not authorized"}`
@@ -34,7 +34,7 @@ Because we didn't explicitly group our endpoints into custom "tags" (like "Users
 * **Inside the dropdown**:
   * **Request Body**: Expects a JSON matching the `HeartbeatPayload` schema (MAC address, occupancy state, battery level).
   * **Responses**: **`202 Accepted`** confirms receipt. This is also where the backend secretly detects "Broken Camera" anomalies — if the heartbeat says "Occupied" but the system has no record of an image being sent!
-  * **Spot lookup**: The backend finds the parking spot by querying the database for the provided `mac_address`. There is no `spot_id` in this payload.
+  * **Spot lookup**: The backend finds the parking spot by querying the `parking_spots` collection for the document whose `sensor_mac` field matches the provided `mac_address`. There is no `spot_id` in this payload.
 
 #### 4. `PUT /api/v1/sensors/resolve`
 * **What it is**: The admin tool to fix anomalies. If a camera breaks or gets covered in mud, the system flags the spot as `UNIDENTIFIED`. 
@@ -71,19 +71,13 @@ Because we didn't explicitly group our endpoints into custom "tags" (like "Users
 
 ---
 
-### 🔐 A Note on HMAC Security
-
-The backend includes an `verify_hmac_signature` function that can validate `X-Timestamp` and `X-Signature` headers using HMAC-SHA256 with a shared secret (`PARKME_HARDWARE_HMAC_SECRET`). However, this verification is **optional** — if either header is missing, the function silently returns without raising an error. This means requests from hardware that omits these headers (which is currently all of them) will pass through without HMAC validation. The mechanism is in place as a future-proofing layer that can be enforced once the firmware includes signing logic.
-
----
-
 ### 📦 Part 2: The "Schemas" Section
 
 At the very bottom of the page, FastAPI lists all the "Schemas". These are the strict data blueprints (Pydantic Models) we defined to ensure the backend only accepts perfectly formatted data. If a client sends data that violates a schema, FastAPI instantly rejects it with a `422 Unprocessable Entity` error before our code even runs.
 
 #### 1. `HeartbeatPayload`
 * **What it is**: The strict blueprint for the ESP32's periodic check-in.
-* **Inside the dropdown**: You'll see it strictly requires `mac_address` (string), `is_occupied` (boolean: true/false), and `battery_level` (float: 0–100). If the ESP32 forgets to send the battery level, FastAPI rejects it. Note: there is no `spot_id` here — the backend resolves the spot by looking up the `mac_address` in the database.
+* **Inside the dropdown**: You'll see it strictly requires `mac_address` (string), `is_occupied` (boolean: true/false), and `battery_level` (float: 0–100). If the ESP32 forgets to send the battery level, FastAPI rejects it. Note: there is no `spot_id` here — the backend resolves the spot by querying the `parking_spots` collection for the document whose `sensor_mac` field matches the provided `mac_address`.
 
 #### 2. `ResolvePayload`
 * **What it is**: The blueprint for the "Acknowledge & Resolve" button click.

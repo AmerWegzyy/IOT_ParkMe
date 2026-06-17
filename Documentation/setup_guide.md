@@ -97,7 +97,6 @@ cp .env.example .env
 Now edit the `.env` file:
 ```
 GOOGLE_APPLICATION_CREDENTIALS=./serviceAccountKey.json
-ESP32_HMAC_SECRET=your_secret_key_here
 JWT_SECRET=your_jwt_secret_here
 ENVIRONMENT=development
 PORT=8000
@@ -176,7 +175,6 @@ gcloud run deploy parkme-backend \
 ```bash
 gcloud run services update parkme-backend \
   --region me-west1 \
-  --set-env-vars "ESP32_HMAC_SECRET=your_production_secret" \
   --set-env-vars "JWT_SECRET=your_production_jwt_secret" \
   --set-env-vars "ENVIRONMENT=production"
 ```

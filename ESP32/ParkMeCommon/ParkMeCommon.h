@@ -119,28 +119,13 @@ inline String buildServerUrl(const char *host, uint16_t port, const char *path) 
   return buildServerUrl("http", host, port, path);
 }
 
-inline String makeSpotUpdatePayload(uint32_t spotId,
-                                    SpotState state,
-                                    int batteryPercent) {
-  String payload = "{\"spot_id\":";
-  payload += String(spotId);
-  payload += ",\"status\":";
-  payload += String(static_cast<uint8_t>(state));
-  payload += ",\"battery_level\":";
-  payload += String(batteryPercent);
-  payload += "}";
-  return payload;
-}
 
 inline String makeHeartbeatPayload(const String &macAddress,
-                                   uint32_t spotId,
                                    SpotState state,
                                    int batteryPercent) {
   String payload = "{\"mac_address\":\"";
   payload += macAddress;
-  payload += "\",\"spot_id\":";
-  payload += String(spotId);
-  payload += ",\"is_occupied\":";
+  payload += "\",\"is_occupied\":";
   payload += state == STATE_OCCUPIED ? "true" : "false";
   payload += ",\"battery_level\":";
   payload += String(batteryPercent);

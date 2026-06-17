@@ -70,14 +70,12 @@ Both nodes utilize the HC-SR04 ultrasonic sensor.
     The Camera Node detects if PSRAM is present on the ESP32-CAM board. If PSRAM is found, it captures high-resolution VGA images (`FRAMESIZE_VGA` / Quality 10). If no PSRAM is detected, it falls back to QVGA (`FRAMESIZE_QVGA` / Quality 12) to avoid running out of memory.
 
 ### B. Backend-Level Resiliency ([main.py](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Backend/main.py))
-1.  **Replay Attack Prevention (HMAC Security — Optional):**
-    HMAC verification in the backend is **optional**. The `verify_hmac_signature()` function silently returns if the `X-Signature` and `X-Timestamp` headers are missing from the request. If the headers *are* present, the backend validates the signature and checks that the request timestamp is within 30 seconds to prevent replay attacks. Currently, **neither hardware node sends HMAC headers**, so all device requests pass through without signature verification. This is a known security gap planned for future hardening.
-2.  **LPR Double-trigger Deduplication:**
+1.  **LPR Double-trigger Deduplication:**
     To prevent multiple database writes for a single vehicle arrival, `main.py` maintains an in-memory deduplication cache (`LPR_DEDUP_CACHE`). If the same license plate is read again within 5 seconds, the request is dropped with:
     ```json
     {"status": "dropped", "reason": "duplicate_within_5s", "action": "RETRY", "message": "Processing..."}
     ```
-3.  **Bouncing Drivers (Aborted Sessions):**
+2.  **Bouncing Drivers (Aborted Sessions):**
     If a car occupies a spot but departs in under 60 seconds, the backend marks the log exit time and overrides the license plate record to `"ABORTED"`, setting `is_violation = False` to prevent penalty triggers.
 4.  **Ghost Cars (Unidentified Occupancy) & OCR Race-Condition Resolution:**
     If the Sensor Node reports `is_occupied: true` but the Camera Node failed to capture or read a license plate, the backend creates an automatic log labeled `"UNIDENTIFIED"` and flags it as a violation.

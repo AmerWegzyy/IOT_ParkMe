@@ -2,8 +2,6 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-import hmac
-import hashlib
 import logging
 from datetime import datetime, timedelta
 import zoneinfo
@@ -12,7 +10,7 @@ from typing import List
 def get_il_time():
     return datetime.now(zoneinfo.ZoneInfo("Asia/Jerusalem"))
 
-from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException, status, Request, UploadFile, File, Form, Header
+from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException, status, UploadFile, File, Form, Header
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -23,13 +21,13 @@ from google.cloud.firestore_v1 import FieldFilter
 from google.cloud import vision
 import asyncio
 import json
+from cachetools import TTLCache
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Environment Variables
-ESP32_HMAC_SECRET = os.environ.get("ESP32_HMAC_SECRET", "super_secret_hmac_key_replace_me_in_production")
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "")
 
 # Firebase Setup
@@ -88,7 +86,9 @@ class ResolvePayload(BaseModel):
     spot_id: str
 
 # In-memory deduplication cache for LPR reads. Maps: license_plate -> datetime
-LPR_DEDUP_CACHE = {}
+# TTL of 120s covers the ~45s camera retry window with margin, and is well
+# below the 6-minute heartbeat interval so it won't interfere with other timing.
+LPR_DEDUP_CACHE = TTLCache(maxsize=1000, ttl=120)
 
 # ==========================================
 # DEPENDENCIES & MIDDLEWARE
@@ -97,24 +97,6 @@ def get_firestore_db():
     """Returns the Firestore client instance."""
     return firestore_client
 
-async def verify_hmac_signature(request: Request):
-    """Verifies the HMAC-SHA256 signature to secure the endpoint against spoofing."""
-    signature = request.headers.get("X-Signature")
-    timestamp = request.headers.get("X-Timestamp")
-    
-    if not signature or not timestamp:
-        return
-        
-    req_time = datetime.fromtimestamp(int(timestamp))
-    if datetime.now() - req_time > timedelta(seconds=30):
-        raise HTTPException(status_code=401, detail="Request expired (Replay attack detected)")
-
-    body = await request.body()
-    message = f"{timestamp}.{body.decode('utf-8')}".encode('utf-8')
-    expected_mac = hmac.new(ESP32_HMAC_SECRET.encode('utf-8'), message, hashlib.sha256).hexdigest()
-    
-    if not hmac.compare_digest(expected_mac, signature):
-        raise HTTPException(status_code=401, detail="Invalid HMAC signature")
 
 # ==========================================
 # LPR PROCESSING (SERVER-SIDE)
@@ -150,7 +132,7 @@ def extract_license_plate(image_bytes: bytes) -> str:
 # ==========================================
 # ENDPOINTS
 # ==========================================
-@app.post("/api/v1/sensors/heartbeat", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_hmac_signature)])
+@app.post("/api/v1/sensors/heartbeat", status_code=status.HTTP_202_ACCEPTED)
 async def receive_heartbeat_data(
     payload: HeartbeatPayload, 
     db = Depends(get_firestore_db)
@@ -556,6 +538,9 @@ async def get_recent_logs(current_user: dict = Depends(get_current_user), db = D
             msg_type = "violation"
             msg = f"Unauthorized access at Spot {spot_id} (Plate: {license_plate})"
         else:
+            # Intentional: The Security Log only shows anomalies (violations,
+            # unidentified, resolved, aborted). Normal authorized parking
+            # events are excluded by design.
             continue
             
         result.append({
@@ -600,9 +585,8 @@ async def stream_events(token: str = None):
             while True:
                 message = await q.get()
                 yield f"data: {message}\n\n"
-        except asyncio.CancelledError:
+        finally:
             sse_clients.remove(client)
-            raise
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -647,14 +631,14 @@ async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_c
         }
         await broadcast_event("spot_update", {"spot": broadcast_spot_data})
         await broadcast_event("log_event", {"log": {
-            "timestamp": datetime.now().isoformat(), 
+            "timestamp": get_il_time().isoformat(), 
             "type": "info", 
             "message": f"Admin {admin_user.get('name')} resolved anomaly at spot {payload.spot_id}."
         }})
         
     return {"status": "resolved", "spot_id": payload.spot_id}
 
-@app.post("/api/v1/telemetry/bulk", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_hmac_signature)])
+@app.post("/api/v1/telemetry/bulk", status_code=status.HTTP_202_ACCEPTED)
 async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)):
     logger.info(f"Received {len(payload.data)} cached events from {payload.mac_address}")
     

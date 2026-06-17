@@ -114,7 +114,6 @@ The core application logic, database, and hardware integrations are currently st
   * **Required Index:** Collection Group `parking_logs`, indexed on `spot_id` (Ascending) + `exit_time` (Ascending) + `entry_time` (Descending).
   * **How to fix:** Either click the auto-generated link in the backend server's error log, or manually navigate to the Firebase Console -> Firestore -> Indexes -> Composite, and create the index.
 - [ ] **Write Automated Tests:** Create `pytest` suites to validate backend endpoints, specifically testing the self-healing and bouncing driver edge cases.
-- [ ] **Enforce HMAC Security:** The backend currently has `verify_hmac_signature` logic, but it is marked as *optional* because the ESP32 firmware does not currently hash its requests. The firmware must be updated to compute an HMAC-SHA256 hash using `PARKME_HARDWARE_HMAC_SECRET` and send `X-Signature` headers.
 - [ ] **Deploy Frontend to Firebase Hosting** (See guide below)
 - [ ] **Deploy Backend to Google Cloud Platform** (See guide below)
 
@@ -188,6 +187,5 @@ Cloud Run is perfect for FastAPI: it auto-scales to zero (saving money) and scal
    ```
 4. **Set Environment Variables:**
    In the Google Cloud Console, navigate to Cloud Run $\rightarrow$ `parkme-api` $\rightarrow$ Edit & Deploy New Revision $\rightarrow$ Variables & Secrets. Add the following:
-   * `PARKME_HARDWARE_HMAC_SECRET`
    * `GOOGLE_APPLICATION_CREDENTIALS` (Bind this to your Firebase Service Account JSON using Google Secret Manager for maximum security).
 5. **Hardware Update:** Finally, update the `PARKME_SERVER_HOST` in your ESP32 `SECRETS.h` to point to the new Cloud Run URL (without the `https://`).

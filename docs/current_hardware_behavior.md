@@ -27,7 +27,6 @@ This document describes the current behavior of the ESP32 hardware nodes in the 
 
 * **WiFi Retry**: Reconnects every **10 seconds** (`PARKME_SENSOR_WIFI_RETRY_INTERVAL_MS = 10000`).
 * **HTTP Timeout**: **5 seconds** (`PARKME_SENSOR_HTTP_TIMEOUT_MS = 5000`).
-* **HMAC**: Hardware does **not** send HMAC signatures. The `PARKME_HARDWARE_HMAC_SECRET` is left empty by default. The backend's HMAC verification silently skips if no signature headers are present.
 
 ---
 
@@ -62,7 +61,6 @@ This document describes the current behavior of the ESP32 hardware nodes in the 
 * **WiFi Retry**: Reconnects every **10 seconds** (`PARKME_GATE_WIFI_RETRY_INTERVAL_MS = 10000`).
 * **HTTP Timeout**: **10 seconds** (`PARKME_GATE_HTTP_TIMEOUT_MS = 10000`).
 * **Transport**: Raw `WiFiClient` / `WiFiClientSecure` TCP sockets with manually constructed HTTP/1.1 requests (multipart boundary for image upload). Uses `setInsecure()` for TLS (no certificate pinning).
-* **HMAC**: Not sent. Same as the Sensor Node.
 
 ---
 

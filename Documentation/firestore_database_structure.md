@@ -81,19 +81,21 @@ Represents the **live state** of each physical ESP32 sensor node. Updated on eve
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `mac_address` | string | Unique MAC address of the ESP32 node |
+| `sensor_mac` | string | MAC address of the ESP32 ultrasonic sensor node |
+| `camera_mac` | string | MAC address of the ESP32-CAM camera node |
 | `category` | string | Who can park here: `student`, `lecturer`, `staff`, `special-needs-driver` |
 | `is_occupied` | boolean | Is a car physically detected by the sensor? |
 | `battery_level` | number | Battery percentage (0–100) |
 | `last_seen` | timestamp | Last heartbeat received from this sensor |
 
 - **Document ID:** The spot label (e.g., `"A1"`, `"B2"`)
-- **Queried by:** Direct document lookup by spot ID, or by `mac_address` field (for heartbeats)
+- **Queried by:** Direct document lookup by spot ID, by `sensor_mac` field (for heartbeats), or by `camera_mac` field (for camera uploads)
 
 **Example document** (`parking_spots/A1`):
 ```json
 {
-  "mac_address": "AA:BB:CC:DD:EE:01",
+  "sensor_mac": "AA:BB:CC:DD:EE:01",
+  "camera_mac": "AA:BB:CC:DD:EE:02",
   "category": "student",
   "is_occupied": true,
   "battery_level": 95.5,

@@ -129,7 +129,6 @@ All of these are **unchanged** — no need to touch them:
 - ✅ All request and response JSON formats
 - ✅ The Web Frontend (HTML/CSS/JS — zero changes)
 - ✅ ESP32 sensor code (just update the server URL)
-- ✅ HMAC security for ESP32 communication
 - ✅ JWT authentication for users
 - ✅ License plate OCR processing
 - ✅ Real-time SSE updates

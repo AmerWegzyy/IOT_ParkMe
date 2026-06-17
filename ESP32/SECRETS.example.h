@@ -13,14 +13,10 @@ constexpr char PARKME_SERVER_SCHEME[] = "https";
 constexpr char PARKME_SERVER_HOST[] = "YOUR-CLOUD-BACKEND.onrender.com";
 constexpr uint16_t PARKME_SERVER_PORT = 443;
 
-// Leave empty for classroom/demo use. Set the same value as PARKME_HMAC_SECRET
-// in the cloud backend if you later implement signed ESP32 requests.
-constexpr char PARKME_HARDWARE_HMAC_SECRET[] = "";
 
 constexpr char PARKME_API_UPDATE_SPOT_PATH[] = "/api/v1/sensors/heartbeat";
 constexpr char PARKME_API_GATE_ENTRY_PATH[] = "/api/v1/sensors/park";
 
-constexpr uint32_t PARKME_SENSOR_SPOT_ID = 101;
 constexpr uint8_t PARKME_SENSOR_TRIG_PIN = 5;
 constexpr uint8_t PARKME_SENSOR_ECHO_PIN = 18;
 constexpr int8_t PARKME_SENSOR_BATTERY_PIN = 34;
@@ -40,7 +36,6 @@ constexpr uint32_t PARKME_SENSOR_WIFI_RETRY_INTERVAL_MS = 10000;
 constexpr uint32_t PARKME_SENSOR_HTTP_TIMEOUT_MS = 5000;
 constexpr bool PARKME_SENSOR_ALLOW_FREE_HEARTBEATS = true;
 
-constexpr uint32_t PARKME_GATE_SPOT_ID = 201;
 constexpr int8_t PARKME_GATE_TRIG_PIN = 12;
 constexpr int8_t PARKME_GATE_ECHO_PIN = 13;
 constexpr int8_t PARKME_GATE_FLASH_LED_PIN = 4;

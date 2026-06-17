@@ -36,8 +36,8 @@ graph TD
     end
 
     %% Communication paths
-    SENSOR -- 1. Heartbeats<br/>HTTP/HTTPS, HMAC Optional --> API
-    CAMERA -- 2. Park Events + Images<br/>Raw HTTP/1.1 over TCP, HMAC Optional --> API
+    SENSOR -- 1. Heartbeats<br/>HTTP/HTTPS --> API
+    CAMERA -- 2. Park Events + Images<br/>Raw HTTP/1.1 over TCP --> API
     API -- 3. OCR Request --> VISION
     API -- 4. Read/Write Data --> DB
     WEB -- 5. API Requests, JWT Auth --> API
@@ -53,7 +53,7 @@ graph TD
 
 1.  **Detection:** The ESP32-CAM gate node detects a vehicle arriving within 50 cm using its HC-SR04 proximity sensor.
 2.  **Capture:** The ESP32-CAM turns on the flash LED for 80ms and captures a JPEG snapshot of the vehicle's license plate.
-3.  **Transmission:** The ESP32-CAM sends the image to the backend via a `POST /api/v1/sensors/park` request using raw HTTP/1.1 over TCP. The request does **not** currently include HMAC signatures (the backend's HMAC verification is optional and silently passes unsigned requests). The camera retries up to 3 times on failure.
+3.  **Transmission:** The ESP32-CAM sends the image to the backend via a `POST /api/v1/sensors/park` request using raw HTTP/1.1 over TCP. The camera retries up to 3 times on failure.
 4.  **Processing (OCR):** The backend receives the image and sends it to the **Google Cloud Vision API** for text detection. The Vision API response is parsed to extract the license plate string.
 5.  **Validation:** 
     *   The backend queries **Firestore** to find the vehicle associated with that license plate and its owner's role.
@@ -85,6 +85,6 @@ graph TD
 
 ## 4. Security & Authentication
 
-*   **Device-to-Cloud (ESP32 to Backend):** The backend includes an **optional HMAC-SHA256 verification** mechanism. The `verify_hmac_signature()` function checks for `X-Signature` and `X-Timestamp` headers — if they are present, it validates the signature against the shared secret (`ESP32_HMAC_SECRET`) and rejects requests older than 30 seconds to prevent replay attacks. However, if the headers are **absent**, the function silently passes the request through without verification. **Currently, neither the Sensor Node nor the Camera Node sends HMAC headers**, meaning all device requests are effectively unsigned. This is a **known security gap** planned for future hardening. Communication from the Camera Node uses raw HTTP/1.1 over TCP.
+*   **Device-to-Cloud (ESP32 to Backend):** Hardware requests do not currently implement authentication. Communication from the Camera Node uses raw HTTP/1.1 over TCP.
 *   **User-to-Cloud (Web App to Backend):** Uses **Firebase ID Tokens (JWT)**. When a user logs in via the client, they receive a secure token signed by Google. They send this token in the `Authorization` header for subsequent requests. The backend verifies it via the Firebase Admin SDK and retrieves user properties (like roles) from Firestore to enforce role-based access control (RBAC).
 *   **Cloud-to-Database (Backend to Firestore):** Uses **Google Application Default Credentials (ADC)** via the `serviceAccountKey.json`. This provides secure server-to-server authentication within Google's infrastructure.

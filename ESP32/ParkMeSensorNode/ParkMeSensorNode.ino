@@ -13,13 +13,12 @@ namespace {
 Preferences preferences;
 
 struct PendingTelemetry {
-  uint32_t spotId;
   uint8_t status;
   uint8_t batteryPercent;
   uint8_t valid;
 };
 
-PendingTelemetry pendingTelemetry = {PARKME_SENSOR_SPOT_ID, 0, 100, 0};
+PendingTelemetry pendingTelemetry = {0, 100, 0};
 
 float baselineDistanceCm = PARKME_SENSOR_DEFAULT_BASELINE_CM;
 float occupiedThresholdCm = computeOccupiedThreshold(
@@ -68,7 +67,6 @@ void clearPendingTelemetry() {
 }
 
 void queuePendingTelemetry(SpotState state, int batteryPercent) {
-  pendingTelemetry.spotId = PARKME_SENSOR_SPOT_ID;
   pendingTelemetry.status = static_cast<uint8_t>(state);
   pendingTelemetry.batteryPercent =
       static_cast<uint8_t>(clampValue(batteryPercent, 0, 100));
@@ -80,7 +78,7 @@ void loadPendingTelemetry() {
   size_t loaded =
       preferences.getBytes("pending", &pendingTelemetry, sizeof(pendingTelemetry));
   if (loaded != sizeof(pendingTelemetry)) {
-    pendingTelemetry = {PARKME_SENSOR_SPOT_ID, 0, 100, 0};
+    pendingTelemetry = {0, 100, 0};
   }
 }
 
@@ -206,7 +204,6 @@ bool postTelemetry(SpotState state, int batteryPercent) {
 
   http.addHeader("Content-Type", "application/json");
   String payload = makeHeartbeatPayload(WiFi.macAddress(),
-                                        PARKME_SENSOR_SPOT_ID,
                                         state,
                                         batteryPercent);
 
@@ -322,8 +319,8 @@ void setup() {
 
   Serial.println();
   Serial.println("ParkMe Sensor Node Started");
-  Serial.print("Spot ID: ");
-  Serial.println(PARKME_SENSOR_SPOT_ID);
+  Serial.print("MAC: ");
+  Serial.println(WiFi.macAddress());
   Serial.print("Loaded baseline: ");
   Serial.print(baselineDistanceCm);
   Serial.print(" cm | Threshold: ");

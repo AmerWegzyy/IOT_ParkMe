@@ -356,6 +356,12 @@ async function fetchLogs() {
 }
 
 // Auto-login check
-if (localStorage.getItem('parkme_token')) {
-    initDashboard();
+const savedToken = localStorage.getItem('parkme_token');
+if (savedToken) {
+    const payload = parseJwt(savedToken);
+    if (payload && payload.exp && payload.exp * 1000 > Date.now()) {
+        initDashboard();
+    } else {
+        localStorage.removeItem('parkme_token');
+    }
 }

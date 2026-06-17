@@ -15,6 +15,5 @@ Shared files:
 Before flashing:
 
 1. Edit `SECRETS.h`.
-2. Set the correct `spot_id` values so they match the records in the backend database.
-3. Confirm the LCD uses address `0x27`; change it if your module uses a different address.
-4. For the sensor node, leave the spot empty and hold the calibration button during boot to store a baseline distance.
+2. Confirm the LCD uses address `0x27`; change it if your module uses a different address.
+3. For the sensor node, leave the spot empty and hold the calibration button during boot to store a baseline distance.

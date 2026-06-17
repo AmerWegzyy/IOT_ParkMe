@@ -35,14 +35,7 @@ You must fire an HTTP POST request to this endpoint under two conditions:
 ```
 *Note: `battery_level` must be a float between 0 and 100.*
 
-> **Important — `spot_id` quirk:** The sensor firmware also includes a `spot_id` field in the JSON it sends. However, the backend's `HeartbeatPayload` Pydantic model does **not** define `spot_id` — the backend silently ignores it and instead resolves the parking spot by querying the database for the provided `mac_address`. You don't need to remove `spot_id` from the firmware (it does no harm), but be aware that the backend does not use it.
-
-### Security Headers (HMAC-SHA256) — Currently Optional
-The backend contains an `verify_hmac_signature` function that can validate two custom headers:
-* `X-Timestamp`: The current Unix timestamp.
-* `X-Signature`: An HMAC-SHA256 hash of the string `<timestamp>.<json_body>` using a shared secret key.
-
-**However, this verification is optional.** If either header is missing, the backend silently skips validation. The current firmware (`.ino` files) does **not** send these headers, and the shared secret (`PARKME_HARDWARE_HMAC_SECRET`) is not referenced in any Arduino code. Requests without HMAC headers are accepted normally. This is a future-proofing mechanism that can be enforced later when the firmware is updated to include signing.
+> **Note:** The backend resolves the parking spot by querying the `parking_spots` Firestore collection for the document whose `sensor_mac` field matches the provided `mac_address`. There is no `spot_id` in this payload.
 
 ### NVS Caching (Sensor Node Only)
 The Sensor Node firmware includes NVS (Non-Volatile Storage) caching for failed telemetry POSTs. If the HTTP request fails (e.g., server unreachable), the reading is stored in NVS and retried on the next cycle. This ensures no heartbeat data is silently lost during network outages.
@@ -62,16 +55,16 @@ You must fire this HTTP POST request **ONLY** when the ultrasonic sensor detects
 
 ### Form-Data Payload
 The Camera Node uses **raw HTTP/1.1 over TCP** (`WiFiClient`), NOT the Arduino `HTTPClient` library. The firmware manually constructs the HTTP request headers and multipart body, then writes them byte-by-byte to the TCP socket. The backend requires a strict multipart form structure:
-1. **`spot_id`** (Text Field): A string representing the physical spot ID (e.g., `"444"` or `"555"`).
+1. **`camera_mac`** (Text Field): The MAC address of this ESP32-CAM node (e.g., `"AA:BB:CC:DD:EE:02"`). The backend dynamically resolves the `spot_id` by querying Firestore for the matching `camera_mac`.
 2. **`file`** (File Field): The raw JPEG buffer from `esp_camera_fb_get()`.
 
 ### Example Arduino HTTP Form Structure
 Ensure your `boundary` logic correctly maps to these keys:
 ```text
 --boundary_string
-Content-Disposition: form-data; name="spot_id"
+Content-Disposition: form-data; name="camera_mac"
 
-444
+AA:BB:CC:DD:EE:02
 --boundary_string
 Content-Disposition: form-data; name="file"; filename="capture.jpg"
 Content-Type: image/jpeg
@@ -95,5 +88,5 @@ The backend responds with a JSON object containing an `action` field. The Camera
 2. **Do not forget the Exit heartbeat**: When a car leaves, the backend relies 100% on the ESP32 sending a `heartbeat` with `is_occupied: false` to end the parking session and free up the spot in the database.
 3. **Wait for WiFi**: The ESP32-CAM draws massive current when the camera and WiFi radio run simultaneously. If you encounter brownout resets, ensure you capture the frame into PSRAM *before* turning on the WiFi radio to transmit.
 4. **Raw TCP, not HTTPClient**: The Camera Node builds HTTP requests manually over a `WiFiClient` TCP connection. If you're modifying the camera firmware, do not try to swap in the `HTTPClient` library without updating all the header/body construction logic.
-5. **`spot_id` is a string**: Both the heartbeat firmware field (ignored) and the park endpoint form field use string spot IDs (e.g., `"444"`), not integers.
+5. **MAC addresses are strings**: The heartbeat payload uses `mac_address` and the park endpoint uses `camera_mac`. Both are string fields. The backend resolves the logical spot ID from these MAC addresses automatically.
 6. **6-minute heartbeat, not 60 seconds**: The periodic heartbeat interval is 360,000 ms (6 minutes). Sending every 60 seconds would drain the battery unnecessarily and generate excessive traffic.

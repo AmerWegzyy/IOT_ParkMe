@@ -33,8 +33,7 @@
   - [ ] Write and run unit tests for the core backend endpoints.
   - [ ] Perform integration testing between the ESP32 hardware and the backend (simulating real-time parking events).
   - [ ] Test frontend interactions (login, viewing spots, real-time updates).
-- [ ] **Security:**
-  - [ ] Enforce HMAC signature verification on the backend (currently optional/bypassed) and ensure the ESP32 sends the correct signature to prevent spoofing.
+
 - [ ] **Deployment:**
   - [ ] **Backend Cloud Deployment:** Deploy the FastAPI backend to a cloud provider (e.g., Google Cloud Run, Render, or Heroku).
   - [ ] **Frontend Firebase Hosting:** Decouple the frontend from the FastAPI server and deploy the static files to Firebase Hosting for faster, dedicated CDN delivery.
