@@ -51,7 +51,7 @@ graph TD
 
 ### Scenario A: A Vehicle Parks (The "Park" Event)
 
-1.  **Detection:** The ESP32-CAM gate node detects a vehicle arriving within 50 cm using its HC-SR04 proximity sensor.
+1.  **Detection:** The ESP32-CAM gate node detects a vehicle arriving within 20 cm using its HC-SR04 proximity sensor.
 2.  **Capture:** The ESP32-CAM turns on the flash LED for 80ms and captures a JPEG snapshot of the vehicle's license plate.
 3.  **Transmission:** The ESP32-CAM sends the image to the backend via a `POST /api/v1/sensors/park` request using raw HTTP/1.1 over TCP. The camera retries up to 3 times on failure.
 4.  **Processing (OCR):** The backend receives the image and sends it to the **Google Cloud Vision API** for text detection. The Vision API response is parsed to extract the license plate string.

@@ -48,8 +48,8 @@ Both nodes utilize the HC-SR04 ultrasonic sensor.
     It is clamped to a minimum of $8\text{ cm}$ to prevent false triggers.
 
 ### C. Gate Node Arrival Detection & Relays
-*   **Trigger:** When a car is detected at $\le 50\text{ cm}$ of the gate.
-*   **State Locking:** A simple latch logic (`carPresent` boolean flag) ensures the scan runs exactly once when the vehicle arrives. The scan is locked until the vehicle departs ($>50\text{ cm}$).
+*   **Trigger:** When a car is detected at $\le 20\text{ cm}$ of the gate.
+*   **State Locking:** A simple latch logic (`carPresent` boolean flag) ensures the scan runs exactly once when the vehicle arrives. The scan is locked until the vehicle departs ($>20\text{ cm}$).
 *   **Capture & Flash:** When triggered, the board turns on the high-power onboard white LED (GPIO 4) for 80ms, captures a frame, and turns it off to capture clear license plates even at night.
 *   **Gate Operation:** If the backend responds with `"action":"WELCOME"`, the node activates the gate relay (GPIO configuration `PARKME_GATE_RELAY_PIN`) with a high-state pulse of 3,000ms.
 

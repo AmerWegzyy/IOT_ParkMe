@@ -40,8 +40,8 @@ This document describes the current behavior of the ESP32 hardware nodes in the 
 
 * **Automatic Vehicle Detection**:
   * The `loop()` continuously calls `isCarAtGate()`, which reads the ultrasonic sensor.
-  * A vehicle is detected when the distance is **greater than 0 and less than 50 cm**.
-* **State Latch (Debouncing)**: A boolean `carPresent` latch prevents re-triggering. A scan only begins when `isCarAtGate() == true` AND `carPresent == false`. The latch resets only after the car fully clears the sensor (distance ≥ 50 cm).
+  * A vehicle is detected when the distance is **greater than 0 and less than or equal to 20 cm**.
+* **State Latch (Debouncing)**: A boolean `carPresent` latch prevents re-triggering. A scan only begins when `isCarAtGate() == true` AND `carPresent == false`. The latch resets only after the car fully clears the sensor (distance > 20 cm).
 * **Flash LED**: GPIO 4 fires an **80 ms HIGH pulse** immediately before `esp_camera_fb_get()` to illuminate the plate, then turns LOW.
 * **PSRAM-Aware Camera Config**: The firmware detects PSRAM at runtime via `psramFound()`:
   * **With PSRAM**: VGA resolution, JPEG quality 10, 2 frame buffers.
@@ -54,7 +54,7 @@ This document describes the current behavior of the ESP32 hardware nodes in the 
   5. On `ACTION_WELCOME`: the relay (if configured, `PARKME_GATE_RELAY_PIN ≥ 0`) fires a **3-second HIGH pulse** (`PARKME_GATE_RELAY_PULSE_MS = 3000`) to open the gate barrier.
   6. On `ACTION_DENIED`: a denial message is shown on the LCD. No relay action.
 * **No Caching**: Unlike the Sensor Node, the Camera Node does **not** cache failed uploads. If all retries fail, the spot falls back to the "ghost log" flow when the heartbeat detects physical occupancy without an active parking log.
-* **State Reset**: After the interaction completes, the LCD displays "Please / Clear gate". The node goes dormant until the ultrasonic sensor registers the car has left (distance ≥ 50 cm), which resets `carPresent` and shows "Ready to scan / Approach gate".
+* **State Reset**: After the interaction completes, the LCD displays "Please / Clear gate". The node goes dormant until the ultrasonic sensor registers the car has left (distance > 20 cm), which resets `carPresent` and shows "Ready to scan / Approach gate".
 
 ### Networking
 

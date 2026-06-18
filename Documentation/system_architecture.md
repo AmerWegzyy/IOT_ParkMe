@@ -18,7 +18,7 @@ The system uses an **Edge-Push Architecture** rather than heavy polling.
 ## 2. Event Workflows
 
 ### A. The "Park" Event (ESP32-CAM)
-1. **Trigger:** The ultrasonic sensor on the camera node detects an object < 50cm.
+1. **Trigger:** The ultrasonic sensor on the camera node detects an object <= 20cm.
 2. **Action:** The camera snaps a JPEG (VGA or QVGA depending on PSRAM) and fires a `POST` request to `/api/v1/sensors/park` containing the image and the `camera_mac`.
 3. **Processing:** The backend uses Google Cloud Vision to extract the license plate.
 4. **Validation:** The backend maps `camera_mac` to a logical spot, looks up the vehicle owner, and checks their Role-Based Access Control (RBAC) permissions against the spot's designated category.

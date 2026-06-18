@@ -19,7 +19,7 @@ The ParkMe ecosystem relies on decoupled microservices communicating over HTTP, 
 When a registered driver approaches the parking gate, the following sequence occurs:
 
 1. **Gate Trigger (Hardware $\rightarrow$ Backend):**
-   * The **Camera Node**'s ultrasonic sensor detects a vehicle within 50 cm.
+   * The **Camera Node**'s ultrasonic sensor detects a vehicle within 20 cm.
    * The camera flashes its LED for 80ms, snaps a JPEG, and sends a `multipart/form-data` request via raw TCP HTTP/1.1 to the Backend at `POST /api/v1/sensors/park`.
 2. **OCR Processing (Backend $\leftrightarrow$ Cloud Vision):**
    * The Backend receives the JPEG and immediately forwards it to the **Google Cloud Vision API**.
@@ -66,7 +66,7 @@ The physical world is chaotic. Here is exactly how the current backend and front
 
 ### D. Double Triggers (LPR Deduplication)
 * **The Scenario:** The camera node accidentally captures and sends the same vehicle's license plate multiple times in rapid succession. This typically happens for two reasons:
-   1. **Physical Fluctuation:** The driver creeps forward slowly, causing the ultrasonic sensor's distance reading to bounce back and forth across the 50cm trigger threshold.
+   1. **Physical Fluctuation:** The driver creeps forward slowly, causing the ultrasonic sensor's distance reading to bounce back and forth across the 20cm trigger threshold.
    2. **Network Stutter:** The camera sends the image successfully, but the Wi-Fi drops before the backend's `200 OK` acknowledgment arrives. The camera assumes failure and aggressively retries sending the same image.
 * **The Handling:** 
    1. To prevent spamming the database with duplicate parking logs and triggering multiple SSE UI broadcasts, the backend maintains an in-memory dictionary called `LPR_DEDUP_CACHE`.

@@ -285,7 +285,7 @@ GateAction performGateScan() {
 
 bool isCarAtGate() {
   float distanceCm = readDistanceCm();
-  return (distanceCm > 0 && distanceCm < 50.0f);
+  return (distanceCm > 0 && distanceCm <= 20.0f);
 }
 
 void setup() {

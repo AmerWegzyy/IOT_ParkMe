@@ -93,7 +93,7 @@ The ParkMe system integrates hardware sensors, camera nodes, and a cloud backend
 ### 9. Debouncing Gate Triggers
 
 - **Scenario**: The ultrasonic sensor at the gate fluctuates between "present" and "not present" due to the irregular shape of a moving vehicle.
-- **Handling**: The loop uses a **boolean state latch** (`carPresent`). It only triggers a scan when `isCarAtGate() == true` AND `carPresent == false`. The latch sets to `true` on detection and only resets to `false` after the car fully clears the sensor (distance ≥ 50 cm), preventing re-triggering during a single vehicle interaction.
+- **Handling**: The loop uses a **boolean state latch** (`carPresent`). It only triggers a scan when `isCarAtGate() == true` AND `carPresent == false`. The latch sets to `true` on detection and only resets to `false` after the car fully clears the sensor (distance > 20 cm), preventing re-triggering during a single vehicle interaction.
 
 > **Note**: The constant `PARKME_GATE_DEBOUNCE_MS` exists in `SECRETS.example.h` but is **never referenced** in the camera node firmware. All debouncing is handled by the `carPresent` latch.
 
