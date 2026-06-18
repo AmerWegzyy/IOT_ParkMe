@@ -6,9 +6,7 @@ The core application logic, database, and hardware integrations are currently st
 
 ## Outstanding Tasks
 
-- [ ] **Create Firestore Composite Indexes**
-  * *Note: If you already clicked the link in the 500 error terminal and successfully tested it, this is complete!*
-  * **Required Index:** Collection Group `parking_logs`, indexed on `spot_id` (Ascending) + `exit_time` (Ascending) + `entry_time` (Descending).
+- [ ] **Create Firestore Composite Indexes** (See guide below)
 - [ ] **Write Automated Tests** 
   * Create `pytest` suites to validate backend endpoints, specifically testing the self-healing and bouncing driver edge cases.
 - [ ] **Deploy Frontend to Firebase Hosting** (See guide below)
@@ -20,7 +18,32 @@ The core application logic, database, and hardware integrations are currently st
 
 Follow these exact steps to take the project from `localhost` to production.
 
-### Step 0: Enabling Google Cloud APIs (Required for OCR)
+### Step 0: Creating Firestore Composite Indexes (Database Prep)
+The backend's heartbeat logic requires a complex query to resolve ghost logs and calculate parking durations. Firestore requires explicit composite indexes for this, otherwise the backend will crash with a `500 FailedPrecondition` error.
+
+There are two ways to create this index:
+
+**Method 1: The Automatic Link (Recommended)**
+1. Run the backend locally (`fastapi dev main.py`).
+2. Trigger a heartbeat event from the ultrasonic sensor (or via Postman/curl).
+3. The backend will crash and print a long `FailedPrecondition` error in the terminal containing a direct Google Cloud link.
+4. `Ctrl+Click` that link. It will open your browser directly to the Firebase Console with the exact index pre-configured.
+5. Click **Create Index** and wait 3-5 minutes for it to build.
+
+**Method 2: Manual Creation via Firebase Console**
+1. Go to the [Firebase Console](https://console.firebase.google.com).
+2. Select your project (`parkme-technion-f280b`).
+3. In the left sidebar, click **Firestore Database**, then click the **Indexes** tab.
+4. Click the **Add Index** button.
+5. Set the Collection ID to `parking_logs`.
+6. Add the following fields exactly in this order:
+   - `spot_id` : **Ascending**
+   - `exit_time` : **Ascending**
+   - `entry_time` : **Descending**
+7. Set Query scopes to **Collection**.
+8. Click **Create Index** and wait 3-5 minutes for it to build.
+
+### Step 1: Enabling Google Cloud APIs (Required for OCR)
 The camera OCR relies entirely on the Google Cloud Vision API. Whether running locally or in production, you must manually enable this API in your project, or the backend will crash with a `403 Forbidden` error.
 
 1. **Navigate to the Google Cloud Console:** Go to [console.cloud.google.com](https://console.cloud.google.com).
@@ -29,7 +52,7 @@ The camera OCR relies entirely on the Google Cloud Vision API. Whether running l
 4. **Billing Verification:** Ensure your project has an active Billing Account attached. Cloud Vision offers a generous free tier (1,000 units/month), but Google requires a billing account to prevent abuse.
 5. **Propagation Time:** Wait 2-5 minutes after clicking Enable for the API activation to propagate through Google's servers before testing the camera.
 
-### Step 1: Deploying the Frontend (Firebase Hosting)
+### Step 2: Deploying the Frontend (Firebase Hosting)
 Since the frontend is pure HTML/JS/CSS, Firebase Hosting is the fastest, globally-distributed CDN for it.
 
 1. **Install Firebase CLI:**
@@ -52,9 +75,9 @@ Since the frontend is pure HTML/JS/CSS, Firebase Hosting is the fastest, globall
    firebase deploy --only hosting
    ```
    *Firebase will give you a live HTTPS URL (e.g., `https://parkme-technion-f280b.web.app`).*
-5. **Update API URL:** Once the backend is deployed (Step 2), open `Frontend/app.js` and update the `API_BASE` variable to point to your new Cloud Run URL instead of `localhost:8000`.
+5. **Update API URL:** Once the backend is deployed (Step 3), open `Frontend/app.js` and update the `API_BASE` variable to point to your new Cloud Run URL instead of `localhost:8000`.
 
-### Step 2: Deploying the Backend (Google Cloud Run)
+### Step 3: Deploying the Backend (Google Cloud Run)
 Cloud Run is perfect for FastAPI: it auto-scales to zero (saving money) and scales up instantly when a car parks.
 
 1. **Prepare the Dockerfile:**
