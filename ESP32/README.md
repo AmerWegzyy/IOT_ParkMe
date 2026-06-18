@@ -8,7 +8,7 @@ This folder now contains three Arduino deliverables:
 
 Shared files:
 
-- `SECRETS.h`: Wi-Fi, backend host, spot ids, pins, and timing values.
+- `SECRETS.h`: Wi-Fi, backend host, pins, and timing values.
 - `ParkMeCommon/ParkMeCommon.h`: reusable logic for thresholds, battery percent, heartbeats, and backend response parsing.
 - `ParkMeLcd/ParkMeLcd.h`: lightweight I2C LCD driver so you do not need a third-party LCD library.
 

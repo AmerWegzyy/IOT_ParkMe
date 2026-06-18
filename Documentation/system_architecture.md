@@ -34,6 +34,6 @@ The system uses an **Edge-Push Architecture** rather than heavy polling.
 ## 3. Security & Access Control
 
 * **Identity (JWT):** The frontend uses Firebase Authentication. A secure JWT is passed in the `Authorization` header. The backend verifies this token to determine the user's role (`student`, `lecturer`, `staff`, `admin`).
-* **Hardware Auth:** At present, hardware authentication (HMAC) has been fully decoupled from the system for streamlined development. Nodes communicate over raw HTTP/1.1 TCP sockets.
+* **Hardware Auth:** Nodes communicate over raw HTTP/1.1 TCP sockets without additional authentication headers. Security relies on network-level controls.
 * **Data Privacy (Need-to-Know Filter):** When a student loads the dashboard, the backend aggressively filters the response. It mathematically drops spots the student has no access to, and strips `license_plate` fields from occupied spots to protect privacy.
 * **Stream Security:** The SSE pipeline `/api/v1/stream` routes events exclusively to authorized users. An eavesdropping student physically cannot receive an SSE packet intended for an admin or staff member.

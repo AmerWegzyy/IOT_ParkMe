@@ -34,4 +34,4 @@ Holding the boot button (GPIO 0) for 4 seconds triggers a calibration sequence. 
 
 ### D. Duplicate LPR Deduplication
 **Scenario:** Bouncing gate frames or rapid camera retries result in identical valid plates being submitted simultaneously.
-**Handling:** The backend utilizes an in-memory `cachetools.TTLCache`. If an identical plate is read within a **120-second window**, the request is forcefully dropped with a `duplicate_within_5s` reason, saving database read/writes while comfortably covering the 45-second camera retry timeframe without impacting 6-minute heartbeats.
+**Handling:** The backend utilizes an in-memory `cachetools.TTLCache`. If an identical plate is read within a **120-second window**, the request is forcefully dropped with a `duplicate_within_window` reason, saving database read/writes while comfortably covering the 45-second camera retry timeframe without impacting 6-minute heartbeats.

@@ -267,10 +267,10 @@ async def receive_park_event(
     logger.info(f"Extracted plate {license_plate} from camera {camera_mac}")
     
     last_seen = LPR_DEDUP_CACHE.get(license_plate)
-    if last_seen and (server_time - last_seen).total_seconds() < 5:
+    if last_seen:
         return {
             "status": "dropped", 
-            "reason": "duplicate_within_5s",
+            "reason": "duplicate_within_window",
             "action": "RETRY",
             "message": "Processing..."
         }
