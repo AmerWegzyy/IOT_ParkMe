@@ -3,8 +3,8 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
-#include <ParkMeCommon.h>
-#include <ParkMeConfig.h>
+#include "ParkMeCommon.h"
+#include "ParkMeConfig.h"
 
 using namespace parkme;
 
@@ -21,10 +21,7 @@ struct PendingTelemetry {
 PendingTelemetry pendingTelemetry = {0, 100, 0};
 
 float baselineDistanceCm = PARKME_SENSOR_DEFAULT_BASELINE_CM;
-float occupiedThresholdCm = computeOccupiedThreshold(
-    PARKME_SENSOR_DEFAULT_BASELINE_CM,
-    PARKME_SENSOR_OCCUPIED_DELTA_CM,
-    PARKME_SENSOR_MIN_THRESHOLD_CM);
+float occupiedThresholdCm = PARKME_SENSOR_OCCUPIED_THRESHOLD_CM;
 
 SpotState lastPublishedState = STATE_UNKNOWN;
 unsigned long lastSampleAtMs = 0;
@@ -85,18 +82,12 @@ void loadPendingTelemetry() {
 void loadCalibration() {
   baselineDistanceCm =
       preferences.getFloat("base_cm", PARKME_SENSOR_DEFAULT_BASELINE_CM);
-  occupiedThresholdCm = computeOccupiedThreshold(
-      baselineDistanceCm,
-      PARKME_SENSOR_OCCUPIED_DELTA_CM,
-      PARKME_SENSOR_MIN_THRESHOLD_CM);
+  occupiedThresholdCm = PARKME_SENSOR_OCCUPIED_THRESHOLD_CM;
 }
 
 void saveCalibration(float baselineCm) {
   baselineDistanceCm = baselineCm;
-  occupiedThresholdCm = computeOccupiedThreshold(
-      baselineDistanceCm,
-      PARKME_SENSOR_OCCUPIED_DELTA_CM,
-      PARKME_SENSOR_MIN_THRESHOLD_CM);
+  occupiedThresholdCm = PARKME_SENSOR_OCCUPIED_THRESHOLD_CM;
   preferences.putFloat("base_cm", baselineDistanceCm);
 }
 
@@ -166,6 +157,8 @@ bool connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.print("Connected. IP: ");
     Serial.println(WiFi.localIP());
+    Serial.print("MAC: ");
+    Serial.println(WiFi.macAddress());
     return true;
   }
 
@@ -197,7 +190,19 @@ bool postTelemetry(SpotState state, int batteryPercent) {
                      PARKME_SERVER_HOST,
                      PARKME_SERVER_PORT,
                      PARKME_API_UPDATE_SPOT_PATH);
-  if (!http.begin(url)) {
+  WiFiClient plainClient;
+  WiFiClientSecure secureClient;
+  bool usingHttps = String(PARKME_SERVER_SCHEME).equalsIgnoreCase("https");
+  bool beganRequest = false;
+
+  if (usingHttps) {
+    secureClient.setInsecure();
+    beganRequest = http.begin(secureClient, url);
+  } else {
+    beganRequest = http.begin(plainClient, url);
+  }
+
+  if (!beganRequest) {
     Serial.println("HTTP begin failed.");
     return false;
   }
@@ -321,6 +326,14 @@ void setup() {
   Serial.println("ParkMe Sensor Node Started");
   Serial.print("MAC: ");
   Serial.println(WiFi.macAddress());
+  Serial.print("Spot ID: ");
+  Serial.println(PARKME_SENSOR_SPOT_ID);
+  Serial.print("Backend: ");
+  Serial.print(PARKME_SERVER_SCHEME);
+  Serial.print("://");
+  Serial.print(PARKME_SERVER_HOST);
+  Serial.print(":");
+  Serial.println(PARKME_SERVER_PORT);
   Serial.print("Loaded baseline: ");
   Serial.print(baselineDistanceCm);
   Serial.print(" cm | Threshold: ");
@@ -346,7 +359,7 @@ void loop() {
   }
   lastSampleAtMs = millis();
 
-  float distanceCm = readDistanceCm();
+  float distanceCm = sampleAverageDistance(3);
   SpotState state = classifyDistanceCm(distanceCm,
                                        occupiedThresholdCm,
                                        PARKME_SENSOR_MAX_RELIABLE_DISTANCE_CM);

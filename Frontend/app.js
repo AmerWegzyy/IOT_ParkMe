@@ -34,6 +34,7 @@ const securityLogs = document.getElementById('security-logs');
 const logoutBtn = document.getElementById('logout-btn');
 
 let eventSource = null;
+let currentProfile = null;
 
 // Parse JWT utility
 function parseJwt(token) {
@@ -88,6 +89,8 @@ logoutBtn.addEventListener('click', () => {
     if (typeof firebase !== 'undefined' && firebase.auth) {
         firebase.auth().signOut().catch(console.error);
     }
+    currentProfile = null;
+    localStorage.removeItem('parkme_profile');
     localStorage.removeItem('parkme_token');
     if (eventSource) eventSource.close();
     dashboardScreen.classList.add('hidden');
@@ -108,7 +111,8 @@ async function initDashboard() {
             throw new Error('Failed to fetch user profile');
         }
         const profile = await res.json();
-        window.currentUserProfile = profile;
+        currentProfile = profile;
+        localStorage.setItem('parkme_profile', JSON.stringify(profile));
 
         // UI Updates
         document.getElementById('user-greeting').textContent = `Welcome, ${profile.name}`;
@@ -138,6 +142,8 @@ async function initDashboard() {
     } catch (e) {
         console.error("Dashboard initialization failed:", e);
         // Clean up token and show login screen if authentication fails
+        currentProfile = null;
+        localStorage.removeItem('parkme_profile');
         localStorage.removeItem('parkme_token');
         loginScreen.classList.remove('hidden');
         dashboardScreen.classList.add('hidden');
@@ -229,7 +235,15 @@ function createSpotCard(spot) {
         </div>
     `;
 
-    if (window.currentUserProfile && window.currentUserProfile.role === 'admin') {
+    const profile = currentProfile ||
+        (() => {
+            try {
+                return JSON.parse(localStorage.getItem('parkme_profile'));
+            } catch (e) {
+                return null;
+            }
+        })();
+    if (profile && profile.role === 'admin') {
         let batt = spot.battery_level !== undefined && spot.battery_level !== null ? `${spot.battery_level}%` : 'N/A';
         let seen = spot.last_seen ? new Date(spot.last_seen).toLocaleTimeString('en-US', { timeZone: 'Asia/Jerusalem' }) : 'N/A';
         html += `
@@ -284,9 +298,6 @@ function createSpotCard(spot) {
 
 function updateSpotUI(spot) {
     const existing = document.getElementById(`spot-${spot.id}`);
-    
-    // Check role to enforce strict UI view for drivers
-    let isAdmin = window.currentUserProfile && window.currentUserProfile.role === 'admin';
 
     const newCard = createSpotCard(spot);
     if (existing) {

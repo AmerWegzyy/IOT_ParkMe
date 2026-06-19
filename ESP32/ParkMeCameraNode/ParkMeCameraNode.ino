@@ -4,9 +4,9 @@
 #include <WiFiClientSecure.h>
 #include <Wire.h>
 
-#include <ParkMeCommon.h>
-#include <ParkMeConfig.h>
-#include <ParkMeLcd.h>
+#include "ParkMeCommon.h"
+#include "ParkMeConfig.h"
+#include "ParkMeLcd.h"
 
 using namespace parkme;
 
@@ -36,6 +36,8 @@ ParkMeLcd lcd(PARKME_GATE_LCD_ADDRESS,
 
 unsigned long lastWifiAttemptAtMs = 0;
 bool carPresent = false;
+bool rawCarPresent = false;
+unsigned long lastPresenceChangeAtMs = 0;
 
 }  // namespace
 
@@ -56,6 +58,9 @@ float readDistanceCm() {
 }
 
 void showScreen(const String &line1, const String &line2) {
+  if (!PARKME_GATE_LCD_ENABLED) {
+    return;
+  }
   lcd.printAt(0, fitForLcd(line1, PARKME_GATE_LCD_COLUMNS));
   lcd.printAt(1, fitForLcd(line2, PARKME_GATE_LCD_COLUMNS));
 }
@@ -85,6 +90,8 @@ bool connectWiFi() {
     showScreen("WiFi connected", "Ready to scan");
     Serial.print("WiFi connected. IP: ");
     Serial.println(WiFi.localIP());
+    Serial.print("MAC: ");
+    Serial.println(WiFi.macAddress());
     return true;
   }
 
@@ -142,6 +149,8 @@ bool initCamera() {
 bool captureAndUpload(String &responseBody, int &httpStatusCode) {
   camera_fb_t *frame = nullptr;
 
+  Serial.println("Vehicle detected, taking photo...");
+
   if (PARKME_GATE_FLASH_LED_PIN >= 0) {
     digitalWrite(PARKME_GATE_FLASH_LED_PIN, HIGH);
     delay(80);
@@ -158,12 +167,18 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
     return false;
   }
 
+  Serial.print("Photo captured successfully. Size: ");
+  Serial.print(frame->len);
+  Serial.println(" bytes");
+
   WiFiClient plainClient;
   WiFiClientSecure secureClient;
   Client *client =
       String(PARKME_SERVER_SCHEME) == "https" ? &secureClient : &plainClient;
   secureClient.setInsecure();
   client->setTimeout(PARKME_GATE_HTTP_TIMEOUT_MS);
+
+  Serial.println("Uploading photo to backend...");
 
   if (!client->connect(PARKME_SERVER_HOST, PARKME_SERVER_PORT)) {
     esp_camera_fb_return(frame);
@@ -230,8 +245,8 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
 }
 
 GateAction handleServerDecision(const String &responseBody) {
-  GateAction action = parseGateAction(responseBody.c_str());
-  String message = extractJsonStringField(responseBody, "message");
+  GateAction action = parseGateAction(responseBody);
+  String message = extractGateMessage(responseBody);
 
   switch (action) {
     case ACTION_WELCOME:
@@ -258,6 +273,7 @@ GateAction handleServerDecision(const String &responseBody) {
 
 GateAction performGateScan() {
   if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi offline. Cannot start gate scan.");
     showScreen("WiFi offline", "Cannot scan");
     delay(1500);
     return ACTION_UNKNOWN;
@@ -269,12 +285,14 @@ GateAction performGateScan() {
   int httpStatusCode = -1;
 
   if (!captureAndUpload(responseBody, httpStatusCode)) {
+    Serial.println("Capture/upload failed. Will retry if attempts remain.");
     showScreen("Upload failed", "Try again");
     delay(2000);
     return ACTION_RETRY;
   }
 
   if (httpStatusCode < 200 || httpStatusCode >= 300) {
+    Serial.println("Backend rejected the captured photo.");
     showScreen("Server rejected", "Check backend");
     delay(2000);
     return ACTION_RETRY;
@@ -285,12 +303,44 @@ GateAction performGateScan() {
 
 bool isCarAtGate() {
   float distanceCm = readDistanceCm();
-  return (distanceCm > 0 && distanceCm <= 20.0f);
+  return (distanceCm > 0 && distanceCm < PARKME_GATE_TRIGGER_DISTANCE_CM);
+}
+
+void handleVehicleArrival() {
+  int retries = 0;
+
+  Serial.println("Vehicle arrived at gate. Starting scan workflow.");
+
+  while (retries < 3) {
+    GateAction result = performGateScan();
+
+    if (result == ACTION_WELCOME || result == ACTION_DENIED) {
+      Serial.println("Gate scan completed with a final decision.");
+      break;
+    }
+
+    if (result == ACTION_RETRY || result == ACTION_UNKNOWN) {
+      retries++;
+      Serial.print("Gate scan retry ");
+      Serial.print(retries);
+      Serial.println(" of 3.");
+      if (retries < 3) {
+        showScreen("Retrying...", String(retries) + "/3");
+        delay(1000);
+      }
+    }
+  }
+
+  Serial.println("Waiting for gate area to clear.");
+  showScreen("Please", "Clear gate");
 }
 
 void setup() {
   Serial.begin(115200);
   delay(200);
+  Serial.println();
+  Serial.println("ParkMe Camera Node Started");
+  Serial.println("Boot stage: pin setup");
 
   if (PARKME_GATE_TRIG_PIN >= 0) {
     pinMode(PARKME_GATE_TRIG_PIN, OUTPUT);
@@ -309,18 +359,31 @@ void setup() {
     digitalWrite(PARKME_GATE_RELAY_PIN, LOW);
   }
 
-  Wire.begin(PARKME_GATE_LCD_SDA_PIN, PARKME_GATE_LCD_SCL_PIN);
-  lcd.begin(Wire);
-  lcd.backlight(true);
-  showScreen("ParkMe Gate", "Booting...");
+  if (PARKME_GATE_LCD_ENABLED) {
+    Wire.begin(PARKME_GATE_LCD_SDA_PIN, PARKME_GATE_LCD_SCL_PIN);
+    Serial.println("Boot stage: LCD init");
+    lcd.begin(Wire);
+    lcd.backlight(true);
+    showScreen("ParkMe Gate", "Booting...");
+  }
 
+  Serial.println("Boot stage: camera init");
   if (!initCamera()) {
     return;
   }
 
+  Serial.println("Boot stage: WiFi init");
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   connectWiFi();
+  Serial.print("Gate spot: ");
+  Serial.println(PARKME_GATE_SPOT_ID);
+  Serial.print("Backend: ");
+  Serial.print(PARKME_SERVER_SCHEME);
+  Serial.print("://");
+  Serial.print(PARKME_SERVER_HOST);
+  Serial.print(":");
+  Serial.println(PARKME_SERVER_PORT);
   showScreen("Ready to scan", "Approach gate");
 }
 
@@ -328,30 +391,20 @@ void loop() {
   maintainWiFi();
 
   bool carCurrentlyDetected = isCarAtGate();
+  if (carCurrentlyDetected != rawCarPresent) {
+    rawCarPresent = carCurrentlyDetected;
+    lastPresenceChangeAtMs = millis();
+  }
 
-  if (carCurrentlyDetected && !carPresent) {
-    carPresent = true;
-    int retries = 0;
-    
-    while (retries < 3) {
-      GateAction result = performGateScan();
-      
-      if (result == ACTION_WELCOME || result == ACTION_DENIED) {
-        break; 
-      }
-      
-      if (result == ACTION_RETRY || result == ACTION_UNKNOWN) {
-        retries++;
-        if (retries < 3) {
-          showScreen("Retrying...", String(retries) + "/3");
-          delay(1000); // brief pause before retry
-        }
-      }
+  if (carCurrentlyDetected != carPresent &&
+      millis() - lastPresenceChangeAtMs >= PARKME_GATE_DEBOUNCE_MS) {
+    carPresent = carCurrentlyDetected;
+
+    if (carPresent) {
+      handleVehicleArrival();
+    } else {
+      Serial.println("Gate area cleared.");
+      showScreen("Ready to scan", "Approach gate");
     }
-    
-    showScreen("Please", "Clear gate");
-  } else if (!carCurrentlyDetected && carPresent) {
-    carPresent = false;
-    showScreen("Ready to scan", "Approach gate");
   }
 }

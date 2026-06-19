@@ -5,10 +5,28 @@ load_dotenv()
 import logging
 from datetime import datetime, timedelta
 import zoneinfo
+from pathlib import Path
 from typing import List
 
+
+def _resolve_il_timezone():
+    for timezone_name in ("Asia/Jerusalem", "Israel"):
+        try:
+            return zoneinfo.ZoneInfo(timezone_name)
+        except zoneinfo.ZoneInfoNotFoundError:
+            continue
+    return None
+
+
+IL_TIMEZONE = _resolve_il_timezone()
+
+
 def get_il_time():
-    return datetime.now(zoneinfo.ZoneInfo("Asia/Jerusalem"))
+    if IL_TIMEZONE is not None:
+        return datetime.now(IL_TIMEZONE)
+
+    # Windows dev machines may not have IANA tzdata installed yet.
+    return datetime.now().astimezone()
 
 from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException, status, UploadFile, File, Form, Header
 from fastapi.responses import StreamingResponse
@@ -27,14 +45,23 @@ from cachetools import TTLCache
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+backend_dir = Path(__file__).resolve().parent
+for env_filename in (".env", "env"):
+    env_path = backend_dir / env_filename
+    if env_path.exists():
+        load_dotenv(env_path)
+        break
+
 # Environment Variables
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "")
+FIREBASE_CLOCK_SKEW_SECONDS = int(os.environ.get("FIREBASE_CLOCK_SKEW_SECONDS", "10"))
 
 # Firebase Setup
-# Uses GOOGLE_APPLICATION_CREDENTIALS env var for service account JSON path
+# Uses GOOGLE_APPLICATION_CREDENTIALS locally and Cloud Run ADC in production.
 if not firebase_admin._apps:
     cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred, {"projectId": FIREBASE_PROJECT_ID})
+    firebase_options = {"projectId": FIREBASE_PROJECT_ID} if FIREBASE_PROJECT_ID else {}
+    firebase_admin.initialize_app(cred, firebase_options)
 
 firestore_client = firestore.client()
 
@@ -78,10 +105,6 @@ class BulkPayload(BaseModel):
     mac_address: str
     data: List[BulkTelemetryItem]
 
-class LoginPayload(BaseModel):
-    email: str
-    password: str
-
 class ResolvePayload(BaseModel):
     spot_id: str
 
@@ -97,6 +120,34 @@ def get_firestore_db():
     """Returns the Firestore client instance."""
     return firestore_client
 
+def get_latest_active_log_for_spot(logs_ref, spot_id: str):
+    """Returns the newest active parking log for a spot without requiring a Firestore composite index."""
+    active_logs = (
+        logs_ref
+        .where(filter=FieldFilter("spot_id", "==", spot_id))
+        .where(filter=FieldFilter("exit_time", "==", None))
+        .get()
+    )
+
+    latest_doc = None
+    latest_entry_timestamp = float("-inf")
+    for doc in active_logs:
+        entry_time = doc.to_dict().get("entry_time")
+        entry_timestamp = entry_time.timestamp() if hasattr(entry_time, "timestamp") else float("-inf")
+        if entry_timestamp > latest_entry_timestamp:
+            latest_doc = doc
+            latest_entry_timestamp = entry_timestamp
+
+    return latest_doc
+
+
+def find_spot_by_mac(spots_ref, mac_address: str, *field_names: str):
+    """Find the first parking spot whose configured MAC matches any provided field name."""
+    for field_name in field_names:
+        query = spots_ref.where(filter=FieldFilter(field_name, "==", mac_address)).limit(1).get()
+        for doc in query:
+            return doc
+    return None
 
 # ==========================================
 # LPR PROCESSING (SERVER-SIDE)
@@ -129,6 +180,28 @@ def extract_license_plate(image_bytes: bytes) -> str:
         
     return ""
 
+
+def build_gate_response(action: str,
+                        status_text: str,
+                        message: str,
+                        *,
+                        plate: str | None = None,
+                        is_violation: bool | None = None,
+                        reason: str | None = None) -> dict:
+    response = {
+        "action": action,
+        "status": status_text,
+        "message": message,
+        "display_message": message
+    }
+    if plate is not None:
+        response["plate"] = plate
+    if is_violation is not None:
+        response["is_violation"] = is_violation
+    if reason is not None:
+        response["reason"] = reason
+    return response
+
 # ==========================================
 # ENDPOINTS
 # ==========================================
@@ -139,14 +212,9 @@ async def receive_heartbeat_data(
 ):
     server_time = get_il_time()
     
-    # Find the parking spot by sensor_mac
+    # Support both the new sensor_mac schema and the older mac_address field.
     spots_ref = db.collection("parking_spots")
-    spot_query = spots_ref.where(filter=FieldFilter("sensor_mac", "==", payload.mac_address)).limit(1).get()
-    
-    spot_doc = None
-    for doc in spot_query:
-        spot_doc = doc
-        break
+    spot_doc = find_spot_by_mac(spots_ref, payload.mac_address, "sensor_mac", "mac_address")
     
     if spot_doc:
         # Update the parking spot
@@ -160,19 +228,7 @@ async def receive_heartbeat_data(
         
         # Find active parking log for this spot (no exit_time)
         logs_ref = db.collection("parking_logs")
-        active_log_query = (
-            logs_ref
-            .where(filter=FieldFilter("spot_id", "==", spot_id))
-            .where(filter=FieldFilter("exit_time", "==", None))
-            .order_by("entry_time", direction=firestore.Query.DESCENDING)
-            .limit(1)
-            .get()
-        )
-        
-        active_log_doc = None
-        for doc in active_log_query:
-            active_log_doc = doc
-            break
+        active_log_doc = get_latest_active_log_for_spot(logs_ref, spot_id)
         
         if payload.is_occupied and not active_log_doc:
             # Create a new parking log for unidentified occupancy
@@ -217,19 +273,11 @@ async def receive_heartbeat_data(
         # Get the current active log for broadcast
         license_plate = None
         is_violation = False
-        active_log_query2 = (
-            logs_ref
-            .where(filter=FieldFilter("spot_id", "==", spot_id))
-            .where(filter=FieldFilter("exit_time", "==", None))
-            .order_by("entry_time", direction=firestore.Query.DESCENDING)
-            .limit(1)
-            .get()
-        )
-        for doc in active_log_query2:
-            log_d = doc.to_dict()
+        latest_active_log_doc = get_latest_active_log_for_spot(logs_ref, spot_id)
+        if latest_active_log_doc:
+            log_d = latest_active_log_doc.to_dict()
             license_plate = log_d.get("license_plate")
             is_violation = log_d.get("is_violation", False)
-            break
         
         broadcast_spot = {
             "id": spot_id,
@@ -257,41 +305,31 @@ async def receive_park_event(
     license_plate = extract_license_plate(image_bytes)
     
     if not license_plate:
-        return {
-            "status": "failed", 
-            "reason": "could_not_read_plate",
-            "action": "RETRY",
-            "message": "Scan again"
-        }
+        return build_gate_response("RETRY",
+                                   "failed",
+                                   "scan again",
+                                   reason="could_not_read_plate")
         
     logger.info(f"Extracted plate {license_plate} from camera {camera_mac}")
-    
+
     last_seen = LPR_DEDUP_CACHE.get(license_plate)
-    if last_seen:
-        return {
-            "status": "dropped", 
-            "reason": "duplicate_within_window",
-            "action": "RETRY",
-            "message": "Processing..."
-        }
+    if last_seen and (server_time - last_seen).total_seconds() < 5:
+        return build_gate_response("RETRY",
+                                   "dropped",
+                                   "retry shortly",
+                                   plate=license_plate,
+                                   reason="duplicate_within_5s")
     LPR_DEDUP_CACHE[license_plate] = server_time
     
-    # Get the parking spot document by camera_mac
+    # Support both the new camera_mac schema and the older mac_address field.
     spots_ref = db.collection("parking_spots")
-    spot_query = spots_ref.where(filter=FieldFilter("camera_mac", "==", camera_mac)).limit(1).get()
-    
-    spot_doc = None
-    for doc in spot_query:
-        spot_doc = doc
-        break
-        
+    spot_doc = find_spot_by_mac(spots_ref, camera_mac, "camera_mac", "mac_address")
+
     if not spot_doc:
-        return {
-            "status": "failed", 
-            "reason": "invalid_camera_mac",
-            "action": "RETRY",
-            "message": "Invalid camera"
-        }
+        return build_gate_response("RETRY",
+                                   "failed",
+                                   "invalid camera",
+                                   reason="invalid_camera_mac")
         
     spot_id = spot_doc.id
     spot_data = spot_doc.to_dict()
@@ -402,20 +440,18 @@ async def receive_park_event(
         }})
 
     action = "DENIED" if is_violation else "WELCOME"
-    return {
-        "status": "park_recorded", 
-        "plate": license_plate, 
-        "is_violation": is_violation,
-        "action": action,
-        "message": display_message
-    }
+    return build_gate_response(action,
+                               "park_recorded",
+                               display_message,
+                               plate=license_plate,
+                               is_violation=is_violation)
 
 def get_current_user(authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid auth header")
     token = authorization.split(" ")[1]
     try:
-        decoded_token = auth.verify_id_token(token)
+        decoded_token = auth.verify_id_token(token, clock_skew_seconds=FIREBASE_CLOCK_SKEW_SECONDS)
         uid = decoded_token.get("uid")
         email = decoded_token.get("email")
         
@@ -554,8 +590,7 @@ async def stream_events(token: str = None):
     if not token:
         raise HTTPException(status_code=401, detail="Missing token")
     try:
-        decoded_token = auth.verify_id_token(token)
-        uid = decoded_token.get("uid")
+        decoded_token = auth.verify_id_token(token, clock_skew_seconds=FIREBASE_CLOCK_SKEW_SECONDS)
         email = decoded_token.get("email")
         
         db = firestore_client
@@ -642,14 +677,9 @@ async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_c
 async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)):
     logger.info(f"Received {len(payload.data)} cached events from {payload.mac_address}")
     
-    # Find the parking spot by sensor_mac
+    # Support both the new sensor_mac schema and the older mac_address field.
     spots_ref = db.collection("parking_spots")
-    spot_query = spots_ref.where(filter=FieldFilter("sensor_mac", "==", payload.mac_address)).limit(1).get()
-    
-    spot_doc = None
-    for doc in spot_query:
-        spot_doc = doc
-        break
+    spot_doc = find_spot_by_mac(spots_ref, payload.mac_address, "sensor_mac", "mac_address")
         
     if not spot_doc:
         logger.warning(f"Bulk data received for unknown MAC: {payload.mac_address}")
@@ -661,23 +691,11 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
     events = sorted(payload.data, key=lambda x: x.t)
     
     for item in events:
-        event_time = datetime.fromtimestamp(item.t, tz=zoneinfo.ZoneInfo("Asia/Jerusalem"))
+        event_time = datetime.fromtimestamp(item.t, tz=IL_TIMEZONE) if IL_TIMEZONE else datetime.fromtimestamp(item.t).astimezone()
         is_occupied = item.v
         
         # Get current active log
-        active_log_query = (
-            logs_ref
-            .where(filter=FieldFilter("spot_id", "==", spot_id))
-            .where(filter=FieldFilter("exit_time", "==", None))
-            .order_by("entry_time", direction=firestore.Query.DESCENDING)
-            .limit(1)
-            .get()
-        )
-        
-        active_log_doc = None
-        for doc in active_log_query:
-            active_log_doc = doc
-            break
+        active_log_doc = get_latest_active_log_for_spot(logs_ref, spot_id)
             
         if is_occupied and not active_log_doc:
             logs_ref.add({
@@ -721,19 +739,11 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
         
         license_plate = None
         is_violation = False
-        active_log_query2 = (
-            logs_ref
-            .where(filter=FieldFilter("spot_id", "==", spot_id))
-            .where(filter=FieldFilter("exit_time", "==", None))
-            .order_by("entry_time", direction=firestore.Query.DESCENDING)
-            .limit(1)
-            .get()
-        )
-        for doc in active_log_query2:
-            log_d = doc.to_dict()
+        latest_active_log_doc = get_latest_active_log_for_spot(logs_ref, spot_id)
+        if latest_active_log_doc:
+            log_d = latest_active_log_doc.to_dict()
             license_plate = log_d.get("license_plate")
             is_violation = log_d.get("is_violation", False)
-            break
         
         broadcast_spot = {
             "id": spot_id,
@@ -748,6 +758,5 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
 
     return {"status": "bulk_processed", "events": len(payload.data)}
 
-import os
 frontend_dir = os.path.join(os.path.dirname(__file__), "../Frontend")
 app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")

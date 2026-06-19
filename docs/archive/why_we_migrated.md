@@ -1,177 +1,110 @@
-# ParkMe — Why We Migrated to Google Cloud + Firebase
+# Why We Migrated to Google Cloud and Firebase
 
-A quick explanation for the team on what changed, why, and what you need to know.
+This note explains why the repository moved away from the older Render + SQL stack and what the change means for the team.
 
----
+## Why the Migration Happened
 
-## Why Did We Migrate?
+The migration was driven by three practical reasons:
 
-### 1. Instructor Requirement
-Our instructor asked us to use **Google Cloud** and **Google Firebase** for the project infrastructure.
+1. Course and infrastructure requirements
+   - The project needed to use Google Cloud and Firebase.
+2. Budget and operations
+   - The team can use Google Cloud credits on the shared Google account.
+   - Cloud Run scales down when the system is idle.
+3. Better fit for the current product
+   - Firestore fits the event-driven parking model well.
+   - Firebase Authentication is a cleaner web-login path than a custom backend login endpoint.
+   - Google Cloud Vision replaces the heavier local OCR toolchain.
 
-### 2. Free Credits
-Technion provides Google Cloud coupons — so the entire infrastructure is **free** for us. With Render + Supabase, we would hit free tier limits quickly.
+## What Changed
 
-### 3. Better Fit for IoT
-- **Google Cloud Run** scales to zero — we don't pay when nobody is using the system (and it wakes up automatically when an ESP32 sends data)
-- **Firebase Firestore** has built-in real-time capabilities, which fits perfectly with our live parking updates
-- **Firebase has excellent web SDKs** — easier integration with our web app if needed
+### Backend hosting
 
-### 4. Everything Under One Roof
-Before, we had two separate services (Render for server, Supabase for database). Now **both the server and database are managed by Google** — one dashboard, one billing, one set of credentials.
+- Before: Render
+- Now: Google Cloud Run
 
----
+Impact:
 
-## What Changed?
+- `Backend/render.yaml` was removed.
+- `Backend/cloudbuild.yaml` was added.
+- `Backend/Dockerfile` now matches Cloud Run deployment expectations.
 
-### The Server (where our code runs)
+### Database layer
 
-| | Before | After |
-|---|---|---|
-| **Platform** | Render | Google Cloud Run |
-| **What it runs** | Same FastAPI + Uvicorn | Same FastAPI + Uvicorn |
-| **Region** | Frankfurt, Germany | Tel Aviv, Israel (`me-west1`) — **closer to Technion!** |
-| **Deployment** | Push to GitHub → Render auto-deploys | `gcloud builds submit` → Cloud Build auto-deploys |
+- Before: SQL-based storage with schema and seed SQL files
+- Now: Firebase Firestore
 
-> **For you as a developer:** The server code (FastAPI, endpoints, logic) works exactly the same. The difference is just *where* it runs.
+Impact:
 
----
+- SQL queries in `Backend/main.py` were replaced with Firestore SDK calls.
+- `Backend/schema.sql` and `Backend/seed.sql` were removed.
+- `Backend/seed_firestore.py` was added.
 
-### The Database (where our data is stored)
+### OCR pipeline
 
-| | Before (SQL) | After (Firestore) |
-|---|---|---|
-| **Type** | PostgreSQL (relational) | Firestore (NoSQL / document-based) |
-| **Structure** | Tables with rows & columns | Collections with JSON documents |
-| **Queries** | SQL (`SELECT * FROM users WHERE...`) | Firestore SDK (`db.collection("users").where(...)`) |
-| **JOINs** | Built-in (`JOIN users ON...`) | Done manually in Python (two queries + merge) |
-| **Local file** | `parkme.db` (SQLite for dev) | No local file — always connects to cloud |
+- Before: OpenCV + Tesseract inside the backend container
+- Now: Google Cloud Vision API
 
-> **For you as a developer:** If you write new endpoints or modify existing ones, you'll use Firestore SDK calls instead of SQL. See examples below.
+Impact:
 
----
+- `Backend/main.py` now calls Cloud Vision for text detection.
+- `Backend/requirements.txt` now depends on `google-cloud-vision`.
+- The Docker image no longer needs the old Tesseract stack.
 
-## What Does the Code Look Like Now?
+### Web authentication
 
-### Reading data — Before vs After
+- Before: custom FastAPI login endpoint
+- Now: Firebase Authentication
 
-**Before (SQL):**
-```python
-# Find a user by email
-user = db.execute(
-    text("SELECT id, name, email, role FROM users WHERE email = :email"),
-    {"email": "student@technion.ac.il"}
-).fetchone()
+Impact:
 
-print(user.name)  # "John Doe"
-```
+- The frontend signs in directly with Firebase.
+- The backend verifies Firebase ID tokens.
+- The Firestore `users` collection remains the source of roles and display names.
 
-**After (Firestore):**
-```python
-# Find a user by email
-users_query = db.collection("users") \
-    .where("email", "==", "student@technion.ac.il") \
-    .limit(1).get()
+### Frontend hosting
 
-user = users_query[0].to_dict()
-print(user["name"])  # "John Doe"
-```
+- Before: only served by the backend
+- Now: still serveable by the backend, with Firebase Hosting added as the recommended static-hosting option
 
----
+Impact:
 
-### Writing data — Before vs After
+- `firebase.json` and `.firebaserc` were added.
+- `Frontend/index.html` loads Firebase SDKs.
+- `Frontend/app.js` now uses Firebase Auth and a Cloud Run production URL.
 
-**Before (SQL):**
-```python
-db.execute(
-    text("INSERT INTO parking_logs (spot_id, license_plate) VALUES (:spot, :plate)"),
-    {"spot": "A1", "plate": "1234567"}
-)
-db.commit()
-```
+## What Stayed Similar
 
-**After (Firestore):**
-```python
-db.collection("parking_logs").add({
-    "spot_id": "A1",
-    "license_plate": "1234567"
-})
-# No commit needed — Firestore writes are instant
-```
+These areas stayed mostly familiar:
 
----
+- The FastAPI project structure is still the backend core.
+- Most business endpoints remain under `/api/v1`.
+- The frontend UI is still plain HTML/CSS/JS.
+- The ESP32 firmware flow is still heartbeat plus image upload.
 
-### Updating data — Before vs After
+## What Changed for Daily Development
 
-**Before (SQL):**
-```python
-db.execute(
-    text("UPDATE parking_spots SET is_occupied = TRUE WHERE id = :id"),
-    {"id": "A1"}
-)
-db.commit()
-```
+### Backend work
 
-**After (Firestore):**
-```python
-db.collection("parking_spots").document("A1").update({
-    "is_occupied": True
-})
-```
+- New database reads and writes must use Firestore SDK calls instead of SQL.
+- Local backend runs need Google credentials and a Firebase project.
+- Some queries require Firestore composite indexes.
 
----
+### Frontend work
 
-## What Stays Exactly the Same?
+- Local login now depends on Firebase web config.
+- Production API calls should target the Cloud Run URL.
 
-All of these are **unchanged** — no need to touch them:
+### Hardware work
 
-- ✅ All API endpoint URLs (`/api/v1/spots`, `/api/v1/sensors/heartbeat`, etc.)
-- ✅ All request and response JSON formats
-- ✅ The Web Frontend (HTML/CSS/JS — zero changes)
-- ✅ ESP32 sensor code (just update the server URL)
-- ✅ JWT authentication for users
-- ✅ License plate OCR processing
-- ✅ Real-time SSE updates
+- Firmware still needs a backend host and spot identifiers configured locally.
+- The final deployed backend host must be copied into `ESP32/SECRETS.h`.
+- Signed hardware traffic should use the same `ESP32_HMAC_SECRET` in firmware and backend.
 
----
+## Read Next
 
-## What Do I Need to Do as a Team Member?
-
-### If you work on the Backend:
-
-1. **Get the `serviceAccountKey.json`** file from the team lead (or generate your own from Firebase Console)
-2. **Place it in `Backend/`**
-3. **Set the env variable:** `export GOOGLE_APPLICATION_CREDENTIALS=./serviceAccountKey.json`
-4. **Run as usual:** `uvicorn main:app --reload`
-5. When writing new database queries, use **Firestore SDK** instead of SQL (see examples above)
-
-### If you work on the ESP32 / Hardware:
-
-Nothing changes. Just update the server URL in the ESP32 code once deployed.
-
-### If you work on the Web Frontend:
-
-Nothing changes. The frontend is served by the same FastAPI backend.
-
----
-
-## Key Files Changed
-
-| File | What |
-|------|------|
-| `Backend/main.py` | All SQL queries → Firestore SDK calls |
-| `Backend/requirements.txt` | Removed `sqlalchemy`, added `firebase-admin` |
-| `Backend/Dockerfile` | Removed PostgreSQL libs, reads `$PORT` from Cloud Run |
-| `Backend/cloudbuild.yaml` | **New** — CI/CD pipeline for Google Cloud (replaces `render.yaml`) |
-| `Backend/seed_firestore.py` | **New** — Seeds Firestore with test data |
-| `Backend/.env.example` | Updated env vars for Firebase |
-
----
-
-## Questions?
-
-Check the `Documentation/` folder for more details:
-- `setup_guide.md` — How to set up everything from scratch
-- `how_to_run_locally.md` — How to run locally for development
-- `firestore_database_structure.md` — How the data is organized in Firestore
-- `migration_to_google_cloud_and_firebase.md` — Full technical diff of what changed
+- `Documentation/setup_guide.md`
+- `Documentation/google_cloud_firebase_team_checklist.md`
+- `Documentation/how_to_run_locally.md`
+- `Documentation/migration_to_google_cloud_and_firebase.md`
+- `Documentation/firestore_database_structure.md`

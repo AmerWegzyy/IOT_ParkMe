@@ -1,5 +1,5 @@
 {
   "projects": {
-    "default": "parkme-technion"
+    "default": "YOUR_FIREBASE_PROJECT_ID"
   }
 }

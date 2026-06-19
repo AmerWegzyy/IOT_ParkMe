@@ -1,90 +1,154 @@
-# ParkMe — System Architecture & Workflow
+# ParkMe System Architecture and Workflow
 
-This document provides a high-level overview of how the different components of the ParkMe system communicate and work together to provide a seamless smart parking experience.
+This document describes the current repository architecture after the migration to Google Cloud and Firebase.
 
----
+## 1. Main Components
 
-## 1. System Components
+ParkMe is made of six cooperating parts:
 
-The ParkMe ecosystem consists of four main pillars:
+1. `ESP32` sensor nodes
+   - Detect occupancy with ultrasonic sensors
+   - Send heartbeats with MAC address, occupancy state, and battery level
+2. `ESP32-CAM` gate/camera nodes
+   - Capture an image when a vehicle arrives
+   - Upload the image and spot identifier to the backend
+3. FastAPI backend
+   - Runs the API
+   - Verifies Firebase ID tokens
+   - Reads and writes Firestore
+   - Calls Google Cloud Vision for OCR
+   - Broadcasts live updates over Server-Sent Events
+4. Firebase Firestore
+   - Stores users, vehicles, parking spots, and parking logs
+5. Firebase Authentication
+   - Authenticates dashboard users with email/password
+6. Frontend
+   - Static HTML/CSS/JS dashboard
+   - Can be served by the backend or deployed through Firebase Hosting
 
-1.  **Hardware (ESP32 Sensors):** The physical IoT edge devices deployed at each parking spot. They detect physical presence and capture images of license plates.
-2.  **Backend (FastAPI on Google Cloud Run):** The central brain of the system. It handles business logic, security, image processing (OCR via Google Cloud Vision API), and real-time event broadcasting. Environment variables are loaded from `.env` via `dotenv`.
-3.  **Database (Firebase Firestore):** A NoSQL cloud database that stores all persistent data, including users, vehicles, parking spots state, and historical parking logs.
-4.  **Frontend (Web App):** The user interface where drivers and administrators can view real-time parking availability and logs. Served via FastAPI's StaticFiles mount at `/`.
-
----
-
-## 2. Architecture Diagram
+## 2. High-Level Diagram
 
 ```mermaid
 graph TD
-    subgraph Edge Layer
-        SENSOR[ESP32 Sensor Node<br/>HC-SR04 Proximity]
-        CAMERA[ESP32-CAM Gate Node<br/>Camera + HC-SR04 + LCD + Relay]
+    subgraph Edge
+        S[ESP32 sensor node]
+        C[ESP32-CAM node]
     end
 
-    subgraph Cloud Layer ["Cloud Layer (Google Cloud Platform)"]
-        API[FastAPI Backend<br/>Google Cloud Run]
-        VISION[Google Cloud Vision API<br/>OCR Engine]
-        DB[(Firebase Firestore<br/>NoSQL Database)]
-        AUTH[Firebase Auth<br/>User Authentication]
+    subgraph Google Cloud and Firebase
+        API[FastAPI backend]
+        V[Google Cloud Vision API]
+        DB[(Firestore)]
+        AUTH[Firebase Auth]
+        HOST[Firebase Hosting]
     end
 
-    subgraph Presentation Layer
-        WEB[Web Dashboard<br/>HTML/CSS/JS]
+    subgraph Web
+        UI[Browser dashboard]
     end
 
-    %% Communication paths
-    SENSOR -- 1. Heartbeats<br/>HTTP/HTTPS --> API
-    CAMERA -- 2. Park Events + Images<br/>Raw HTTP/1.1 over TCP --> API
-    API -- 3. OCR Request --> VISION
-    API -- 4. Read/Write Data --> DB
-    WEB -- 5. API Requests, JWT Auth --> API
-    API -- 6. SSE, Server-Sent Events --> WEB
-    WEB -- 7. Login --> AUTH
+    S -->|Heartbeat JSON| API
+    C -->|Multipart image + spot_id| API
+    API -->|OCR request| V
+    API -->|Read and write| DB
+    UI -->|Sign in| AUTH
+    UI -->|Bearer token| API
+    API -->|SSE updates| UI
+    HOST -->|Static frontend| UI
 ```
 
----
+## 3. Current Backend Workflows
 
-## 3. Core Workflows
+### Sensor heartbeat flow
 
-### Scenario A: A Vehicle Parks (The "Park" Event)
+1. The sensor posts to `POST /api/v1/sensors/heartbeat`.
+2. The payload contains:
+   - `mac_address`
+   - `is_occupied`
+   - `battery_level`
+3. The backend finds the matching Firestore parking spot by `mac_address`.
+4. It updates:
+   - `last_seen`
+   - `battery_level`
+   - `is_occupied`
+5. If the spot becomes occupied without an active parking log, the backend creates an `UNIDENTIFIED` log.
+6. If the spot becomes free and the active session is very short, the backend marks it as `ABORTED`.
+7. Any queued sensor telemetry is flushed once connectivity returns.
+8. The backend pushes an SSE `spot_update` event to connected dashboards.
 
-1.  **Detection:** The ESP32-CAM gate node detects a vehicle arriving within 20 cm using its HC-SR04 proximity sensor.
-2.  **Capture:** The ESP32-CAM turns on the flash LED for 80ms and captures a JPEG snapshot of the vehicle's license plate.
-3.  **Transmission:** The ESP32-CAM sends the image to the backend via a `POST /api/v1/sensors/park` request using raw HTTP/1.1 over TCP. The camera retries up to 3 times on failure.
-4.  **Processing (OCR):** The backend receives the image and sends it to the **Google Cloud Vision API** for text detection. The Vision API response is parsed to extract the license plate string.
-5.  **Validation:** 
-    *   The backend queries **Firestore** to find the vehicle associated with that license plate and its owner's role.
-    *   It compares the owner's role with the parking spot's allowed category.
-6.  **Database Update:** 
-    *   A new entry is created in the `parking_logs` Firestore collection. If the user isn't allowed to park there (or is unregistered), it's flagged as a violation.
-    *   The `parking_spots` Firestore document is updated to show `is_occupied: true`.
-7.  **Response to Hardware:** The backend returns a JSON response with `action` (`"WELCOME"` or `"DENIED"`) and a `message` for the LCD display. If `action` is `"WELCOME"`, the gate node opens the barrier relay for 3 seconds.
-8.  **Real-Time Broadcast:** The backend sends a Server-Sent Event (SSE) to all connected Web App clients, immediately updating the UI to show the spot as taken (and triggering an alert if it's a violation). SSE `spot_update` events are filtered by user role; `log_event` events are admin-only.
+### Camera parking flow
 
-### Scenario B: Continuous Monitoring (The "Heartbeat")
+1. The camera posts to `POST /api/v1/sensors/park`.
+2. The request contains:
+   - `spot_id`
+   - `file`
+3. The backend sends the image bytes to Google Cloud Vision.
+4. OCR extracts digits from the detected text.
+5. The backend:
+   - looks up the parking spot in Firestore
+   - looks up the vehicle by license plate
+   - looks up the matching user profile
+   - decides whether the parking event is allowed
+6. A new `parking_logs` document is created, or a stale `UNIDENTIFIED` log is self-healed if the camera succeeds after the heartbeat already created a ghost log.
+7. The spot is marked occupied and the dashboard receives live updates.
+8. The backend returns a gate decision payload with `action` and `message` for the LCD and relay behavior.
 
-1.  **Periodic Check-in:** Every 6 minutes, the ESP32 Sensor Node sends a lightweight heartbeat to `POST /api/v1/sensors/heartbeat`. This includes the current physical occupancy and battery level.
-2.  **Database Update:** The backend updates the corresponding spot in Firestore with the latest `last_seen` timestamp, battery level, and physical occupancy.
-3.  **Anomaly Detection:** 
-    *   **Ghost Car:** If the heartbeat says "occupied" but there is no active log (maybe the camera failed to capture the plate), the backend creates an "UNIDENTIFIED" log and flags a violation.
-    *   **Bouncing Driver:** If a car leaves within 60 seconds of arriving, the backend intercepts the departure and marks the log as "ABORTED" with `is_violation = False`, canceling any potential violation.
-4.  **Offline Resilience:** If the Sensor Node cannot reach the server, it caches the telemetry data in NVS (non-volatile storage) and flushes it automatically once connectivity is restored.
-5.  **Real-Time Broadcast:** Any changes in state are broadcasted via SSE to the web frontend.
+### Web dashboard flow
 
-### Scenario C: Web Frontend Usage
+1. The frontend signs in through Firebase Authentication.
+2. Firebase returns an ID token to the browser.
+3. The frontend sends that token to the backend as `Authorization: Bearer ...`.
+4. The backend verifies the token with Firebase Admin SDK.
+5. The backend looks up the matching user profile in Firestore by email.
+6. The frontend loads:
+   - `GET /api/v1/users/me`
+   - `GET /api/v1/spots`
+   - `GET /api/v1/logs` for admins
+7. The frontend opens `GET /api/v1/stream?token=...` for live updates.
+8. Admin users can acknowledge unresolved `UNIDENTIFIED` events after the frontend retry cooldown finishes.
 
-1.  **Login:** A user logs into the Web App. The frontend authenticates directly against Firebase Auth and retrieves a Firebase ID token.
-2.  **Initial Load:** The frontend fetches the user's role/profile from `GET /api/v1/users/me` and the spot statuses from `GET /api/v1/spots` (sending the Firebase ID token in the Authorization header). The backend fetches the current state of all spots from Firestore, filtering them based on the user's role (e.g., an admin sees everything, a student only sees student spots).
-3.  **Live Updates:** The frontend opens a persistent connection to `GET /api/v1/stream`. It listens for SSE events. When a car parks or leaves, the backend pushes the update down this stream, and the frontend updates the map/list without needing to refresh the page. `spot_update` events are filtered by the user's role; `log_event` events are only sent to admin users.
-4.  **Admin Resolution:** If an admin sees an "UNIDENTIFIED" car, they can manually inspect it. To prevent race conditions during camera failures, the UI enforces a **45-second freeze/countdown** on the "Resolve" button to allow the Camera Node to finish its network retries. Once unlocked, the admin can click it to call `PUT /api/v1/sensors/resolve`. The backend updates the Firestore log to "RESOLVED" and clears the violation.
+## 4. Platform Changes from the Pre-Migration Version
 
----
+The repo no longer uses the original Render + SQL stack.
 
-## 4. Security & Authentication
+Current platform choices:
 
-*   **Device-to-Cloud (ESP32 to Backend):** Hardware requests do not currently implement authentication. Communication from the Camera Node uses raw HTTP/1.1 over TCP.
-*   **User-to-Cloud (Web App to Backend):** Uses **Firebase ID Tokens (JWT)**. When a user logs in via the client, they receive a secure token signed by Google. They send this token in the `Authorization` header for subsequent requests. The backend verifies it via the Firebase Admin SDK and retrieves user properties (like roles) from Firestore to enforce role-based access control (RBAC).
-*   **Cloud-to-Database (Backend to Firestore):** Uses **Google Application Default Credentials (ADC)** via the `serviceAccountKey.json`. This provides secure server-to-server authentication within Google's infrastructure.
+- Backend runtime: Google Cloud Run
+- Database: Firebase Firestore
+- Web authentication: Firebase Authentication
+- OCR provider: Google Cloud Vision API
+- Static hosting: Firebase Hosting
+
+Removed platform assumptions:
+
+- Render deployment config
+- SQL schema and SQL seed files
+- OpenCV/Tesseract OCR pipeline
+- Custom backend login endpoint
+
+## 5. Security Model
+
+### Web auth
+
+- The frontend authenticates with Firebase Auth.
+- The backend verifies Firebase ID tokens before serving protected routes.
+- User role and profile data are stored in Firestore.
+
+### Backend-to-Google auth
+
+- Local development uses `GOOGLE_APPLICATION_CREDENTIALS` with a downloaded service-account JSON file.
+- Cloud Run uses Application Default Credentials from the runtime service account.
+
+### Device auth
+
+- The backend includes HMAC verification support for ESP32 requests.
+- The same `ESP32_HMAC_SECRET` should be configured on backend and firmware before production use.
+- The current code path allows unsigned requests when those headers are omitted, so hardening that production path is still a follow-up task.
+
+## 6. Important Integration Notes
+
+- Firestore spot IDs in the seeded data are string IDs such as `A1`, `A2`, `B1`, and `C2`.
+- Heartbeats are matched by `parking_spots.mac_address`, not by the numeric sensor label in firmware.
+- The frontend still needs the final deployed Cloud Run URL in `Frontend/app.js` for production use.
+- The firmware still needs a local `ESP32/SECRETS.h` file with Wi-Fi and backend host values.
+- Firebase Auth users must exist in Firebase Authentication and have matching emails in Firestore.

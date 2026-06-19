@@ -1,100 +1,152 @@
-# ParkMe API Documentation (Swagger UI Tour)
+# ParkMe API Documentation
 
-Here is a complete guided tour of your FastAPI Swagger UI documentation at `http://localhost:8000/docs#/`. FastAPI automatically generates this interactive interface based exactly on the Python code we wrote in `main.py`.
+This file is a lightweight route summary for the current backend.
 
-> **Note:** The frontend (Vanilla JS) is served directly by FastAPI via a `StaticFiles` mount, so the same server that handles the API also serves the web UI — no separate web server needed.
+For the main migration and setup notes, prefer the files in `Documentation/`.
 
----
+> The frontend is served directly by FastAPI through `StaticFiles`, so the same server can host both the API and the local dashboard UI.
 
-### 🟢 Part 1: The "default" Dropdowns (Your API Endpoints)
+## Current Auth Model
 
-Because we didn't explicitly group our endpoints into custom "tags" (like "Users", "Sensors", etc.), FastAPI groups them all under a single section called **default**. Here are the dropdowns you see, representing every route your server exposes:
+- Web users sign in with Firebase Authentication.
+- Protected backend routes expect a Firebase ID token in the `Authorization` header.
+- The backend verifies the token and then loads the matching Firestore user profile.
 
-#### 1. `GET /api/v1/stream`
-* **What it is**: The Server-Sent Events (SSE) pipeline. This is the persistent, one-way tunnel that pipes real-time data from the backend to the frontend.
-* **Inside the dropdown**: 
-  * **Parameters**: It expects a `token` (string) as a query parameter (e.g., `?token=eyJ...`). 
-  * **Responses**: A successful response (`200`) returns `text/event-stream`, which is the live continuous text feed. A `401` means the token was missing or invalid.
-  * **Role filtering**: `spot_update` events are filtered by the user's role (e.g., standard drivers only see relevant spots). `log_event` messages are only sent to admin connections.
+## Current Main Routes
 
-#### 2. `POST /api/v1/sensors/park`
-* **What it is**: The Edge Sensor Fusion endpoint. When the ESP32 camera detects a car entering, it captures a JPEG and fires it here. The backend runs the image through **Google Cloud Vision API** for license-plate recognition (LPR).
-* **Inside the dropdown**:
-  * **Request Body (multipart/form-data)**: It accepts `camera_mac` (string — the MAC address of the ESP32-CAM camera node) as a text form field and `file` (a binary JPEG upload). The backend dynamically resolves the `spot_id` by querying Firestore for the matching `camera_mac`.
-  * **Responses**: A `200 OK` returns a JSON object with `status`, `action`, and `message` keys:
-    * **Authorized plate**: `{"status": "ok", "action": "WELCOME", "message": "Welcome, <name>!"}`
-    * **Unauthorized plate**: `{"status": "ok", "action": "DENIED", "message": "Not authorized"}`
-    * **OCR failure**: `{"status": "failed", "reason": "could_not_read_plate", "action": "RETRY", "message": "Scan again"}`
-    * **Duplicate within 5s**: `{"status": "dropped", "reason": "duplicate_within_5s", "action": "RETRY", "message": "Processing..."}`
-    * **Invalid spot**: `{"status": "failed", "reason": "invalid_spot_id", "action": "RETRY", "message": "Invalid spot"}`
-  * **Behind the scenes**: The endpoint also performs ghost-log self-healing (overwrites stale `UNIDENTIFIED` logs with real plate data) and bouncing-driver detection (if a car leaves within 60 seconds, the session is marked `ABORTED`).
+### `POST /api/v1/sensors/heartbeat`
 
-#### 3. `POST /api/v1/sensors/heartbeat`
-* **What it is**: The lifeline endpoint for the ESP32. The sensor periodically POSTs its current physical state so the server knows it hasn't died and the battery isn't empty.
-* **Inside the dropdown**:
-  * **Request Body**: Expects a JSON matching the `HeartbeatPayload` schema (MAC address, occupancy state, battery level).
-  * **Responses**: **`202 Accepted`** confirms receipt. This is also where the backend secretly detects "Broken Camera" anomalies — if the heartbeat says "Occupied" but the system has no record of an image being sent!
-  * **Spot lookup**: The backend finds the parking spot by querying the `parking_spots` collection for the document whose `sensor_mac` field matches the provided `mac_address`. There is no `spot_id` in this payload.
+Purpose:
 
-#### 4. `PUT /api/v1/sensors/resolve`
-* **What it is**: The admin tool to fix anomalies. If a camera breaks or gets covered in mud, the system flags the spot as `UNIDENTIFIED`. 
-* **Inside the dropdown**:
-  * **Parameters**: It requires an `Authorization` header containing the admin's Bearer token.
-  * **Request Body**: Expects JSON matching `ResolvePayload` (`spot_id` as a string).
-  * **Responses**: `200 OK` confirms the anomaly was manually cleared by the admin. `403` means a standard user tried to hack the endpoint.
+- update a parking spot's live hardware status
 
-#### 5. `GET /api/v1/spots`
-* **What it is**: The initialization endpoint for the Vanilla JS frontend map.
-* **Inside the dropdown**:
-  * **Parameters**: Requires an `Authorization` Bearer token.
-  * **Responses**: A `200 OK` returns a JSON array of `spots`. Behind the scenes, the backend uses the token to dynamically filter this array:
-    * **Admin users** see all spots, including sensitive fields like `license_plate`, `battery_level`, and `last_seen`.
-    * **Standard drivers** only receive spots matching their category (e.g., special-needs) and without the sensitive fields.
+Payload:
 
-#### 6. `GET /api/v1/logs`
-* **What it is**: The endpoint that fetches the historical security feed for the admin panel.
-* **Inside the dropdown**:
-  * **Parameters**: Requires an `Authorization` Bearer token.
-  * **Responses**: A `200 OK` returns an array of the 50 most recent security alerts (unauthorized plates or camera failures). `403 Forbidden` triggers if a standard driver tries to peek at the logs.
+```json
+{
+  "mac_address": "AA:BB:CC:DD:EE:01",
+  "is_occupied": true,
+  "battery_level": 92.0
+}
+```
 
-#### 7. `GET /api/v1/users/me`
-* **What it is**: Fetches the authenticated user's profile and role details.
-* **Inside the dropdown**:
-  * **Parameters**: Requires an `Authorization` Bearer token containing a verified Firebase ID Token.
-  * **Responses**: A `200 OK` returns user data: `uid`, `user_id`, `email`, `name`, `role`, `is_special_needs`. `401 Unauthorized` triggers if the Firebase ID Token is invalid or expired.
+Notes:
 
-#### 8. `POST /api/v1/telemetry/bulk`
-* **What it is**: A bulk telemetry ingestion endpoint. The ESP32 can batch multiple telemetry events (e.g., cached readings from NVS storage) and send them in one shot.
-* **Inside the dropdown**:
-  * **Request Body**: Expects a JSON matching the `BulkPayload` schema — an object containing an `events` array of `BulkTelemetryItem` objects.
-  * **Responses**: `200 OK` acknowledges receipt. Currently this endpoint logs the events but does not perform advanced processing or storage — it's a forward-looking hook for future analytics.
+- the backend resolves the spot by `mac_address`
+- the route creates or closes active parking logs as needed
+- this is also where ghost `UNIDENTIFIED` occupancy can be created when a sensor reports occupied before a valid camera event arrives
 
----
+### `POST /api/v1/sensors/park`
 
-### 📦 Part 2: The "Schemas" Section
+Purpose:
 
-At the very bottom of the page, FastAPI lists all the "Schemas". These are the strict data blueprints (Pydantic Models) we defined to ensure the backend only accepts perfectly formatted data. If a client sends data that violates a schema, FastAPI instantly rejects it with a `422 Unprocessable Entity` error before our code even runs.
+- receive an image from the ESP32-CAM and evaluate the parking event
 
-#### 1. `HeartbeatPayload`
-* **What it is**: The strict blueprint for the ESP32's periodic check-in.
-* **Inside the dropdown**: You'll see it strictly requires `mac_address` (string), `is_occupied` (boolean: true/false), and `battery_level` (float: 0–100). If the ESP32 forgets to send the battery level, FastAPI rejects it. Note: there is no `spot_id` here — the backend resolves the spot by querying the `parking_spots` collection for the document whose `sensor_mac` field matches the provided `mac_address`.
+Request type:
 
-#### 2. `ResolvePayload`
-* **What it is**: The blueprint for the "Acknowledge & Resolve" button click.
-* **Inside the dropdown**: Requires exactly one field: `spot_id` (string, e.g. `"444"`). 
+- `multipart/form-data`
 
-#### 3. `LoginPayload`
-* **What it is**: The blueprint for user login/registration data.
-* **Inside the dropdown**: Contains the fields needed when syncing a Firebase-authenticated user with the local database.
+Fields:
 
-#### 4. `BulkTelemetryItem`
-* **What it is**: A single telemetry event inside a bulk upload.
-* **Inside the dropdown**: Represents one timestamped reading from a sensor node.
+- `spot_id` as text
+- `file` as the uploaded image
 
-#### 5. `BulkPayload`
-* **What it is**: The wrapper for the bulk telemetry endpoint.
-* **Inside the dropdown**: Contains an `events` array of `BulkTelemetryItem` objects.
+Notes:
 
-#### 6. `HTTPValidationError` & `ValidationError`
-* **What they are**: These aren't schemas we wrote; they are automatically generated by FastAPI.
-* **Inside the dropdown**: They describe the exact structure of the error message FastAPI will send back to the client if they violate one of the schemas above (e.g., detailing exactly which field was missing or the wrong data type).
+- OCR is performed through Google Cloud Vision
+- the backend looks up the spot, vehicle, and user in Firestore
+- the response returns `action` and `message` fields used by the gate LCD and relay logic
+- duplicate reads within a short window are dropped with a `RETRY` action
+
+### `GET /api/v1/users/me`
+
+Purpose:
+
+- return the authenticated dashboard user's profile
+
+Auth:
+
+- `Authorization: Bearer <firebase-id-token>`
+
+### `GET /api/v1/spots`
+
+Purpose:
+
+- return the visible parking spots for the current user
+
+Auth:
+
+- `Authorization: Bearer <firebase-id-token>`
+
+Notes:
+
+- admins see more operational detail
+- standard users receive role-filtered spot data
+
+### `GET /api/v1/logs`
+
+Purpose:
+
+- return recent violation or unidentified log events for admins
+
+Auth:
+
+- `Authorization: Bearer <firebase-id-token>`
+
+### `GET /api/v1/stream`
+
+Purpose:
+
+- provide live SSE updates to the dashboard
+
+Auth:
+
+- `token` query parameter containing a Firebase ID token
+
+Notes:
+
+- `spot_update` events are filtered by role
+- `log_event` messages are only sent to admins
+
+### `PUT /api/v1/sensors/resolve`
+
+Purpose:
+
+- allow an admin to resolve an `UNIDENTIFIED` parking event
+
+Auth:
+
+- `Authorization: Bearer <firebase-id-token>`
+
+Payload:
+
+```json
+{
+  "spot_id": "A1"
+}
+```
+
+### `POST /api/v1/telemetry/bulk`
+
+Purpose:
+
+- accept cached sensor events uploaded in bulk
+
+Payload:
+
+```json
+{
+  "mac_address": "AA:BB:CC:DD:EE:01",
+  "data": [
+    { "t": 1718520000, "v": true }
+  ]
+}
+```
+
+## Removed Route
+
+The old backend login route is no longer part of the current architecture:
+
+- removed: `POST /api/v1/auth/login`
+
+Login is now handled by Firebase Authentication in the frontend.

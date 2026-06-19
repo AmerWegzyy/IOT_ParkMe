@@ -2,14 +2,39 @@ Backend/parkme.db
 Backend/__pycache__/
 Backend/venv/
 Backend/venv2/
+Backend/.venv/
 Backend/.env
 Backend/serviceAccountKey.json
 Backend/latestDiagram.png
 Backend/newDiagram.png
 Backend/olderDiagram.png
 Backend/=2.8.0
+Backend.zip
+Backend/env
+Backend/env.example
+.arduino-data/
+.arduino-downloads/
+__pycache__/
+*.pyc
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
+Backend/.env
+Backend/.env.*
+!Backend/.env.example
+serviceAccountKey.json
+**/serviceAccountKey.json
+
+# Local ESP32 config and build artifacts
 ESP32/SECRETS.h
 ESP32/compiled_program.bin
+
+# Firebase CLI local state
+.firebase/
+firebase-debug.log
+
 settings.json
 .agents/
 skill-creator/

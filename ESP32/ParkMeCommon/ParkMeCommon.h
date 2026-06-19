@@ -2,6 +2,7 @@
 #define PARKME_COMMON_H
 
 #include <Arduino.h>
+#include <ctype.h>
 
 namespace parkme {
 
@@ -135,22 +136,73 @@ inline String makeHeartbeatPayload(const String &macAddress,
 
 inline String extractJsonStringField(const String &payload,
                                      const char *fieldName) {
-  String pattern = "\"";
-  pattern += fieldName;
-  pattern += "\":\"";
+  String keyPattern = "\"";
+  keyPattern += fieldName;
+  keyPattern += "\"";
 
-  int start = payload.indexOf(pattern);
-  if (start < 0) {
+  int keyStart = payload.indexOf(keyPattern);
+  if (keyStart < 0) {
     return "";
   }
 
-  start += pattern.length();
-  int end = payload.indexOf('"', start);
-  if (end < 0) {
+  int colonIndex = payload.indexOf(':', keyStart + keyPattern.length());
+  if (colonIndex < 0) {
     return "";
   }
 
-  return payload.substring(start, end);
+  int valueStart = colonIndex + 1;
+  while (valueStart < payload.length() &&
+         isspace(static_cast<unsigned char>(payload[valueStart]))) {
+    ++valueStart;
+  }
+
+  if (valueStart >= payload.length() || payload[valueStart] != '"') {
+    return "";
+  }
+
+  ++valueStart;
+  int valueEnd = valueStart;
+  while (valueEnd < payload.length()) {
+    if (payload[valueEnd] == '"' && payload[valueEnd - 1] != '\\') {
+      break;
+    }
+    ++valueEnd;
+  }
+
+  if (valueEnd >= payload.length()) {
+    return "";
+  }
+
+  String value = payload.substring(valueStart, valueEnd);
+  value.replace("\\\"", "\"");
+  value.replace("\\n", " ");
+  return value;
+}
+
+inline GateAction parseGateAction(const String &payload) {
+  String action = extractJsonStringField(payload, "action");
+  action.toUpperCase();
+
+  if (action == "WELCOME") {
+    return ACTION_WELCOME;
+  }
+  if (action == "DENIED") {
+    return ACTION_DENIED;
+  }
+  if (action == "RETRY") {
+    return ACTION_RETRY;
+  }
+
+  return ACTION_UNKNOWN;
+}
+
+inline String extractGateMessage(const String &payload) {
+  String message = extractJsonStringField(payload, "message");
+  if (message.length() > 0) {
+    return message;
+  }
+
+  return extractJsonStringField(payload, "display_message");
 }
 
 inline int parseHttpStatusCode(const String &statusLine) {
