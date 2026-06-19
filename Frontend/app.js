@@ -164,6 +164,8 @@ function connectSSE(token) {
                 updateSpotUI(data.spot);
             } else if (data.type === 'log_event') {
                 appendLog(data.log);
+            } else if (data.type === 'refresh_logs') {
+                fetchLogs();
             }
         };
     } catch (e) {

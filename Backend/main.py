@@ -194,7 +194,7 @@ async def receive_heartbeat_data(
             # Handle Firestore timestamp conversion
             if hasattr(entry_time, 'timestamp'):
                 # entry_time is a datetime-like object from Firestore
-                duration_seconds = (server_time - entry_time.replace(tzinfo=server_time.tzinfo)).total_seconds()
+                duration_seconds = server_time.timestamp() - entry_time.timestamp()
             else:
                 duration_seconds = 60  # Default to >= 60 if we can't compute
             
@@ -205,6 +205,9 @@ async def receive_heartbeat_data(
                 update_data["license_plate"] = "ABORTED"
             
             active_log_doc.reference.update(update_data)
+            
+            if duration_seconds < 60:
+                await broadcast_event("refresh_logs", {})
         
         # Build updated spot data for SSE broadcast
         spot_data_dict = spot_doc.to_dict()
@@ -365,6 +368,7 @@ async def receive_park_event(
             # Keep original entry_time
         })
         logger.info(f"Resolved UNIDENTIFIED ghost log for spot {spot_id} with plate {license_plate}")
+        await broadcast_event("refresh_logs", {})
     else:
         # Create a new parking log
         logs_ref.add({
@@ -394,7 +398,7 @@ async def receive_park_event(
     }
     await broadcast_event("spot_update", {"spot": broadcast_spot_data})
 
-    if is_violation:
+    if is_violation and not unidentified_doc:
         await broadcast_event("log_event", {"log": {
             "timestamp": server_time.isoformat(), 
             "type": "unidentified" if not vehicle_user else "violation", 
@@ -630,11 +634,7 @@ async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_c
             "last_seen": last_seen_raw.isoformat() if hasattr(last_seen_raw, 'isoformat') else str(last_seen_raw) if last_seen_raw else None
         }
         await broadcast_event("spot_update", {"spot": broadcast_spot_data})
-        await broadcast_event("log_event", {"log": {
-            "timestamp": get_il_time().isoformat(), 
-            "type": "info", 
-            "message": f"Admin {admin_user.get('name')} resolved anomaly at spot {payload.spot_id}."
-        }})
+        await broadcast_event("refresh_logs", {})
         
     return {"status": "resolved", "spot_id": payload.spot_id}
 
@@ -694,7 +694,7 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
             entry_time = log_data.get("entry_time")
             
             if hasattr(entry_time, 'timestamp'):
-                duration_seconds = (event_time - entry_time.replace(tzinfo=event_time.tzinfo)).total_seconds()
+                duration_seconds = event_time.timestamp() - entry_time.timestamp()
             else:
                 duration_seconds = 60
                 
