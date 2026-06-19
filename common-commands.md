@@ -31,3 +31,13 @@ python3 -m http.server 3000
 ```
 *The standalone frontend will start at `http://localhost:3000`.*
 
+
+## 🔍 Git: Check if Local Main is in Sync with Remote
+
+Checks whether the local `main` branch matches `origin/main` without printing the full diff:
+```bash
+git diff --quiet main origin/main && echo "identical" || echo "different"
+```
+* Prints `identical` if local and remote `main` match exactly.
+* Prints `different` if they've diverged (local ahead, remote ahead, or both).
+* **Note:** this compares against the *locally cached* `origin/main` ref. Run `git fetch` first if you want to check against the actual latest state on the remote.
