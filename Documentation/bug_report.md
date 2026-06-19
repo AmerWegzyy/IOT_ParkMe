@@ -7,7 +7,7 @@
 
 ## 🔴 Critical Bugs
 
-### BUG-001: `SECRETS.h` is a completely wrong file — will not compile
+### ✅ [RESOLVED] BUG-001: `SECRETS.h` is a completely wrong file — will not compile
 **File:** [SECRETS.h](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/ESP32/SECRETS.h)  
 **Severity:** 🔴 Critical (Compilation blocker)
 
@@ -19,7 +19,7 @@ Both `ParkMeSensorNode.ino` and `ParkMeCameraNode.ino` include this file via `Pa
 
 ---
 
-### BUG-002: HMAC verification silently passes when headers are missing
+### ✅ [RESOLVED] BUG-002: HMAC verification silently passes when headers are missing
 **File:** [main.py:100-106](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Backend/main.py#L100-L106)  
 **Severity:** 🔴 Critical (Security bypass)
 
@@ -38,7 +38,7 @@ If the ESP32 (or any attacker) sends a request **without** `X-Signature` and `X-
 
 ---
 
-### BUG-003: `resolve_spot` broadcasts a timestamp without timezone
+### ✅ [RESOLVED] BUG-003: `resolve_spot` broadcasts a timestamp without timezone
 **File:** [main.py:650](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Backend/main.py#L650)  
 **Severity:** 🔴 Critical (Inconsistency)
 
@@ -54,7 +54,7 @@ Every other endpoint uses `get_il_time()` to produce timezone-aware `Asia/Jerusa
 
 ## 🟠 Medium Bugs
 
-### BUG-004: `LPR_DEDUP_CACHE` grows unbounded — memory leak
+### ✅ [RESOLVED] BUG-004: `LPR_DEDUP_CACHE` grows unbounded — memory leak
 **File:** [main.py:91](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Backend/main.py#L91)  
 **Severity:** 🟠 Medium (Production stability)
 
@@ -68,7 +68,7 @@ Every unique license plate that passes through the camera is inserted into this 
 
 ---
 
-### BUG-005: Sensor heartbeat JSON still includes an unnecessary `spot_id` field
+### ✅ [RESOLVED] BUG-005: Sensor heartbeat JSON still includes an unnecessary `spot_id` field
 **File:** [ParkMeCommon.h:135-149](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/ESP32/ParkMeCommon/ParkMeCommon.h#L135-L149)  
 **Severity:** 🟠 Medium (Architectural debt)
 
@@ -83,7 +83,7 @@ The backend's Pydantic `HeartbeatPayload` model only declares `mac_address`, `is
 
 ---
 
-### BUG-006: `PARKME_GATE_SPOT_ID` still defined in `SECRETS.example.h`
+### ✅ [RESOLVED] BUG-006: `PARKME_GATE_SPOT_ID` still defined in `SECRETS.example.h`
 **File:** [SECRETS.example.h:43](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/ESP32/SECRETS.example.h#L43)  
 **Severity:** 🟠 Medium (Stale artifact)
 
@@ -97,7 +97,7 @@ After the refactor to `camera_mac`, `PARKME_GATE_SPOT_ID` is no longer reference
 
 ---
 
-### BUG-007: SSE client list is not cleaned up on disconnect
+### ✅ [RESOLVED] BUG-007: SSE client list is not cleaned up on disconnect
 **File:** [main.py:598-605](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Backend/main.py#L598-L605)  
 **Severity:** 🟠 Medium (Memory leak / stale broadcasts)
 
@@ -118,7 +118,7 @@ The cleanup only triggers on `asyncio.CancelledError`. If the client disconnects
 
 ---
 
-### BUG-008: Frontend auto-login uses a potentially expired token
+### ✅ [RESOLVED] BUG-008: Frontend auto-login uses a potentially expired token
 **File:** [app.js:358-361](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Frontend/app.js#L358-L361)  
 **Severity:** 🟠 Medium (UX issue)
 
@@ -136,7 +136,7 @@ Firebase ID tokens expire after 1 hour. If a user closes their browser and retur
 
 ## 🟡 Low Severity / Documentation Issues
 
-### BUG-009: Documentation still references old `mac_address` schema
+### ✅ [RESOLVED] BUG-009: Documentation still references old `mac_address` schema
 **Files:**
 - [firestore_database_structure.md](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Documentation/firestore_database_structure.md)
 - [api_documentation.md](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/docs/api_documentation.md)
@@ -153,7 +153,7 @@ Additionally, [ESP32/README.md:18](file:///mnt/c/Users/aamer/OneDrive/Desktop/TE
 
 ---
 
-### BUG-010: `seed_firestore.py` does not wipe `users` or `vehicles` collections
+### ✅ [RESOLVED] BUG-010: `seed_firestore.py` does not wipe `users` or `vehicles` collections
 **File:** [seed_firestore.py:63-98](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Backend/seed_firestore.py#L63-L98)  
 **Severity:** 🟡 Low (Incomplete cleanup)
 
@@ -163,7 +163,7 @@ The seeder wipes `parking_spots` and `parking_logs` before re-seeding, but it do
 
 ---
 
-### BUG-011: `GET /api/v1/logs` skips legitimate authorized parking events
+### ✅ [RESOLVED] BUG-011: `GET /api/v1/logs` skips legitimate authorized parking events
 **File:** [main.py:558-559](file:///mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Backend/main.py#L558-L559)  
 **Severity:** 🟡 Low (Feature gap)
 
