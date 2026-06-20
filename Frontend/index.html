@@ -64,6 +64,19 @@
     <!-- Toast Notifications -->
     <div id="toast-container" class="toast-container"></div>
 
+    <!-- Image Modal Overlay -->
+    <div id="image-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-panel">
+            <span class="modal-close" onclick="closeImageModal()">&times;</span>
+            <div class="modal-header">
+                <h3>Violation Snapshot</h3>
+            </div>
+            <div class="modal-body">
+                <img id="modal-image" src="" alt="Violation Snapshot" />
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDKs (Compat versions for simple integration) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>

@@ -311,8 +311,26 @@ function appendLog(log) {
     li.innerHTML = `
         <span class="log-time">${time}</span>
         <span class="log-message ${msgClass}">${log.message}</span>
+        ${log.image_data ? `<button class="btn-secondary btn-small" onclick="openImageModal('${log.image_data}')">View Photo</button>` : ''}
     `;
     securityLogs.prepend(li);
+}
+
+function openImageModal(url) {
+    const modal = document.getElementById('image-modal');
+    const img = document.getElementById('modal-image');
+    if (modal && img) {
+        img.src = url;
+        modal.classList.remove('hidden');
+    }
+}
+
+function closeImageModal() {
+    const modal = document.getElementById('image-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        document.getElementById('modal-image').src = '';
+    }
 }
 
 // Initial fetch

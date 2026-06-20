@@ -16,11 +16,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import firebase_admin
-from firebase_admin import credentials, firestore, auth
+from firebase_admin import credentials, firestore, auth, storage
+import uuid
+from datetime import timedelta
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud import vision
 import asyncio
 import json
+import base64
 from cachetools import TTLCache
 
 # Configure Logging
@@ -34,7 +37,10 @@ FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "")
 # Uses GOOGLE_APPLICATION_CREDENTIALS env var for service account JSON path
 if not firebase_admin._apps:
     cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred, {"projectId": FIREBASE_PROJECT_ID})
+    firebase_admin.initialize_app(cred, {
+        "projectId": FIREBASE_PROJECT_ID,
+        "storageBucket": "parkme-technion-f280b.appspot.com"
+    })
 
 firestore_client = firestore.client()
 
@@ -203,6 +209,8 @@ async def receive_heartbeat_data(
             if duration_seconds < 60:
                 update_data["is_violation"] = False
                 update_data["license_plate"] = "ABORTED"
+                if log_data.get("image_data"):
+                    update_data["image_data"] = firestore.DELETE_FIELD
             
             active_log_doc.reference.update(update_data)
             
@@ -358,20 +366,33 @@ async def receive_park_event(
         unidentified_doc = doc
         break
 
+    image_data_uri = None
+    if is_violation:
+        try:
+            base64_img = base64.b64encode(image_bytes).decode('utf-8')
+            image_data_uri = f"data:image/jpeg;base64,{base64_img}"
+            logger.info(f"Encoded violation image inline for spot {spot_id}")
+        except Exception as e:
+            logger.error(f"Failed to encode violation image inline: {e}")
+
     if unidentified_doc:
         # Overwrite the ghost log to clear the Admin UI "Resolve" button
-        unidentified_doc.reference.update({
+        update_data = {
             "license_plate": license_plate,
             "user_id": user_id,
             "snapshot_role": snapshot_role,
             "is_violation": is_violation
             # Keep original entry_time
-        })
+        }
+        if image_data_uri:
+            update_data["image_data"] = image_data_uri
+            
+        unidentified_doc.reference.update(update_data)
         logger.info(f"Resolved UNIDENTIFIED ghost log for spot {spot_id} with plate {license_plate}")
         await broadcast_event("refresh_logs", {})
     else:
         # Create a new parking log
-        logs_ref.add({
+        log_data = {
             "spot_id": spot_id,
             "license_plate": license_plate,
             "user_id": user_id,
@@ -379,7 +400,11 @@ async def receive_park_event(
             "entry_time": server_time,
             "exit_time": None,
             "is_violation": is_violation
-        })
+        }
+        if image_data_uri:
+            log_data["image_data"] = image_data_uri
+            
+        logs_ref.add(log_data)
     
     # Update the parking spot
     spot_ref.update({
@@ -548,9 +573,11 @@ async def get_recent_logs(current_user: dict = Depends(get_current_user), db = D
             continue
             
         result.append({
+            "id": doc.id,
             "timestamp": entry_time.isoformat() if hasattr(entry_time, 'isoformat') else str(entry_time) if entry_time else None,
             "type": msg_type,
-            "message": msg
+            "message": msg,
+            "image_data": l.get("image_data")
         })
     return {"logs": result}
 @app.get("/api/v1/stream")
@@ -702,6 +729,8 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
             if duration_seconds < 60:
                 update_data["is_violation"] = False
                 update_data["license_plate"] = "ABORTED"
+                if log_data.get("image_data"):
+                    update_data["image_data"] = firestore.DELETE_FIELD
                 
             active_log_doc.reference.update(update_data)
             

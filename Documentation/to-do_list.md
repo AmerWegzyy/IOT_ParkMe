@@ -6,7 +6,7 @@ The core application logic, database, and hardware integrations are currently st
 
 ## Outstanding Tasks
 
-- [ ] **Create Firestore Composite Indexes** (See guide below)
+- [x] **Create Firestore Composite Indexes** (See guide below)
 - [ ] **Write Automated Tests** 
   * Create `pytest` suites to validate backend endpoints, specifically testing the self-healing and bouncing driver edge cases.
 - [ ] **Deploy Frontend to Firebase Hosting** (See guide below)
@@ -42,6 +42,7 @@ There are two ways to create this index:
    - `entry_time` : **Descending**
 7. Set Query scopes to **Collection**.
 8. Click **Create Index** and wait 3-5 minutes for it to build.
+
 
 ### Step 1: Enabling Google Cloud APIs (Required for OCR)
 The camera OCR relies entirely on the Google Cloud Vision API. Whether running locally or in production, you must manually enable this API in your project, or the backend will crash with a `403 Forbidden` error.
