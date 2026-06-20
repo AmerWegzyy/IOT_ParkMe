@@ -6,7 +6,8 @@ import logging
 from datetime import datetime, timedelta
 import zoneinfo
 from pathlib import Path
-from typing import List
+from typing import List, Optional
+import uuid
 
 
 def _resolve_il_timezone():
@@ -55,6 +56,7 @@ for env_filename in (".env", "env"):
 # Environment Variables
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "")
 FIREBASE_CLOCK_SKEW_SECONDS = int(os.environ.get("FIREBASE_CLOCK_SKEW_SECONDS", "10"))
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "development").lower()
 
 # Firebase Setup
 # Uses GOOGLE_APPLICATION_CREDENTIALS locally and Cloud Run ADC in production.
@@ -77,6 +79,8 @@ app.add_middleware(
 
 # SSE Broadcaster
 sse_clients = []
+CAMERA_COMMANDS_COLLECTION = "camera_commands"
+CAMERA_COMMAND_STALE_SECONDS = 90
 
 async def broadcast_event(event_type: str, data: dict):
     message = json.dumps({"type": event_type, **data})
@@ -107,6 +111,23 @@ class BulkPayload(BaseModel):
 
 class ResolvePayload(BaseModel):
     spot_id: str
+
+
+class CameraPollPayload(BaseModel):
+    camera_mac: str = Field(..., description="MAC address reported by the ESP32-CAM")
+
+
+class CameraCommandResultPayload(BaseModel):
+    camera_mac: str
+    request_id: str
+    status: str = Field(..., description="COMPLETED or FAILED")
+    detail: Optional[str] = None
+
+
+class DebugCameraTriggerPayload(BaseModel):
+    spot_id: Optional[str] = None
+    camera_mac: Optional[str] = None
+    reason: str = "manual_trigger"
 
 # In-memory deduplication cache for LPR reads. Maps: license_plate -> datetime
 # TTL of 120s covers the ~45s camera retry window with margin, and is well
@@ -143,11 +164,101 @@ def get_latest_active_log_for_spot(logs_ref, spot_id: str):
 
 def find_spot_by_mac(spots_ref, mac_address: str, *field_names: str):
     """Find the first parking spot whose configured MAC matches any provided field name."""
+    candidates = []
+    for candidate in (mac_address.strip(), mac_address.strip().upper(), mac_address.strip().lower()):
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+
     for field_name in field_names:
-        query = spots_ref.where(filter=FieldFilter(field_name, "==", mac_address)).limit(1).get()
-        for doc in query:
-            return doc
+        for candidate in candidates:
+            query = spots_ref.where(filter=FieldFilter(field_name, "==", candidate)).limit(1).get()
+            for doc in query:
+                return doc
     return None
+
+
+def normalize_mac(mac_address: str) -> str:
+    return mac_address.strip().upper()
+
+
+def get_camera_command_ref(db, camera_mac: str):
+    return db.collection(CAMERA_COMMANDS_COLLECTION).document(normalize_mac(camera_mac))
+
+
+def get_command_reference_time(command_data: dict):
+    return command_data.get("claimed_at") or command_data.get("queued_at")
+
+
+def is_stale_command(command_data: dict, now: datetime, stale_after_seconds: int = CAMERA_COMMAND_STALE_SECONDS):
+    reference_time = get_command_reference_time(command_data)
+    if not hasattr(reference_time, "timestamp"):
+        return True
+    return (now - reference_time.replace(tzinfo=now.tzinfo)).total_seconds() > stale_after_seconds
+
+
+def queue_capture_command(db, camera_mac: str, spot_id: str, reason: str):
+    normalized_mac = normalize_mac(camera_mac)
+    command_ref = get_camera_command_ref(db, normalized_mac)
+    existing_doc = command_ref.get()
+    now = get_il_time()
+
+    if existing_doc.exists:
+        existing_data = existing_doc.to_dict() or {}
+        if existing_data.get("status") in {"PENDING", "CLAIMED"} and not is_stale_command(existing_data, now):
+            return existing_data
+
+    request_id = str(uuid.uuid4())
+    command_data = {
+        "request_id": request_id,
+        "action": "CAPTURE",
+        "status": "PENDING",
+        "camera_mac": normalized_mac,
+        "spot_id": spot_id,
+        "reason": reason,
+        "queued_at": now
+    }
+    command_ref.set(command_data)
+    return command_data
+
+
+def claim_capture_command(db, camera_mac: str):
+    command_ref = get_camera_command_ref(db, camera_mac)
+    command_doc = command_ref.get()
+
+    if not command_doc.exists:
+        return None
+
+    command_data = command_doc.to_dict() or {}
+    if command_data.get("status") != "PENDING":
+        return None
+
+    claimed_at = get_il_time()
+    command_ref.update({
+        "status": "CLAIMED",
+        "claimed_at": claimed_at
+    })
+    command_data["status"] = "CLAIMED"
+    command_data["claimed_at"] = claimed_at
+    return command_data
+
+
+def complete_capture_command(db, camera_mac: str, request_id: str, status_text: str, detail: str | None):
+    command_ref = get_camera_command_ref(db, camera_mac)
+    command_doc = command_ref.get()
+
+    if not command_doc.exists:
+        return False
+
+    command_data = command_doc.to_dict() or {}
+    if command_data.get("request_id") != request_id:
+        return False
+
+    command_ref.update({
+        "status": status_text.upper(),
+        "detail": detail,
+        "completed_at": get_il_time()
+    })
+    return True
 
 # ==========================================
 # LPR PROCESSING (SERVER-SIDE)
@@ -217,31 +328,47 @@ async def receive_heartbeat_data(
     spot_doc = find_spot_by_mac(spots_ref, payload.mac_address, "sensor_mac", "mac_address")
     
     if spot_doc:
-        # Update the parking spot
-        spot_doc.reference.update({
-            "last_seen": server_time,
-            "battery_level": payload.battery_level,
-            "is_occupied": payload.is_occupied
-        })
-        
+        spot_data_before = spot_doc.to_dict()
+        previous_is_occupied = bool(spot_data_before.get("is_occupied", False))
+        camera_mac = spot_data_before.get("camera_mac") or spot_data_before.get("mac_address")
         spot_id = spot_doc.id
-        
+
         # Find active parking log for this spot (no exit_time)
         logs_ref = db.collection("parking_logs")
         active_log_doc = get_latest_active_log_for_spot(logs_ref, spot_id)
-        
-        if payload.is_occupied and not active_log_doc:
-            # Create a new parking log for unidentified occupancy
-            logs_ref.add({
-                "spot_id": spot_id,
-                "license_plate": "UNIDENTIFIED",
-                "entry_time": server_time,
-                "exit_time": None,
-                "is_violation": True,
-                "user_id": None,
-                "snapshot_role": None
-            })
-            
+        is_new_arrival = payload.is_occupied and not previous_is_occupied
+        should_queue_camera = False
+
+        if payload.is_occupied:
+            # If the spot was previously free but an active log still exists,
+            # treat it as stale state and close it before starting a fresh cycle.
+            if is_new_arrival and active_log_doc:
+                logger.warning(
+                    "Closing stale active log for spot %s before processing a new arrival.",
+                    spot_id
+                )
+                active_log_doc.reference.update({"exit_time": server_time})
+                active_log_doc = None
+
+            # Create the ghost log on a real FREE -> OCCUPIED transition, or
+            # self-heal if occupancy is true but the active log is missing.
+            if is_new_arrival or not active_log_doc:
+                logs_ref.add({
+                    "spot_id": spot_id,
+                    "license_plate": "UNIDENTIFIED",
+                    "entry_time": server_time,
+                    "exit_time": None,
+                    "is_violation": True,
+                    "user_id": None,
+                    "snapshot_role": None
+                })
+                should_queue_camera = True
+            elif payload.is_occupied and active_log_doc:
+                logger.info(
+                    "Spot %s remains occupied with an active log; skipping duplicate camera queue.",
+                    spot_id
+                )
+
         elif not payload.is_occupied and active_log_doc:
             # Compute time difference in Python instead of SQL strftime
             log_data = active_log_doc.to_dict()
@@ -261,9 +388,24 @@ async def receive_heartbeat_data(
                 update_data["license_plate"] = "ABORTED"
             
             active_log_doc.reference.update(update_data)
+
+        # Update the parking spot
+        spot_doc.reference.update({
+            "last_seen": server_time,
+            "battery_level": payload.battery_level,
+            "is_occupied": payload.is_occupied
+        })
+
+        if should_queue_camera and camera_mac:
+            queue_capture_command(db, camera_mac, spot_id, "occupancy_detected")
+            logger.info(
+                "Queued camera capture for spot %s (camera %s) after FREE -> OCCUPIED.",
+                spot_id,
+                camera_mac
+            )
         
         # Build updated spot data for SSE broadcast
-        spot_data_dict = spot_doc.to_dict()
+        spot_data_dict = spot_data_before
         spot_data_dict.update({
             "is_occupied": payload.is_occupied,
             "last_seen": server_time,
@@ -291,6 +433,79 @@ async def receive_heartbeat_data(
         await broadcast_event("spot_update", {"spot": broadcast_spot})
 
     return {"status": "heartbeat_processed", "timestamp": server_time.isoformat()}
+
+
+@app.post("/api/v1/cameras/poll")
+async def poll_camera_command(payload: CameraPollPayload, db = Depends(get_firestore_db)):
+    command_data = claim_capture_command(db, payload.camera_mac)
+    if not command_data:
+        return {"action": "IDLE"}
+
+    queued_at = command_data.get("queued_at")
+    claimed_at = command_data.get("claimed_at")
+    return {
+        "action": command_data.get("action", "IDLE"),
+        "request_id": command_data.get("request_id"),
+        "spot_id": command_data.get("spot_id"),
+        "reason": command_data.get("reason"),
+        "queued_at": queued_at.isoformat() if hasattr(queued_at, "isoformat") else str(queued_at) if queued_at else None,
+        "claimed_at": claimed_at.isoformat() if hasattr(claimed_at, "isoformat") else str(claimed_at) if claimed_at else None
+    }
+
+
+@app.post("/api/v1/cameras/result")
+async def complete_camera_command(payload: CameraCommandResultPayload, db = Depends(get_firestore_db)):
+    success = complete_capture_command(
+        db,
+        payload.camera_mac,
+        payload.request_id,
+        payload.status,
+        payload.detail
+    )
+    if not success:
+        raise HTTPException(status_code=404, detail="Matching camera command not found")
+
+    return {"status": "acknowledged", "request_id": payload.request_id}
+
+
+@app.post("/api/v1/debug/cameras/trigger")
+async def debug_trigger_camera(payload: DebugCameraTriggerPayload, db = Depends(get_firestore_db)):
+    if ENVIRONMENT != "development":
+        raise HTTPException(status_code=403, detail="Debug camera trigger is disabled outside development")
+
+    camera_mac = payload.camera_mac
+    spot_id = payload.spot_id
+
+    if spot_id:
+        spot_doc = db.collection("parking_spots").document(spot_id).get()
+        if not spot_doc.exists:
+            raise HTTPException(status_code=404, detail="Spot not found")
+        spot_data = spot_doc.to_dict() or {}
+        camera_mac = camera_mac or spot_data.get("camera_mac") or spot_data.get("mac_address")
+        spot_id = spot_doc.id
+
+    if not camera_mac:
+        raise HTTPException(status_code=400, detail="Provide spot_id or camera_mac")
+
+    normalized_camera_mac = normalize_mac(camera_mac)
+    if not spot_id:
+        spots_ref = db.collection("parking_spots")
+        spot_doc = find_spot_by_mac(spots_ref, normalized_camera_mac, "camera_mac", "mac_address")
+        if not spot_doc:
+            raise HTTPException(status_code=404, detail="No parking spot found for that camera MAC")
+        spot_id = spot_doc.id
+
+    command_data = queue_capture_command(db, normalized_camera_mac, spot_id, payload.reason)
+    queued_at = command_data.get("queued_at")
+    return {
+        "status": command_data.get("status"),
+        "action": command_data.get("action"),
+        "request_id": command_data.get("request_id"),
+        "spot_id": command_data.get("spot_id"),
+        "camera_mac": command_data.get("camera_mac"),
+        "reason": command_data.get("reason"),
+        "queued_at": queued_at.isoformat() if hasattr(queued_at, "isoformat") else str(queued_at) if queued_at else None
+    }
 
 
 @app.post("/api/v1/sensors/park", status_code=status.HTTP_202_ACCEPTED)
