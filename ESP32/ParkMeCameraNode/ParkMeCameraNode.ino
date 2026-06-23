@@ -356,11 +356,11 @@ GateAction handleServerDecision(const String &responseBody) {
       break;
     case ACTION_RETRY:
       showStatus("Scan again", message);
-      delay(2000);
+      delay(PARKME_GATE_RETRY_STATUS_MS);
       break;
     default:
       showStatus("Server error", "Unexpected data");
-      delay(2000);
+      delay(PARKME_GATE_RETRY_STATUS_MS);
       break;
   }
 
@@ -383,14 +383,14 @@ GateAction performGateScan() {
   if (!captureAndUpload(responseBody, httpStatusCode)) {
     Serial.println("Capture/upload failed. Will retry if attempts remain.");
     showStatus("Upload failed", "Try again");
-    delay(2000);
+    delay(PARKME_GATE_RETRY_STATUS_MS);
     return ACTION_RETRY;
   }
 
   if (httpStatusCode < 200 || httpStatusCode >= 300) {
     Serial.println("Backend rejected the captured photo.");
     showStatus("Server rejected", "Check backend");
-    delay(2000);
+    delay(PARKME_GATE_RETRY_STATUS_MS);
     return ACTION_RETRY;
   }
 
@@ -413,7 +413,7 @@ void handleServerCaptureCommand(const String &requestId,
     Serial.println(reason);
   }
 
-  while (retries < 3) {
+  while (retries < PARKME_GATE_MAX_CAPTURE_RETRIES) {
     GateAction result = performGateScan();
 
     if (result == ACTION_WELCOME || result == ACTION_DENIED) {
@@ -430,10 +430,13 @@ void handleServerCaptureCommand(const String &requestId,
       retries++;
       Serial.print("Capture command retry ");
       Serial.print(retries);
-      Serial.println(" of 3.");
-      if (retries < 3) {
-        showStatus("Retrying...", String(retries) + "/3");
-        delay(1000);
+      Serial.print(" of ");
+      Serial.print(PARKME_GATE_MAX_CAPTURE_RETRIES);
+      Serial.println(".");
+      if (retries < PARKME_GATE_MAX_CAPTURE_RETRIES) {
+        showStatus("Retrying...",
+                   String(retries) + "/" + String(PARKME_GATE_MAX_CAPTURE_RETRIES));
+        delay(PARKME_GATE_RETRY_BACKOFF_MS);
       } else {
         sendCaptureCommandResult(requestId, "FAILED", "capture_failed");
         showStatus("Ready for server", "Waiting command");

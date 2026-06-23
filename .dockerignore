@@ -1,0 +1,10 @@
+.git
+.arduino-data
+.arduino-downloads
+.arduino-user
+**/__pycache__
+*.pyc
+ESP32/compiled_program.bin
+Backend/parkme.db
+Backend.zip
+.agents

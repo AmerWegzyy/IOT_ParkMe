@@ -2,6 +2,7 @@
 #include <Preferences.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <Wire.h>
 
 #include "ParkMeCommon.h"
 #include "ParkMeConfig.h"
@@ -28,8 +29,582 @@ unsigned long lastSampleAtMs = 0;
 unsigned long lastSuccessfulPublishAtMs = 0;
 unsigned long lastWifiAttemptAtMs = 0;
 unsigned long calibrationButtonPressedAtMs = 0;
+unsigned long lastDisplayPollAtMs = 0;
+unsigned long activeMessageUntilAtMs = 0;
+
+float lastMeasuredDistanceCm = -1.0f;
+SpotState lastMeasuredState = STATE_UNKNOWN;
+int lastMeasuredBatteryPercent = 100;
+
+String currentScreenTitle = "ParkMe";
+String currentScreenMessage = "Booting";
+String lastRenderedSignature;
+
+bool graphicsReady = false;
+uint8_t selectedDisplayAddress = 0;
+
+constexpr uint8_t kDisplayWidth = 128;
+constexpr uint8_t kDisplayHeight = 64;
+constexpr uint8_t kDisplayPages = kDisplayHeight / 8;
+constexpr unsigned long kSensorEchoTimeoutUs = 30000;
+constexpr float kSensorMeasurementCapCm =
+    (kSensorEchoTimeoutUs * 0.0343f) / 2.0f;
+uint8_t displayBuffer[kDisplayWidth * kDisplayPages] = {0};
+
+const uint8_t FONT_SPACE[5] = {0x00, 0x00, 0x00, 0x00, 0x00};
+const uint8_t FONT_0[5] = {0x3E, 0x45, 0x49, 0x51, 0x3E};
+const uint8_t FONT_1[5] = {0x00, 0x21, 0x7F, 0x01, 0x00};
+const uint8_t FONT_2[5] = {0x21, 0x43, 0x45, 0x49, 0x31};
+const uint8_t FONT_3[5] = {0x42, 0x41, 0x51, 0x69, 0x46};
+const uint8_t FONT_4[5] = {0x0C, 0x14, 0x24, 0x7F, 0x04};
+const uint8_t FONT_5[5] = {0x72, 0x51, 0x51, 0x51, 0x4E};
+const uint8_t FONT_6[5] = {0x1E, 0x29, 0x49, 0x49, 0x06};
+const uint8_t FONT_7[5] = {0x40, 0x47, 0x48, 0x50, 0x60};
+const uint8_t FONT_8[5] = {0x36, 0x49, 0x49, 0x49, 0x36};
+const uint8_t FONT_9[5] = {0x30, 0x49, 0x49, 0x4A, 0x3C};
+const uint8_t FONT_A[5] = {0x7E, 0x11, 0x11, 0x11, 0x7E};
+const uint8_t FONT_B[5] = {0x7F, 0x49, 0x49, 0x49, 0x36};
+const uint8_t FONT_C[5] = {0x3E, 0x41, 0x41, 0x41, 0x22};
+const uint8_t FONT_D[5] = {0x7F, 0x41, 0x41, 0x22, 0x1C};
+const uint8_t FONT_E[5] = {0x7F, 0x49, 0x49, 0x49, 0x41};
+const uint8_t FONT_F[5] = {0x7F, 0x09, 0x09, 0x09, 0x01};
+const uint8_t FONT_G[5] = {0x3E, 0x41, 0x49, 0x49, 0x7A};
+const uint8_t FONT_H[5] = {0x7F, 0x08, 0x08, 0x08, 0x7F};
+const uint8_t FONT_I[5] = {0x00, 0x41, 0x7F, 0x41, 0x00};
+const uint8_t FONT_J[5] = {0x20, 0x40, 0x41, 0x3F, 0x01};
+const uint8_t FONT_K[5] = {0x7F, 0x08, 0x14, 0x22, 0x41};
+const uint8_t FONT_L[5] = {0x7F, 0x40, 0x40, 0x40, 0x40};
+const uint8_t FONT_M[5] = {0x7F, 0x02, 0x0C, 0x02, 0x7F};
+const uint8_t FONT_N[5] = {0x7F, 0x04, 0x08, 0x10, 0x7F};
+const uint8_t FONT_O[5] = {0x3E, 0x41, 0x41, 0x41, 0x3E};
+const uint8_t FONT_P[5] = {0x7F, 0x09, 0x09, 0x09, 0x06};
+const uint8_t FONT_Q[5] = {0x3E, 0x41, 0x51, 0x21, 0x5E};
+const uint8_t FONT_R[5] = {0x7F, 0x09, 0x19, 0x29, 0x46};
+const uint8_t FONT_S[5] = {0x46, 0x49, 0x49, 0x49, 0x31};
+const uint8_t FONT_T[5] = {0x01, 0x01, 0x7F, 0x01, 0x01};
+const uint8_t FONT_U[5] = {0x3F, 0x40, 0x40, 0x40, 0x3F};
+const uint8_t FONT_V[5] = {0x1F, 0x20, 0x40, 0x20, 0x1F};
+const uint8_t FONT_W[5] = {0x7F, 0x20, 0x18, 0x20, 0x7F};
+const uint8_t FONT_X[5] = {0x63, 0x14, 0x08, 0x14, 0x63};
+const uint8_t FONT_Y[5] = {0x03, 0x04, 0x78, 0x04, 0x03};
+const uint8_t FONT_Z[5] = {0x61, 0x51, 0x49, 0x45, 0x43};
 
 }  // namespace
+
+const uint8_t *fontFor(char c) {
+  switch (c) {
+    case '0': return FONT_0;
+    case '1': return FONT_1;
+    case '2': return FONT_2;
+    case '3': return FONT_3;
+    case '4': return FONT_4;
+    case '5': return FONT_5;
+    case '6': return FONT_6;
+    case '7': return FONT_7;
+    case '8': return FONT_8;
+    case '9': return FONT_9;
+    case 'A': return FONT_A;
+    case 'B': return FONT_B;
+    case 'C': return FONT_C;
+    case 'D': return FONT_D;
+    case 'E': return FONT_E;
+    case 'F': return FONT_F;
+    case 'G': return FONT_G;
+    case 'H': return FONT_H;
+    case 'I': return FONT_I;
+    case 'J': return FONT_J;
+    case 'K': return FONT_K;
+    case 'L': return FONT_L;
+    case 'M': return FONT_M;
+    case 'N': return FONT_N;
+    case 'O': return FONT_O;
+    case 'P': return FONT_P;
+    case 'Q': return FONT_Q;
+    case 'R': return FONT_R;
+    case 'S': return FONT_S;
+    case 'T': return FONT_T;
+    case 'U': return FONT_U;
+    case 'V': return FONT_V;
+    case 'W': return FONT_W;
+    case 'X': return FONT_X;
+    case 'Y': return FONT_Y;
+    case 'Z': return FONT_Z;
+    default: return FONT_SPACE;
+  }
+}
+
+String normalizeDisplayText(String text) {
+  text.replace("\n", " ");
+  text.toUpperCase();
+
+  for (size_t i = 0; i < text.length(); ++i) {
+    char c = text[i];
+    bool allowed = (c >= 'A' && c <= 'Z') ||
+                   (c >= '0' && c <= '9') ||
+                   c == ' ';
+    if (!allowed) {
+      text.setCharAt(i, ' ');
+    }
+  }
+
+  return text;
+}
+
+void oledCommand(uint8_t command) {
+  Wire.beginTransmission(selectedDisplayAddress);
+  Wire.write(0x00);
+  Wire.write(command);
+  Wire.endTransmission();
+}
+
+void oledData(const uint8_t *data, uint8_t length) {
+  Wire.beginTransmission(selectedDisplayAddress);
+  Wire.write(0x40);
+  for (uint8_t i = 0; i < length; ++i) {
+    Wire.write(data[i]);
+  }
+  Wire.endTransmission();
+}
+
+bool oledAddressResponds(uint8_t address) {
+  Wire.beginTransmission(address);
+  return Wire.endTransmission() == 0;
+}
+
+void oledInit() {
+  oledCommand(0xAE);
+  oledCommand(0xD5);
+  oledCommand(0x80);
+  oledCommand(0xA8);
+  oledCommand(0x3F);
+  oledCommand(0xD3);
+  oledCommand(0x00);
+  oledCommand(0x40);
+  oledCommand(0x8D);
+  oledCommand(0x14);
+  oledCommand(0xA1);
+  oledCommand(0xC8);
+  oledCommand(0xDA);
+  oledCommand(0x12);
+  oledCommand(0x81);
+  oledCommand(0xFF);
+  oledCommand(0xD9);
+  oledCommand(0xF1);
+  oledCommand(0xDB);
+  oledCommand(0x40);
+  oledCommand(0xA4);
+  oledCommand(0xA6);
+  oledCommand(0xAF);
+}
+
+void oledDisplay() {
+  for (uint8_t page = 0; page < kDisplayPages; ++page) {
+    uint8_t column = PARKME_DISPLAY_COLUMN_OFFSET;
+    oledCommand(0xB0 + page);
+    oledCommand(0x00 + (column & 0x0F));
+    oledCommand(0x10 + ((column >> 4) & 0x0F));
+
+    const uint8_t *pageData = &displayBuffer[page * kDisplayWidth];
+    for (uint8_t x = 0; x < kDisplayWidth; x += 16) {
+      oledData(&pageData[x], 16);
+    }
+  }
+}
+
+void clearDisplayBuffer() {
+  memset(displayBuffer, 0, sizeof(displayBuffer));
+}
+
+void setPixel(uint8_t x, uint8_t y, bool enabled) {
+  if (x >= kDisplayWidth || y >= kDisplayHeight) {
+    return;
+  }
+
+  uint16_t index = x + (y / 8) * kDisplayWidth;
+  uint8_t mask = 1 << (y % 8);
+  if (enabled) {
+    displayBuffer[index] |= mask;
+  } else {
+    displayBuffer[index] &= ~mask;
+  }
+}
+
+void drawChar(uint8_t x, uint8_t y, char c, uint8_t scale) {
+  const uint8_t *glyph = fontFor(c);
+  for (uint8_t col = 0; col < 5; ++col) {
+    for (uint8_t row = 0; row < 7; ++row) {
+      bool pixelOn = glyph[col] & (1 << row);
+      for (uint8_t dx = 0; dx < scale; ++dx) {
+        for (uint8_t dy = 0; dy < scale; ++dy) {
+          setPixel(x + col * scale + dx, y + row * scale + dy, pixelOn);
+        }
+      }
+    }
+  }
+}
+
+void drawText(uint8_t x, uint8_t y, const String &text, uint8_t scale) {
+  uint8_t cursorX = x;
+  for (size_t i = 0; i < text.length(); ++i) {
+    drawChar(cursorX, y, text[i], scale);
+    cursorX += 6 * scale;
+  }
+}
+
+void splitMessageIntoLines(const String &message, String &line1, String &line2) {
+  constexpr size_t kMaxCharsPerLine = 18;
+  String normalized = message;
+  normalized.replace("\n", " ");
+  normalized.trim();
+
+  if (normalized.length() <= kMaxCharsPerLine) {
+    line1 = normalized;
+    line2 = "";
+    return;
+  }
+
+  int splitAt = normalized.lastIndexOf(' ', kMaxCharsPerLine);
+  if (splitAt <= 0) {
+    splitAt = static_cast<int>(kMaxCharsPerLine);
+  }
+
+  line1 = normalized.substring(0, splitAt);
+  line1.trim();
+
+  line2 = normalized.substring(splitAt);
+  line2.trim();
+  if (line2.length() > kMaxCharsPerLine) {
+    line2 = line2.substring(0, kMaxCharsPerLine);
+    line2.trim();
+  }
+}
+
+void renderToSerial(const String &title, const String &message) {
+  String signature = title + "|" + message;
+  if (signature == lastRenderedSignature) {
+    return;
+  }
+
+  lastRenderedSignature = signature;
+  Serial.println();
+  Serial.println("=== Screen Update ===");
+  Serial.println(title);
+  if (message.length() > 0) {
+    Serial.println(message);
+  }
+  Serial.println("=====================");
+}
+
+void renderToGraphics(const String &title, const String &message) {
+  if (!graphicsReady) {
+    return;
+  }
+
+  String normalizedTitle = normalizeDisplayText(title);
+  String normalizedMessage = normalizeDisplayText(message);
+  String line1;
+  String line2;
+  splitMessageIntoLines(normalizedMessage, line1, line2);
+  normalizedTitle = fitForLcd(normalizedTitle, 10);
+  line1 = fitForLcd(line1, 16);
+  line2 = fitForLcd(line2, 16);
+
+  clearDisplayBuffer();
+  drawText(4, 4, normalizedTitle, 2);
+  drawText(4, 28, line1, 1);
+  drawText(4, 44, line2, 1);
+  oledDisplay();
+}
+
+void showScreen(const String &title, const String &message) {
+  currentScreenTitle = title;
+  currentScreenMessage = message;
+  renderToSerial(title, message);
+  renderToGraphics(title, message);
+}
+
+bool beginGraphicsDisplay() {
+  if (!PARKME_DISPLAY_ENABLE_GRAPHICS) {
+    Serial.println("Graphics display disabled in SECRETS.h. Using serial only.");
+    return false;
+  }
+
+  Wire.begin(PARKME_DISPLAY_SDA_PIN, PARKME_DISPLAY_SCL_PIN);
+  Wire.setClock(100000);
+
+  bool foundConfiguredAddress = false;
+  uint8_t firstDetectedAddress = 0;
+  Serial.print("Scanning I2C on SDA=");
+  Serial.print(PARKME_DISPLAY_SDA_PIN);
+  Serial.print(" SCL=");
+  Serial.println(PARKME_DISPLAY_SCL_PIN);
+  for (uint8_t address = 1; address < 127; ++address) {
+    Wire.beginTransmission(address);
+    uint8_t error = Wire.endTransmission();
+    if (error == 0) {
+      Serial.print("I2C device found at 0x");
+      if (address < 16) {
+        Serial.print('0');
+      }
+      Serial.println(address, HEX);
+      if (firstDetectedAddress == 0) {
+        firstDetectedAddress = address;
+      }
+      if (address == PARKME_DISPLAY_I2C_ADDRESS) {
+        foundConfiguredAddress = true;
+      }
+    }
+  }
+
+  Serial.print("Configured display address: 0x");
+  if (PARKME_DISPLAY_I2C_ADDRESS < 16) {
+    Serial.print('0');
+  }
+  Serial.println(PARKME_DISPLAY_I2C_ADDRESS, HEX);
+
+  if (!foundConfiguredAddress) {
+    Serial.println("Configured display address was not found on the I2C bus.");
+  }
+
+  uint8_t selectedAddress = PARKME_DISPLAY_I2C_ADDRESS;
+  if (!foundConfiguredAddress && firstDetectedAddress != 0) {
+    selectedAddress = firstDetectedAddress;
+    Serial.print("Using detected display address instead: 0x");
+    if (selectedAddress < 16) {
+      Serial.print('0');
+    }
+    Serial.println(selectedAddress, HEX);
+  }
+
+  if (selectedAddress == 0) {
+    Serial.println("No I2C display address available.");
+    return false;
+  }
+
+  if (!oledAddressResponds(selectedAddress)) {
+    Serial.println("Selected OLED address did not respond.");
+    return false;
+  }
+
+  selectedDisplayAddress = selectedAddress;
+  Serial.println("Display driver: LOW-LEVEL SSD1306/SH1106 STYLE");
+  oledInit();
+  clearDisplayBuffer();
+  drawText(10, 12, "WELCOME", 2);
+  drawText(34, 44, "PARKME", 1);
+  oledDisplay();
+  delay(500);
+  return true;
+}
+
+void showLocalSensorScreen() {
+  String title = String("Spot ") + PARKME_GATE_SPOT_ID;
+  String message;
+
+  if (!isKnownState(lastMeasuredState)) {
+    message = "Waiting sensor";
+  } else if (lastMeasuredState == STATE_OCCUPIED) {
+    message = "Occupied ";
+    if (lastMeasuredDistanceCm > 0.0f) {
+      message += String(lastMeasuredDistanceCm, 0);
+      message += "cm";
+    }
+  } else {
+    message = "Free ";
+    if (lastMeasuredDistanceCm > 0.0f) {
+      message += String(lastMeasuredDistanceCm, 0);
+      message += "cm";
+    }
+  }
+
+  message += " B";
+  message += String(lastMeasuredBatteryPercent);
+  message += "%";
+
+  showScreen(title, message);
+}
+
+unsigned long extractJsonUnsignedLongField(const String &payload,
+                                           const char *fieldName,
+                                           unsigned long fallbackValue) {
+  String keyPattern = "\"";
+  keyPattern += fieldName;
+  keyPattern += "\"";
+
+  int keyStart = payload.indexOf(keyPattern);
+  if (keyStart < 0) {
+    return fallbackValue;
+  }
+
+  int colonIndex = payload.indexOf(':', keyStart + keyPattern.length());
+  if (colonIndex < 0) {
+    return fallbackValue;
+  }
+
+  int valueStart = colonIndex + 1;
+  while (valueStart < payload.length() &&
+         isspace(static_cast<unsigned char>(payload[valueStart]))) {
+    ++valueStart;
+  }
+
+  int valueEnd = valueStart;
+  while (valueEnd < payload.length() &&
+         isdigit(static_cast<unsigned char>(payload[valueEnd]))) {
+    ++valueEnd;
+  }
+
+  if (valueEnd <= valueStart) {
+    return fallbackValue;
+  }
+
+  return static_cast<unsigned long>(
+      payload.substring(valueStart, valueEnd).toInt());
+}
+
+bool sendDisplayJsonRequest(const char *path,
+                            const String &payload,
+                            String &responseBody,
+                            int &httpStatusCode) {
+  WiFiClient plainClient;
+  WiFiClientSecure secureClient;
+  Client *client =
+      String(PARKME_SERVER_SCHEME) == "https" ? &secureClient : &plainClient;
+  secureClient.setInsecure();
+  client->setTimeout(PARKME_DISPLAY_HTTP_TIMEOUT_MS);
+
+  if (!client->connect(PARKME_SERVER_HOST, PARKME_SERVER_PORT)) {
+    Serial.println("Display request cannot reach backend.");
+    return false;
+  }
+
+  client->print(String("POST ") + path + " HTTP/1.1\r\n");
+  client->print(String("Host: ") + PARKME_SERVER_HOST + "\r\n");
+  client->print("Connection: close\r\n");
+  client->print("Content-Type: application/json\r\n");
+  client->print("Content-Length: " + String(payload.length()) + "\r\n\r\n");
+  client->print(payload);
+
+  unsigned long waitStartedAtMs = millis();
+  while (!client->available() && client->connected() &&
+         millis() - waitStartedAtMs < PARKME_DISPLAY_HTTP_TIMEOUT_MS) {
+    delay(10);
+  }
+
+  if (!client->available()) {
+    client->stop();
+    Serial.println("Display backend response timeout.");
+    return false;
+  }
+
+  String statusLine = client->readStringUntil('\n');
+  httpStatusCode = parseHttpStatusCode(statusLine);
+
+  while (client->connected()) {
+    String headerLine = client->readStringUntil('\n');
+    if (headerLine == "\r") {
+      break;
+    }
+  }
+
+  responseBody = client->readString();
+  client->stop();
+  return true;
+}
+
+bool pollDisplayCommand(String &requestId,
+                        String &title,
+                        String &message,
+                        unsigned long &holdMs) {
+  String payload = "{\"display_id\":\"";
+  payload += PARKME_DISPLAY_ID;
+  payload += "\"}";
+
+  String responseBody;
+  int httpStatusCode = -1;
+  if (!sendDisplayJsonRequest(PARKME_API_DISPLAY_POLL_PATH,
+                              payload,
+                              responseBody,
+                              httpStatusCode)) {
+    return false;
+  }
+
+  if (httpStatusCode < 200 || httpStatusCode >= 300) {
+    Serial.print("Display poll rejected with HTTP ");
+    Serial.println(httpStatusCode);
+    return false;
+  }
+
+  String action = extractJsonStringField(responseBody, "action");
+  action.toUpperCase();
+  if (action != "SHOW_MESSAGE") {
+    return false;
+  }
+
+  requestId = extractJsonStringField(responseBody, "request_id");
+  title = extractJsonStringField(responseBody, "title");
+  message = extractJsonStringField(responseBody, "message");
+  holdMs = extractJsonUnsignedLongField(responseBody, "hold_ms", 4000);
+  return requestId.length() > 0;
+}
+
+void sendDisplayResult(const String &requestId,
+                       const String &statusText,
+                       const String &detail) {
+  String payload = "{\"display_id\":\"";
+  payload += PARKME_DISPLAY_ID;
+  payload += "\",\"request_id\":\"";
+  payload += requestId;
+  payload += "\",\"status\":\"";
+  payload += statusText;
+  payload += "\",\"detail\":\"";
+  payload += detail;
+  payload += "\"}";
+
+  String responseBody;
+  int httpStatusCode = -1;
+  if (!sendDisplayJsonRequest(PARKME_API_DISPLAY_RESULT_PATH,
+                              payload,
+                              responseBody,
+                              httpStatusCode)) {
+    Serial.println("Failed to acknowledge display command.");
+    return;
+  }
+
+  Serial.print("Display ACK HTTP ");
+  Serial.print(httpStatusCode);
+  Serial.print(" | ");
+  Serial.println(responseBody);
+}
+
+void handleDisplayPolling() {
+  if (activeMessageUntilAtMs > 0 &&
+      static_cast<long>(millis() - activeMessageUntilAtMs) >= 0) {
+    activeMessageUntilAtMs = 0;
+    showLocalSensorScreen();
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  if (millis() - lastDisplayPollAtMs < PARKME_DISPLAY_COMMAND_POLL_INTERVAL_MS) {
+    return;
+  }
+
+  lastDisplayPollAtMs = millis();
+
+  String requestId;
+  String title;
+  String message;
+  unsigned long holdMs = 4000;
+  if (pollDisplayCommand(requestId, title, message, holdMs)) {
+    Serial.print("Display command received: ");
+    Serial.println(requestId);
+    activeMessageUntilAtMs = millis() + holdMs;
+    showScreen(title.length() > 0 ? title : "ParkMe", message);
+    sendDisplayResult(requestId, "DISPLAYED", "rendered");
+  }
+}
 
 float readDistanceCm() {
   digitalWrite(PARKME_SENSOR_TRIG_PIN, LOW);
@@ -39,7 +614,7 @@ float readDistanceCm() {
   delayMicroseconds(10);
   digitalWrite(PARKME_SENSOR_TRIG_PIN, LOW);
 
-  long durationUs = pulseIn(PARKME_SENSOR_ECHO_PIN, HIGH, 30000);
+  long durationUs = pulseIn(PARKME_SENSOR_ECHO_PIN, HIGH, kSensorEchoTimeoutUs);
   if (durationUs == 0) {
     return -1.0f;
   }
@@ -82,12 +657,18 @@ void loadPendingTelemetry() {
 void loadCalibration() {
   baselineDistanceCm =
       preferences.getFloat("base_cm", PARKME_SENSOR_DEFAULT_BASELINE_CM);
-  occupiedThresholdCm = PARKME_SENSOR_OCCUPIED_THRESHOLD_CM;
+  occupiedThresholdCm = computeOccupiedThreshold(
+      baselineDistanceCm,
+      PARKME_SENSOR_OCCUPIED_DELTA_CM,
+      PARKME_SENSOR_MIN_THRESHOLD_CM);
 }
 
 void saveCalibration(float baselineCm) {
   baselineDistanceCm = baselineCm;
-  occupiedThresholdCm = PARKME_SENSOR_OCCUPIED_THRESHOLD_CM;
+  occupiedThresholdCm = computeOccupiedThreshold(
+      baselineDistanceCm,
+      PARKME_SENSOR_OCCUPIED_DELTA_CM,
+      PARKME_SENSOR_MIN_THRESHOLD_CM);
   preferences.putFloat("base_cm", baselineDistanceCm);
 }
 
@@ -97,8 +678,7 @@ float sampleAverageDistance(uint8_t sampleCount) {
 
   for (uint8_t i = 0; i < sampleCount; ++i) {
     float distanceCm = readDistanceCm();
-    if (distanceCm > 0.0f &&
-        distanceCm <= PARKME_SENSOR_MAX_RELIABLE_DISTANCE_CM) {
+    if (distanceCm > 0.0f && distanceCm <= kSensorMeasurementCapCm) {
       total += distanceCm;
       ++validSamples;
     }
@@ -144,6 +724,7 @@ int readBatteryPercent() {
 bool connectWiFi() {
   lastWifiAttemptAtMs = millis();
 
+  showScreen("Connecting WiFi", "Please wait");
   Serial.print("Connecting to WiFi");
   WiFi.begin(PARKME_WIFI_SSID, PARKME_WIFI_PASSWORD);
 
@@ -159,10 +740,12 @@ bool connectWiFi() {
     Serial.println(WiFi.localIP());
     Serial.print("MAC: ");
     Serial.println(WiFi.macAddress());
+    showLocalSensorScreen();
     return true;
   }
 
   Serial.println("WiFi connection failed.");
+  showScreen("WiFi failed", "Retrying");
   return false;
 }
 
@@ -244,6 +827,12 @@ bool shouldSendTelemetry(SpotState currentState, unsigned long nowMs) {
           PARKME_SENSOR_HEARTBEAT_INTERVAL_MS);
 }
 
+float currentFreeDistanceLimitCm() {
+  return computeFreeDistanceLimit(baselineDistanceCm,
+                                  PARKME_SENSOR_MAX_RELIABLE_DISTANCE_CM,
+                                  PARKME_SENSOR_OCCUPIED_DELTA_CM);
+}
+
 void markTelemetrySent(SpotState state) {
   lastPublishedState = state;
   lastSuccessfulPublishAtMs = millis();
@@ -263,6 +852,9 @@ void flushPendingTelemetry() {
 
 void publishCurrentState(float distanceCm, SpotState state) {
   int batteryPercent = readBatteryPercent();
+  lastMeasuredDistanceCm = distanceCm;
+  lastMeasuredState = state;
+  lastMeasuredBatteryPercent = batteryPercent;
 
   Serial.print("Distance: ");
   Serial.print(distanceCm);
@@ -272,6 +864,10 @@ void publishCurrentState(float distanceCm, SpotState state) {
   Serial.print(batteryPercent);
   Serial.print("% | State: ");
   Serial.println(state == STATE_OCCUPIED ? "OCCUPIED" : "FREE");
+
+  if (activeMessageUntilAtMs == 0) {
+    showLocalSensorScreen();
+  }
 
   if (!shouldSendTelemetry(state, millis())) {
     return;
@@ -306,6 +902,9 @@ void setup() {
   Serial.begin(115200);
   delay(200);
 
+  graphicsReady = beginGraphicsDisplay();
+  showScreen("ParkMe", "Booting");
+
   pinMode(PARKME_SENSOR_TRIG_PIN, OUTPUT);
   pinMode(PARKME_SENSOR_ECHO_PIN, INPUT);
 
@@ -339,6 +938,8 @@ void setup() {
   Serial.print(" cm | Threshold: ");
   Serial.print(occupiedThresholdCm);
   Serial.println(" cm");
+  Serial.print("Display ID: ");
+  Serial.println(PARKME_DISPLAY_ID);
 
   if (calibrationButtonPressed()) {
     runCalibrationMode();
@@ -352,6 +953,7 @@ void setup() {
 void loop() {
   maintainWiFi();
   flushPendingTelemetry();
+  handleDisplayPolling();
   handleCalibrationButton();
 
   if (millis() - lastSampleAtMs < PARKME_SENSOR_SAMPLE_INTERVAL_MS) {
@@ -360,12 +962,18 @@ void loop() {
   lastSampleAtMs = millis();
 
   float distanceCm = sampleAverageDistance(3);
+  float freeDistanceLimitCm = currentFreeDistanceLimitCm();
   SpotState state = classifyDistanceCm(distanceCm,
                                        occupiedThresholdCm,
-                                       PARKME_SENSOR_MAX_RELIABLE_DISTANCE_CM);
+                                       freeDistanceLimitCm);
 
   if (!isKnownState(state)) {
-    Serial.println("Sensor reading invalid. Skipping publish.");
+    Serial.print("Sensor reading invalid. Distance: ");
+    Serial.print(distanceCm);
+    Serial.print(" cm | Free limit: ");
+    Serial.print(freeDistanceLimitCm);
+    Serial.print(" cm | Baseline: ");
+    Serial.println(baselineDistanceCm);
     return;
   }
 

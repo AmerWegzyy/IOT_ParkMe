@@ -37,6 +37,16 @@ constexpr float computeOccupiedThreshold(float baselineCm,
              : (baselineCm - occupiedDeltaCm);
 }
 
+constexpr float computeFreeDistanceLimit(float baselineCm,
+                                         float maxReliableDistanceCm,
+                                         float fallbackBufferCm) {
+  return baselineCm <= 0.0f
+             ? maxReliableDistanceCm
+             : ((baselineCm + fallbackBufferCm) > maxReliableDistanceCm
+                    ? (baselineCm + fallbackBufferCm)
+                    : maxReliableDistanceCm);
+}
+
 constexpr SpotState classifyDistanceCm(float distanceCm,
                                        float occupiedThresholdCm,
                                        float maxReliableDistanceCm) {

@@ -1,8 +1,19 @@
-// Change 'YOUR_CLOUD_RUN_URL' to your actual Cloud Run URL once deployed
-const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const API_BASE = isLocalhost 
-    ? 'http://localhost:8000/api/v1' 
-    : 'https://YOUR_CLOUD_RUN_URL/api/v1';
+const configuredApiBase = typeof window.PARKME_API_BASE === 'string'
+    ? window.PARKME_API_BASE.trim()
+    : '';
+const isFirebaseHostedOrigin = window.location.hostname.endsWith('.web.app') ||
+    window.location.hostname.endsWith('.firebaseapp.com');
+const API_BASE = configuredApiBase
+    ? configuredApiBase.replace(/\/$/, '')
+    : isFirebaseHostedOrigin
+        ? 'https://YOUR_CLOUD_RUN_URL/api/v1'
+        : `${window.location.origin}/api/v1`;
+const BACKEND_ORIGIN = API_BASE.replace(/\/api\/v1$/, '');
+const SPOT_STALE_MS = 120000;
+const STATS_REFRESH_INTERVAL_MS = 60000;
+const RESOLVED_PLATE = 'RESOLVED';
+const REJECTED_PLATE = 'REJECTED';
+const MANUAL_ACCEPTED_PLATE = 'MANUAL_ACCEPTED';
 
 // Initialize Firebase
 if (typeof firebase !== 'undefined') {
@@ -30,11 +41,26 @@ const loginError = document.getElementById('login-error');
 const adminPanel = document.getElementById('admin-panel');
 const dashboardLayout = document.querySelector('.dashboard-layout');
 const spotsGrid = document.getElementById('spots-grid');
+const recommendationBanner = document.getElementById('recommendation-banner');
 const securityLogs = document.getElementById('security-logs');
+const statsGrid = document.getElementById('stats-grid');
 const logoutBtn = document.getElementById('logout-btn');
 
 let eventSource = null;
 let currentProfile = null;
+let statsRefreshInterval = null;
+let spotHealthInterval = null;
+const currentSpots = new Map();
+const offlineSpotIds = new Set();
+
+function showLoginErrorMessage(message) {
+    loginError.textContent = message;
+    loginError.classList.remove('hidden');
+}
+
+function hideLoginErrorMessage() {
+    loginError.classList.add('hidden');
+}
 
 // Parse JWT utility
 function parseJwt(token) {
@@ -61,6 +87,147 @@ function showToast(message, type = 'info') {
     }, 5000);
 }
 
+function stopStatsRefresh() {
+    if (statsRefreshInterval) {
+        clearInterval(statsRefreshInterval);
+        statsRefreshInterval = null;
+    }
+}
+
+function startStatsRefresh() {
+    stopStatsRefresh();
+    statsRefreshInterval = setInterval(() => {
+        if (currentProfile && currentProfile.role === 'admin') {
+            fetchStats();
+            syncOfflineState();
+        }
+    }, STATS_REFRESH_INTERVAL_MS);
+}
+
+function stopSpotHealthMonitor() {
+    if (spotHealthInterval) {
+        clearInterval(spotHealthInterval);
+        spotHealthInterval = null;
+    }
+}
+
+function startSpotHealthMonitor() {
+    stopSpotHealthMonitor();
+    spotHealthInterval = setInterval(() => {
+        syncOfflineState();
+    }, 15000);
+}
+
+function isSpotOffline(spot) {
+    if (!spot || !spot.last_seen) {
+        return false;
+    }
+    const lastSeenMs = new Date(spot.last_seen).getTime();
+    if (Number.isNaN(lastSeenMs)) {
+        return false;
+    }
+    return Date.now() - lastSeenMs > SPOT_STALE_MS;
+}
+
+function renderStats(stats) {
+    if (!statsGrid) {
+        return;
+    }
+
+    const items = [
+        {
+            label: 'Occupied Now',
+            value: `${stats.occupied_spots}/${stats.total_spots}`,
+            meta: 'Current live occupancy'
+        },
+        {
+            label: 'Authorized Sessions',
+            value: stats.authorized_sessions ?? 0,
+            meta: `Peak hour ${stats.peak_hour || 'N/A'}`
+        },
+        {
+            label: 'Violations',
+            value: stats.violation_events ?? 0,
+            meta: `Unresolved ${stats.unresolved_events ?? 0}`
+        },
+        {
+            label: 'Parking Logs',
+            value: stats.total_logs ?? 0,
+            meta: `Busiest spot ${stats.busiest_spot || 'N/A'}`
+        },
+        {
+            label: 'Avg Duration',
+            value: stats.average_duration_minutes !== null && stats.average_duration_minutes !== undefined
+                ? `${stats.average_duration_minutes}m`
+                : 'N/A',
+            meta: `Aborted ${stats.aborted_events ?? 0} | Resolved ${stats.resolved_events ?? 0}`
+        }
+    ];
+
+    statsGrid.innerHTML = items.map((item) => `
+        <div class="stat-card">
+            <div class="stat-label">${item.label}</div>
+            <div class="stat-value">${item.value}</div>
+            <div class="stat-meta">${item.meta}</div>
+        </div>
+    `).join('');
+}
+
+function syncOfflineState() {
+    currentSpots.forEach((spot, spotId) => {
+        const offline = isSpotOffline(spot);
+        const wasOffline = offlineSpotIds.has(spotId);
+
+        if (offline && !wasOffline) {
+            offlineSpotIds.add(spotId);
+            if (currentProfile && currentProfile.role === 'admin') {
+                showToast(`Sensor at Spot ${spotId} looks offline. Last heartbeat is older than 2 minutes.`, 'warning');
+            }
+            updateSpotUI(spot);
+            return;
+        }
+
+        if (!offline && wasOffline) {
+            offlineSpotIds.delete(spotId);
+            if (currentProfile && currentProfile.role === 'admin') {
+                showToast(`Sensor at Spot ${spotId} is back online.`, 'info');
+            }
+            updateSpotUI(spot);
+        }
+    });
+    renderRecommendation();
+}
+
+function renderRecommendation() {
+    if (!recommendationBanner) {
+        return;
+    }
+
+    const visibleFreeSpots = Array.from(currentSpots.values())
+        .filter((spot) => !spot.is_occupied && !isSpotOffline(spot))
+        .sort((a, b) => a.id.localeCompare(b.id));
+
+    if (visibleFreeSpots.length === 0) {
+        recommendationBanner.classList.remove('hidden');
+        recommendationBanner.textContent = 'No verified free spots are available right now. Please wait for the next live update.';
+        return;
+    }
+
+    const recommendedSpot = visibleFreeSpots[0];
+    recommendationBanner.classList.remove('hidden');
+    recommendationBanner.textContent = `Recommended spot right now: ${recommendedSpot.id} (${recommendedSpot.category}).`;
+}
+
+function toBackendAssetUrl(path) {
+    if (!path) {
+        return null;
+    }
+    if (/^https?:\/\//i.test(path)) {
+        return path;
+    }
+    return `${BACKEND_ORIGIN}${path}`;
+}
+
 // Authentication
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -77,11 +244,10 @@ loginForm.addEventListener('submit', async (e) => {
         const token = await userCredential.user.getIdToken();
         
         localStorage.setItem('parkme_token', token);
-        loginError.classList.add('hidden');
+        hideLoginErrorMessage();
         initDashboard();
     } catch (error) {
-        loginError.classList.remove('hidden');
-        loginError.textContent = error.message;
+        showLoginErrorMessage(error.message);
     }
 });
 
@@ -90,11 +256,22 @@ logoutBtn.addEventListener('click', () => {
         firebase.auth().signOut().catch(console.error);
     }
     currentProfile = null;
+    currentSpots.clear();
+    offlineSpotIds.clear();
+    stopStatsRefresh();
+    stopSpotHealthMonitor();
     localStorage.removeItem('parkme_profile');
     localStorage.removeItem('parkme_token');
     if (eventSource) eventSource.close();
     dashboardScreen.classList.add('hidden');
     loginScreen.classList.remove('hidden');
+    if (statsGrid) {
+        statsGrid.innerHTML = '';
+    }
+    if (recommendationBanner) {
+        recommendationBanner.classList.add('hidden');
+        recommendationBanner.textContent = '';
+    }
 });
 
 // Initialize Dashboard
@@ -129,10 +306,18 @@ async function initDashboard() {
             adminPanel.classList.remove('hidden');
             dashboardLayout.classList.add('has-admin');
             fetchLogs();
+            fetchStats();
+            startStatsRefresh();
         } else {
             adminPanel.classList.add('hidden');
             dashboardLayout.classList.remove('has-admin');
+            stopStatsRefresh();
+            if (statsGrid) {
+                statsGrid.innerHTML = '';
+            }
         }
+
+        startSpotHealthMonitor();
 
         // Connect SSE
         connectSSE(token);
@@ -143,10 +328,15 @@ async function initDashboard() {
         console.error("Dashboard initialization failed:", e);
         // Clean up token and show login screen if authentication fails
         currentProfile = null;
+        currentSpots.clear();
+        offlineSpotIds.clear();
+        stopStatsRefresh();
+        stopSpotHealthMonitor();
         localStorage.removeItem('parkme_profile');
         localStorage.removeItem('parkme_token');
         loginScreen.classList.remove('hidden');
         dashboardScreen.classList.add('hidden');
+        showLoginErrorMessage('Authenticated, but could not reach the backend API. Please verify the backend URL and try again.');
     }
 }
 
@@ -168,8 +358,12 @@ function connectSSE(token) {
             const data = JSON.parse(event.data);
             if (data.type === 'spot_update') {
                 updateSpotUI(data.spot);
+                syncOfflineState();
             } else if (data.type === 'log_event') {
                 appendLog(data.log);
+                if (currentProfile && currentProfile.role === 'admin') {
+                    fetchStats();
+                }
             }
         };
     } catch (e) {
@@ -177,10 +371,25 @@ function connectSSE(token) {
     }
 }
 
-async function resolveSpot(spotId) {
+function setReviewButtonsPending(spotId, label) {
+    document.querySelectorAll(`[data-review-spot="${spotId}"]`).forEach((button) => {
+        button.disabled = true;
+        button.style.opacity = '0.5';
+        button.style.cursor = 'wait';
+        button.innerText = label;
+    });
+}
+
+async function submitSpotReview(spotId, action) {
     const token = localStorage.getItem('parkme_token');
+    const isReject = action === 'reject';
+    const isResolve = action === 'resolve';
+    setReviewButtonsPending(
+        spotId,
+        isReject ? 'Rejecting...' : isResolve ? 'Resolving...' : 'Accepting...'
+    );
     try {
-        const res = await fetch(`${API_BASE}/sensors/resolve`, {
+        const res = await fetch(`${API_BASE}/sensors/${action}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -190,29 +399,119 @@ async function resolveSpot(spotId) {
         });
         
         if (res.ok) {
-            showToast(`Spot ${spotId} resolved successfully.`, 'info');
+            const existingSpot = currentSpots.get(spotId);
+            if (existingSpot) {
+                updateSpotUI({
+                    ...existingSpot,
+                    is_occupied: isResolve ? false : true,
+                    license_plate: isReject ? REJECTED_PLATE : isResolve ? null : MANUAL_ACCEPTED_PLATE,
+                    is_violation: isReject,
+                    review_capture_url: null,
+                    review_status: null
+                });
+            } else {
+                fetchSpots();
+            }
+            showToast(
+                isReject
+                    ? `Spot ${spotId} rejected successfully.`
+                    : isResolve
+                        ? `Spot ${spotId} resolved successfully.`
+                        : `Spot ${spotId} accepted successfully.`,
+                isReject ? 'warning' : 'info'
+            );
+            fetchLogs();
+            fetchStats();
         } else {
-            showToast('Simulated: Acknowledge & Resolve clicked!', 'info');
-            // Remove the card for demo purposes
-            document.getElementById(`spot-${spotId}`)?.remove();
+            let detail = isReject
+                ? `Failed to reject Spot ${spotId}. Please try again.`
+                : isResolve
+                    ? `Failed to resolve Spot ${spotId}. Please try again.`
+                    : `Failed to accept Spot ${spotId}. Please try again.`;
+            try {
+                const errorData = await res.json();
+                if (errorData && errorData.detail) {
+                    detail = errorData.detail;
+                }
+            } catch (e) {
+                // Leave the fallback message if the error response is not JSON.
+            }
+            showToast(detail, 'warning');
+            fetchSpots();
         }
     } catch (e) {
-        showToast('Simulated: Spot Acknowledged', 'info');
-        document.getElementById(`spot-${spotId}`)?.remove();
+        showToast(
+            isReject
+                ? `Could not reach the backend to reject Spot ${spotId}.`
+                : isResolve
+                    ? `Could not reach the backend to resolve Spot ${spotId}.`
+                    : `Could not reach the backend to accept Spot ${spotId}.`,
+            'warning'
+        );
+        fetchSpots();
+    }
+}
+
+async function resolveSpot(spotId) {
+    return submitSpotReview(spotId, 'resolve');
+}
+
+async function acceptSpot(spotId) {
+    return submitSpotReview(spotId, 'accept');
+}
+
+async function rejectSpot(spotId) {
+    return submitSpotReview(spotId, 'reject');
+}
+
+async function fetchStats() {
+    const token = localStorage.getItem('parkme_token');
+    if (!token || !currentProfile || currentProfile.role !== 'admin') {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/usage-stats`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!res.ok) {
+            throw new Error('Failed to fetch usage stats');
+        }
+
+        const stats = await res.json();
+        renderStats(stats);
+    } catch (e) {
+        console.error("Failed to fetch stats", e);
     }
 }
 
 // Rendering Logic
 function createSpotCard(spot) {
     const div = document.createElement('div');
+    const offline = isSpotOffline(spot);
     
     let statusClass = 'free';
     let plateDisplay = 'EMPTY';
     
-    if (spot.is_occupied) {
+    if (offline) {
+        statusClass = 'offline';
+        plateDisplay = 'OFFLINE';
+    } else if (spot.is_occupied) {
         if (spot.is_violation && spot.license_plate === 'UNIDENTIFIED') {
             statusClass = 'unidentified';
             plateDisplay = '⚠️ UNIDENTIFIED';
+        } else if (spot.license_plate === RESOLVED_PLATE) {
+            statusClass = 'free';
+            plateDisplay = 'EMPTY';
+        } else if (spot.license_plate === MANUAL_ACCEPTED_PLATE) {
+            statusClass = 'occupied';
+            plateDisplay = 'OCCUPIED (ADMIN ACCEPTED)';
+        } else if (spot.license_plate === REJECTED_PLATE) {
+            statusClass = 'violation';
+            plateDisplay = 'OCCUPIED (REJECTED)';
         } else if (spot.is_violation) {
             statusClass = 'violation';
             plateDisplay = spot.license_plate;
@@ -252,44 +551,37 @@ function createSpotCard(spot) {
                 <div>📡 Ping: ${seen}</div>
             </div>
         `;
+        if (offline) {
+            html += `<div class="device-status offline-text">No heartbeat received in the last 2 minutes.</div>`;
+        }
         if (statusClass === 'unidentified') {
-            const lastSeenTime = spot.last_seen ? new Date(spot.last_seen).getTime() : 0;
-            const elapsed = Date.now() - lastSeenTime;
-            const cooldown = 45000; // 45 seconds
+            const reviewCaptureUrl = toBackendAssetUrl(spot.review_capture_url);
+            const reviewStatus = spot.review_status || (reviewCaptureUrl ? 'ready' : 'retrying');
 
-            if (elapsed < cooldown) {
-                const remaining = Math.ceil((cooldown - elapsed) / 1000);
-                html += `<button id="resolve-btn-${spot.id}" class="resolve-btn" disabled style="margin-top:10px; opacity:0.5; cursor:not-allowed;">Camera Retrying... (${remaining}s)</button>`;
-                
-                // Start a countdown to enable the button
-                setTimeout(() => {
-                    const btn = document.getElementById(`resolve-btn-${spot.id}`);
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.style.opacity = '1';
-                        btn.style.cursor = 'pointer';
-                        btn.innerText = 'Acknowledge & Resolve';
-                        btn.setAttribute('onclick', `resolveSpot('${spot.id}')`);
-                    }
-                }, cooldown - elapsed);
-
-                // Update the countdown text every second
-                const interval = setInterval(() => {
-                    const btn = document.getElementById(`resolve-btn-${spot.id}`);
-                    if (!btn || btn.disabled === false) {
-                        clearInterval(interval);
-                        return;
-                    }
-                    const newElapsed = Date.now() - lastSeenTime;
-                    const newRemaining = Math.ceil((cooldown - newElapsed) / 1000);
-                    if (newRemaining > 0) {
-                        btn.innerText = `Camera Retrying... (${newRemaining}s)`;
-                    }
-                }, 1000);
+            if (reviewStatus === 'retrying') {
+                html += `<button class="resolve-btn" disabled style="margin-top:10px; opacity:0.5; cursor:not-allowed;">Camera Retrying...</button>`;
             } else {
-                html += `<button id="resolve-btn-${spot.id}" class="resolve-btn" onclick="resolveSpot('${spot.id}')" style="margin-top:10px;">Acknowledge & Resolve</button>`;
+                if (reviewCaptureUrl) {
+                    html += `
+                        <div class="review-preview">
+                            <div class="review-label">Last camera image</div>
+                            <img src="${reviewCaptureUrl}" alt="Last camera image for spot ${spot.id}" class="review-image">
+                        </div>
+                    `;
+                } else {
+                    html += `<div class="device-status review-note">No camera image is available for review.</div>`;
+                }
+                html += `
+                    <div class="review-actions">
+                        <button class="accept-btn review-btn" data-review-spot="${spot.id}" onclick="acceptSpot('${spot.id}')">Accept Vehicle</button>
+                        <button class="reject-btn review-btn" data-review-spot="${spot.id}" onclick="rejectSpot('${spot.id}')">Reject Vehicle</button>
+                        <button class="resolve-btn review-btn" data-review-spot="${spot.id}" onclick="resolveSpot('${spot.id}')">Resolve Spot</button>
+                    </div>
+                `;
             }
         }
+    } else if (offline) {
+        html += `<div class="device-status offline-text">Temporarily unavailable.</div>`;
     }
 
     div.innerHTML = html;
@@ -297,6 +589,7 @@ function createSpotCard(spot) {
 }
 
 function updateSpotUI(spot) {
+    currentSpots.set(spot.id, spot);
     const existing = document.getElementById(`spot-${spot.id}`);
 
     const newCard = createSpotCard(spot);
@@ -305,6 +598,7 @@ function updateSpotUI(spot) {
     } else {
         spotsGrid.appendChild(newCard);
     }
+    renderRecommendation();
 }
 
 function appendLog(log) {
@@ -338,8 +632,11 @@ async function fetchSpots() {
         
         const data = await res.json();
         
+        currentSpots.clear();
+        offlineSpotIds.clear();
         spotsGrid.innerHTML = '';
         data.spots.forEach(updateSpotUI);
+        syncOfflineState();
     } catch (e) {
         console.error("Failed to fetch initial spots", e);
     }

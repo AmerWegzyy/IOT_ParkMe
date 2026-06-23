@@ -16,6 +16,10 @@ constexpr uint16_t PARKME_SERVER_PORT = 443;
 
 constexpr char PARKME_API_UPDATE_SPOT_PATH[] = "/api/v1/sensors/heartbeat";
 constexpr char PARKME_API_GATE_ENTRY_PATH[] = "/api/v1/sensors/park";
+constexpr char PARKME_API_CAMERA_POLL_PATH[] = "/api/v1/cameras/poll";
+constexpr char PARKME_API_CAMERA_RESULT_PATH[] = "/api/v1/cameras/result";
+constexpr char PARKME_API_DISPLAY_POLL_PATH[] = "/api/v1/displays/poll";
+constexpr char PARKME_API_DISPLAY_RESULT_PATH[] = "/api/v1/displays/result";
 
 constexpr uint8_t PARKME_SENSOR_TRIG_PIN = 5;
 constexpr uint8_t PARKME_SENSOR_ECHO_PIN = 18;
@@ -56,6 +60,22 @@ constexpr uint8_t PARKME_GATE_LCD_ROWS = 2;
 constexpr uint32_t PARKME_GATE_DEBOUNCE_MS = 250;
 constexpr uint32_t PARKME_GATE_WIFI_RETRY_INTERVAL_MS = 10000;
 constexpr uint32_t PARKME_GATE_HTTP_TIMEOUT_MS = 10000;
+constexpr uint32_t PARKME_GATE_COMMAND_POLL_INTERVAL_MS = 2000;
+constexpr uint8_t PARKME_GATE_MAX_CAPTURE_RETRIES = 3;
+constexpr uint32_t PARKME_GATE_RETRY_STATUS_MS = 2500;
+constexpr uint32_t PARKME_GATE_RETRY_BACKOFF_MS = 2500;
 constexpr uint32_t PARKME_GATE_RELAY_PULSE_MS = 3000;
+
+// Sensor-board display settings. The same ESP32 that reads the ultrasonic
+// sensor also polls the backend for user-facing screen messages.
+constexpr char PARKME_DISPLAY_ID[] = "display-c1";
+constexpr bool PARKME_DISPLAY_ENABLE_GRAPHICS = true;
+constexpr uint8_t PARKME_DISPLAY_SDA_PIN = 21;
+constexpr uint8_t PARKME_DISPLAY_SCL_PIN = 22;
+constexpr uint8_t PARKME_DISPLAY_I2C_ADDRESS = 0x3C;
+constexpr uint8_t PARKME_DISPLAY_COLUMN_OFFSET = 2;
+constexpr uint32_t PARKME_DISPLAY_WIFI_RETRY_INTERVAL_MS = 10000;
+constexpr uint32_t PARKME_DISPLAY_HTTP_TIMEOUT_MS = 7000;
+constexpr uint32_t PARKME_DISPLAY_COMMAND_POLL_INTERVAL_MS = 1000;
 
 #endif

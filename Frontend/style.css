@@ -10,6 +10,7 @@
     --status-occupied: #64748b;
     --status-violation: #ef4444;
     --status-unidentified: #eab308;
+    --status-offline: #f97316;
 }
 
 * {
@@ -210,10 +211,57 @@ body {
     color: var(--text-secondary);
 }
 
+.admin-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+}
+
+.stat-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.stat-label {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.stat-value {
+    margin-top: 8px;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.stat-meta {
+    margin-top: 6px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
 .spots-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 20px;
+}
+
+.recommendation-banner {
+    margin-bottom: 18px;
+    padding: 14px 16px;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: 12px;
+    background: rgba(56, 189, 248, 0.12);
+    color: #dbeafe;
 }
 
 /* Spot Cards */
@@ -287,6 +335,83 @@ body {
     animation: pulse-yellow 2s infinite;
 }
 
+.spot-card.offline {
+    border: 2px solid var(--status-offline);
+    background: linear-gradient(180deg, rgba(249, 115, 22, 0.14), rgba(15, 23, 42, 0.7));
+}
+
+.spot-card.offline .plate-number {
+    color: #fdba74;
+}
+
+.device-status {
+    margin-top: 12px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.device-status.offline-text {
+    color: #fdba74;
+}
+
+.review-preview {
+    margin-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 12px;
+}
+
+.review-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.review-image {
+    width: 100%;
+    max-height: 180px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 23, 42, 0.85);
+}
+
+.review-note {
+    margin-top: 14px;
+    color: #fcd34d;
+}
+
+.review-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.review-btn {
+    margin-top: 0;
+    flex: 1;
+}
+
+.accept-btn {
+    width: 100%;
+    padding: 8px;
+    background: rgba(16, 185, 129, 0.18);
+    border: 1px solid var(--status-free);
+    color: #86efac;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.accept-btn:hover {
+    background: var(--status-free);
+    color: #052e16;
+}
+
 .resolve-btn {
     margin-top: 15px;
     width: 100%;
@@ -304,6 +429,24 @@ body {
 .resolve-btn:hover {
     background: var(--status-unidentified);
     color: #000;
+}
+
+.reject-btn {
+    width: 100%;
+    padding: 8px;
+    background: rgba(239, 68, 68, 0.18);
+    border: 1px solid var(--status-violation);
+    color: #fca5a5;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.reject-btn:hover {
+    background: var(--status-violation);
+    color: #fff;
 }
 
 /* Admin Logs */

@@ -3,8 +3,10 @@ Backend/__pycache__/
 Backend/venv/
 Backend/venv2/
 Backend/.venv/
+Backend/run_local_backend.ps1
 Backend/.env
 Backend/serviceAccountKey.json
+Backend/captures/
 Backend/latestDiagram.png
 Backend/newDiagram.png
 Backend/olderDiagram.png

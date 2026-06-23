@@ -8,6 +8,10 @@ static_assert(computeOccupiedThreshold(80.0f, 30.0f, 8.0f) == 50.0f,
               "Threshold should be baseline minus delta.");
 static_assert(computeOccupiedThreshold(20.0f, 30.0f, 8.0f) == 8.0f,
               "Threshold should honor the floor.");
+static_assert(computeFreeDistanceLimit(390.0f, 350.0f, 30.0f) == 420.0f,
+              "Free-distance limit should expand to cover the calibrated floor.");
+static_assert(computeFreeDistanceLimit(80.0f, 350.0f, 30.0f) == 350.0f,
+              "Free-distance limit should preserve the configured ceiling when adequate.");
 static_assert(classifyDistanceCm(18.0f, 20.0f, 350.0f) == STATE_OCCUPIED,
               "Near objects should mark the spot occupied.");
 static_assert(classifyDistanceCm(42.0f, 20.0f, 350.0f) == STATE_FREE,

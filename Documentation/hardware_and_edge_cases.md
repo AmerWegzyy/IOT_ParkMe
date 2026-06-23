@@ -12,9 +12,9 @@ If the ultrasonic node loses WiFi exactly when a car arrives, the state change i
 ### B. Adaptive Calibration (Sensor Node)
 Holding the boot button (GPIO 0) for 4 seconds triggers a calibration sequence. It samples the exact distance to the concrete floor 15 times, averages it, and computes a baseline minus a 30cm delta (with an 8cm hard floor). This prevents false positives regardless of ceiling height.
 
-### C. Retries & Debouncing (Camera Node)
-* **Debouncing:** A strict boolean latch (`carPresent`) prevents the camera from taking multiple pictures of the same car while it's moving through the gate. It only resets when the car fully clears (> 20cm).
-* **Retries:** If the OCR fails or network drops, the camera parses the server's `"action": "RETRY"` and will attempt up to 3 captures, displaying a countdown on the LCD.
+### C. Capture Commands & Retries (Camera Node)
+* **Backend-triggered capture:** The camera no longer decides on its own from a local gate sensor. It polls the backend for a capture command and only takes a picture when the backend queues one.
+* **Retries:** If the OCR fails or network drops, the camera reports the failed attempt and retries up to 3 captures before marking the command as failed.
 
 ---
 
