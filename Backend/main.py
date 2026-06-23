@@ -9,6 +9,7 @@ import zoneinfo
 from pathlib import Path
 from typing import List, Optional
 import uuid
+import base64
 
 
 def _resolve_il_timezone():
@@ -31,7 +32,7 @@ def get_il_time():
     return datetime.now().astimezone()
 
 from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException, status, UploadFile, File, Form, Header
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -53,8 +54,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 backend_dir = Path(__file__).resolve().parent
-captures_dir = backend_dir / "captures"
-captures_dir.mkdir(exist_ok=True)
 for env_filename in (".env", "env"):
     env_path = backend_dir / env_filename
     if env_path.exists():
@@ -87,15 +86,13 @@ app.add_middleware(
 
 # SSE Broadcaster
 sse_clients = []
-CAMERA_COMMANDS_COLLECTION = "camera_commands"
 DISPLAY_COMMANDS_COLLECTION = "display_commands"
-CAMERA_COMMAND_STALE_SECONDS = 90
 BOUNCY_DRIVER_MAX_SECONDS = 90
 LPR_DEDUP_CACHE_TTL_SECONDS = 120
 CAMERA_FIRST_HEARTBEAT_GRACE_SECONDS = 10
-CAMERA_UPLOAD_GRACE_SECONDS = 12
+CAMERA_UPLOAD_GRACE_SECONDS = 30
 DISPLAY_SCANNING_HOLD_MS = 3000
-DISPLAY_MANUAL_REVIEW_HOLD_MS = 5000
+DISPLAY_MANUAL_REVIEW_HOLD_MS = 8000
 DISPLAY_WELCOME_HOLD_MS = 5000
 DISPLAY_REJECT_HOLD_MS = 25000
 DISPLAY_SPOT_CLEARED_HOLD_MS = 1500
@@ -133,23 +130,6 @@ class BulkPayload(BaseModel):
 
 class ResolvePayload(BaseModel):
     spot_id: str
-
-
-class CameraPollPayload(BaseModel):
-    camera_mac: str = Field(..., description="MAC address reported by the ESP32-CAM")
-
-
-class CameraCommandResultPayload(BaseModel):
-    camera_mac: str
-    request_id: str
-    status: str = Field(..., description="COMPLETED or FAILED")
-    detail: Optional[str] = None
-
-
-class DebugCameraTriggerPayload(BaseModel):
-    spot_id: Optional[str] = None
-    camera_mac: Optional[str] = None
-    reason: str = "manual_trigger"
 
 
 class DisplayPollPayload(BaseModel):
@@ -199,14 +179,48 @@ def save_review_capture_for_spot(spot_id: str, image_bytes: bytes):
     safe_spot_id = "".join(
         ch for ch in spot_id.strip().lower() if ch.isalnum() or ch in {"-", "_"}
     ) or "spot"
-    filename = f"{safe_spot_id}_review_{uuid.uuid4().hex}.jpg"
-    file_path = captures_dir / filename
-    file_path.write_bytes(image_bytes)
+    
+    db = firestore_client
+    db.collection("spot_captures").document(safe_spot_id).set({
+        "image_base64": base64.b64encode(image_bytes).decode("utf-8"),
+        "updated_at": get_il_time()
+    })
+    
     captured_at = get_il_time().isoformat()
     return {
-        "review_capture_path": f"/captures/{filename}",
+        "review_capture_path": f"/api/v1/captures/{safe_spot_id}",
         "review_capture_at": captured_at
     }
+
+@app.get("/api/v1/captures/{spot_id}")
+async def get_capture(spot_id: str, db = Depends(get_firestore_db)):
+    safe_spot_id = "".join(
+        ch for ch in spot_id.strip().lower() if ch.isalnum() or ch in {"-", "_"}
+    ) or "spot"
+    doc = db.collection("spot_captures").document(safe_spot_id).get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Capture not found")
+    data = doc.to_dict()
+    image_base64 = data.get("image_base64")
+    if not image_base64:
+        raise HTTPException(status_code=404, detail="Capture data missing")
+    
+    image_bytes = base64.b64decode(image_base64)
+    return Response(content=image_bytes, media_type="image/jpeg")
+
+
+@app.get("/api/v1/logs/{log_id}/capture")
+async def get_log_capture(log_id: str, db = Depends(get_firestore_db)):
+    doc = db.collection("parking_logs").document(log_id).get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Log not found")
+    data = doc.to_dict()
+    capture_base64 = data.get("capture_base64")
+    if not capture_base64:
+        raise HTTPException(status_code=404, detail="No capture associated with this log")
+    
+    image_bytes = base64.b64decode(capture_base64)
+    return Response(content=image_bytes, media_type="image/jpeg")
 
 
 def build_review_capture_url(spot_data: dict):
@@ -248,21 +262,6 @@ def build_review_deadline(review_started_at):
     if not hasattr(review_started_at, "tzinfo"):
         return None
     return review_started_at + timedelta(seconds=CAMERA_UPLOAD_GRACE_SECONDS)
-
-
-def get_capture_command_for_spot(db, camera_mac: str | None, spot_id: str):
-    if not camera_mac:
-        return None
-
-    command_doc = get_camera_command_ref(db, camera_mac).get()
-    if not command_doc.exists:
-        return None
-
-    command_data = command_doc.to_dict() or {}
-    if command_data.get("spot_id") != spot_id:
-        return None
-
-    return command_data
 
 
 def get_review_status(license_plate: str | None, spot_data: dict, now: datetime):
@@ -348,10 +347,6 @@ def normalize_mac(mac_address: str) -> str:
     return mac_address.strip().upper()
 
 
-def get_camera_command_ref(db, camera_mac: str):
-    return db.collection(CAMERA_COMMANDS_COLLECTION).document(normalize_mac(camera_mac))
-
-
 def normalize_identity(identity: str) -> str:
     return identity.strip().lower()
 
@@ -364,7 +359,7 @@ def get_command_reference_time(command_data: dict):
     return command_data.get("claimed_at") or command_data.get("queued_at")
 
 
-def is_stale_command(command_data: dict, now: datetime, stale_after_seconds: int = CAMERA_COMMAND_STALE_SECONDS):
+def is_stale_command(command_data: dict, now: datetime, stale_after_seconds: int = 30):
     reference_time = get_command_reference_time(command_data)
     age_seconds = seconds_since(reference_time, now)
     if age_seconds is None:
@@ -388,130 +383,6 @@ def should_preserve_active_log_for_new_arrival(active_log_data: dict,
             "ABORTED"
         }
     )
-
-
-def complete_pending_capture_command_for_spot(db,
-                                              camera_mac: str,
-                                              spot_id: str,
-                                              *,
-                                              detail: str) -> bool:
-    command_ref = get_camera_command_ref(db, camera_mac)
-    command_doc = command_ref.get()
-
-    if not command_doc.exists:
-        return False
-
-    command_data = command_doc.to_dict() or {}
-    if command_data.get("spot_id") != spot_id:
-        return False
-
-    if command_data.get("status") not in {"PENDING", "CLAIMED"}:
-        return False
-
-    command_ref.update({
-        "status": "COMPLETED",
-        "detail": detail,
-        "completed_at": get_il_time()
-    })
-    return True
-
-
-def queue_capture_command(db,
-                         camera_mac: str,
-                         spot_id: str,
-                         reason: str,
-                         *,
-                         replace_existing: bool = False):
-    normalized_mac = normalize_mac(camera_mac)
-    command_ref = get_camera_command_ref(db, normalized_mac)
-    existing_doc = command_ref.get()
-    now = get_il_time()
-
-    if existing_doc.exists:
-        existing_data = existing_doc.to_dict() or {}
-        if (not replace_existing and
-                existing_data.get("status") in {"PENDING", "CLAIMED"} and
-                not is_stale_command(existing_data, now)):
-            return existing_data
-
-    request_id = str(uuid.uuid4())
-    command_data = {
-        "request_id": request_id,
-        "action": "CAPTURE",
-        "status": "PENDING",
-        "camera_mac": normalized_mac,
-        "spot_id": spot_id,
-        "reason": reason,
-        "queued_at": now
-    }
-    command_ref.set(command_data)
-    return command_data
-
-
-def cancel_capture_command_for_spot(db,
-                                    camera_mac: str,
-                                    spot_id: str,
-                                    *,
-                                    detail: str):
-    command_ref = get_camera_command_ref(db, camera_mac)
-    command_doc = command_ref.get()
-
-    if not command_doc.exists:
-        return False
-
-    command_data = command_doc.to_dict() or {}
-    if command_data.get("spot_id") != spot_id:
-        return False
-
-    if command_data.get("status") not in {"PENDING", "CLAIMED"}:
-        return False
-
-    command_ref.update({
-        "status": "CANCELLED",
-        "detail": detail,
-        "completed_at": get_il_time()
-    })
-    return True
-
-
-def claim_capture_command(db, camera_mac: str):
-    command_ref = get_camera_command_ref(db, camera_mac)
-    command_doc = command_ref.get()
-
-    if not command_doc.exists:
-        return None
-
-    command_data = command_doc.to_dict() or {}
-    if command_data.get("status") != "PENDING":
-        return None
-
-    claimed_at = get_il_time()
-    command_ref.update({
-        "status": "CLAIMED",
-        "claimed_at": claimed_at
-    })
-    command_data["status"] = "CLAIMED"
-    command_data["claimed_at"] = claimed_at
-    return command_data
-
-
-def complete_capture_command(db, camera_mac: str, request_id: str, status_text: str, detail: str | None):
-    command_ref = get_camera_command_ref(db, camera_mac)
-    command_doc = command_ref.get()
-
-    if not command_doc.exists:
-        return False
-
-    command_data = command_doc.to_dict() or {}
-    if command_data.get("request_id") != request_id:
-        return False
-
-    command_ref.update({
-        "status": status_text.upper(),
-        "detail": detail,
-        "completed_at": get_il_time()
-    })
-    return True
 
 
 def queue_display_command(db,
@@ -779,6 +650,7 @@ async def receive_heartbeat_data(
                     active_plate not in {RESOLVED_PLATE, REJECTED_PLATE, MANUAL_ACCEPTED_PLATE}):
                 update_data["is_violation"] = False
                 update_data["license_plate"] = "ABORTED"
+                await broadcast_event("log_aborted", {"log_id": active_log_doc.id, "spot_id": spot_id})
 
             active_log_doc.reference.update(update_data)
             if active_plate == REJECTED_PLATE:
@@ -892,15 +764,6 @@ async def receive_heartbeat_data(
     return {"status": "heartbeat_processed", "timestamp": server_time.isoformat()}
 
 
-@app.post("/api/v1/cameras/poll")
-async def poll_camera_command(payload: CameraPollPayload, db = Depends(get_firestore_db)):
-    return {"action": "IDLE", "reason": "camera_polling_removed"}
-
-
-@app.post("/api/v1/cameras/result")
-async def complete_camera_command(payload: CameraCommandResultPayload, db = Depends(get_firestore_db)):
-    return {"status": "ignored", "reason": "camera_polling_removed", "request_id": payload.request_id}
-
 
 @app.post("/api/v1/displays/poll")
 async def poll_display_command(payload: DisplayPollPayload, db = Depends(get_firestore_db)):
@@ -935,14 +798,6 @@ async def complete_display_result(payload: DisplayCommandResultPayload, db = Dep
         raise HTTPException(status_code=404, detail="Matching display command not found")
 
     return {"status": "acknowledged", "request_id": payload.request_id}
-
-
-@app.post("/api/v1/debug/cameras/trigger")
-async def debug_trigger_camera(payload: DebugCameraTriggerPayload, db = Depends(get_firestore_db)):
-    raise HTTPException(
-        status_code=410,
-        detail="Server-triggered camera commands were removed. Trigger the ESP32-CAM through ESP-NOW from the sensor node."
-    )
 
 
 @app.post("/api/v1/sensors/park", status_code=status.HTTP_202_ACCEPTED)
@@ -1144,16 +999,22 @@ async def receive_park_event(
             display_message = "access denied"
             logger.warning(f"Role mismatch: {snapshot_role} user {driver_name} parked in {spot_category} spot {spot_id}")
 
+    capture_base64 = base64.b64encode(image_bytes).decode("utf-8") if is_violation else None
+
     if active_log_doc and active_plate == UNIDENTIFIED_PLATE:
-        active_log_doc.reference.update({
+        update_data = {
             "license_plate": license_plate,
             "user_id": user_id,
             "snapshot_role": snapshot_role,
             "is_violation": is_violation
-        })
+        }
+        if capture_base64:
+            update_data["capture_base64"] = capture_base64
+        active_log_doc.reference.update(update_data)
         logger.info(f"Resolved UNIDENTIFIED review log for spot {spot_id} with plate {license_plate}")
+        log_id = active_log_doc.id
     else:
-        logs_ref.add({
+        new_log_data = {
             "spot_id": spot_id,
             "license_plate": license_plate,
             "user_id": user_id,
@@ -1161,7 +1022,11 @@ async def receive_park_event(
             "entry_time": server_time,
             "exit_time": None,
             "is_violation": is_violation
-        })
+        }
+        if capture_base64:
+            new_log_data["capture_base64"] = capture_base64
+        _, new_log_ref = logs_ref.add(new_log_data)
+        log_id = new_log_ref.id
     
     spot_ref.update({
         "is_occupied": True,
@@ -1190,8 +1055,10 @@ async def receive_park_event(
 
     if is_violation:
         await broadcast_event("log_event", {"log": {
+            "log_id": log_id,
+            "spot_id": spot_id,
             "timestamp": server_time.isoformat(), 
-            "type": "unidentified" if not vehicle_user else "violation", 
+            "type": "unidentified" if license_plate == UNIDENTIFIED_PLATE else "violation", 
             "message": f"Violation at Spot {spot_id} by {license_plate}"
         }})
 
@@ -1360,7 +1227,7 @@ async def get_recent_logs(current_user: dict = Depends(get_current_user), db = D
             msg = f"Admin manually accepted vehicle at Spot {spot_id}."
         elif license_plate == REJECTED_PLATE:
             msg_type = "violation"
-            msg = f"Admin rejected vehicle at Spot {spot_id}."
+            msg = f"Violation at Spot {spot_id} (Unidentified Plate)"
         elif license_plate == "ABORTED":
             msg_type = "info"
             msg = f"Driver aborted parking at Spot {spot_id}."
@@ -1374,6 +1241,7 @@ async def get_recent_logs(current_user: dict = Depends(get_current_user), db = D
             continue
             
         result.append({
+            "log_id": doc.id,
             "timestamp": entry_time.isoformat() if hasattr(entry_time, 'isoformat') else str(entry_time) if entry_time else None,
             "type": msg_type,
             "message": msg
@@ -1509,80 +1377,6 @@ async def get_usage_stats(admin_user: dict = Depends(get_current_admin), db = De
         "generated_at": get_il_time().isoformat(),
     }
 
-@app.put("/api/v1/sensors/resolve")
-async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_current_admin), db = Depends(get_firestore_db)):
-    logs_ref = db.collection("parking_logs")
-    active_logs_query = list(
-        logs_ref
-        .where(filter=FieldFilter("spot_id", "==", payload.spot_id))
-        .where(filter=FieldFilter("license_plate", "==", UNIDENTIFIED_PLATE))
-        .where(filter=FieldFilter("exit_time", "==", None))
-        .get()
-    )
-
-    if not active_logs_query:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No active UNIDENTIFIED anomaly found for spot {payload.spot_id}"
-        )
-
-    spot_ref = db.collection("parking_spots").document(payload.spot_id)
-    spot_doc = spot_ref.get()
-    if not spot_doc.exists:
-        raise HTTPException(status_code=404, detail=f"Unknown spot {payload.spot_id}")
-
-    spot_data = spot_doc.to_dict() or {}
-    if build_review_capture_url(spot_data):
-        raise HTTPException(
-            status_code=409,
-            detail="Resolve is only available when no camera image has reached the server."
-        )
-
-    review_resolve_after = spot_data.get("review_resolve_after")
-    overdue_seconds = seconds_since(review_resolve_after, get_il_time())
-    if overdue_seconds is None or overdue_seconds < 0:
-        raise HTTPException(
-            status_code=409,
-            detail="Resolve becomes available only after the missing-camera timeout expires."
-        )
-
-    for log_doc in active_logs_query:
-        log_doc.reference.update({
-            "is_violation": False,
-            "license_plate": RESOLVED_PLATE
-        })
-    
-    spot_ref.update(clear_review_flow_fields())
-    queue_display_command(
-        db,
-        get_display_id_for_spot(payload.spot_id, spot_data),
-        payload.spot_id,
-        "Resolved",
-        "Admin cleared",
-        hold_ms=DISPLAY_MANUAL_REVIEW_HOLD_MS
-    )
-    last_seen_raw = spot_data.get("last_seen")
-    broadcast_spot_data = {
-        "id": spot_doc.id,
-        "category": spot_data.get("category"),
-        "is_occupied": False,
-        "license_plate": None,
-        "is_violation": False,
-        "battery_level": spot_data.get("battery_level"),
-        "last_seen": last_seen_raw.isoformat() if hasattr(last_seen_raw, 'isoformat') else str(last_seen_raw) if last_seen_raw else None,
-        "review_capture_url": None,
-        "review_status": None,
-        "review_resolve_after": None
-    }
-    await broadcast_event("spot_update", {"spot": broadcast_spot_data})
-    await broadcast_event("log_event", {"log": {
-        "timestamp": get_il_time().isoformat(), 
-        "type": "info", 
-        "message": f"Admin {admin_user.get('name')} resolved a missing-camera review at spot {payload.spot_id}."
-    }})
-        
-    return {"status": "resolved", "spot_id": payload.spot_id}
-
 
 @app.put("/api/v1/sensors/accept")
 async def accept_spot(payload: ResolvePayload, admin_user: dict = Depends(get_current_admin), db = Depends(get_firestore_db)):
@@ -1662,11 +1456,20 @@ async def reject_spot(payload: ResolvePayload, admin_user: dict = Depends(get_cu
             detail=f"No active UNIDENTIFIED anomaly found for spot {payload.spot_id}"
         )
 
+    safe_spot_id = "".join(
+        ch for ch in payload.spot_id.strip().lower() if ch.isalnum() or ch in {"-", "_"}
+    ) or "spot"
+    capture_doc = db.collection("spot_captures").document(safe_spot_id).get()
+    capture_base64 = capture_doc.to_dict().get("image_base64") if capture_doc.exists else None
+
     for log_doc in active_logs_query:
-        log_doc.reference.update({
+        update_data = {
             "is_violation": True,
             "license_plate": REJECTED_PLATE
-        })
+        }
+        if capture_base64:
+            update_data["capture_base64"] = capture_base64
+        log_doc.reference.update(update_data)
 
     spot_ref = db.collection("parking_spots").document(payload.spot_id)
     spot_doc = spot_ref.get()
@@ -1697,9 +1500,10 @@ async def reject_spot(payload: ResolvePayload, admin_user: dict = Depends(get_cu
             "review_resolve_after": None
         }})
         await broadcast_event("log_event", {"log": {
+            "log_id": log_doc.id,
             "timestamp": get_il_time().isoformat(),
             "type": "violation",
-            "message": f"Admin {admin_user.get('name')} rejected vehicle at spot {payload.spot_id}."
+            "message": f"Violation at Spot {payload.spot_id} (Unidentified Plate)"
         }})
 
     return {"status": "rejected", "spot_id": payload.spot_id}
@@ -1751,6 +1555,7 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
                     active_plate not in {RESOLVED_PLATE, REJECTED_PLATE, MANUAL_ACCEPTED_PLATE}):
                 update_data["is_violation"] = False
                 update_data["license_plate"] = "ABORTED"
+                await broadcast_event("log_aborted", {"log_id": active_log_doc.id, "spot_id": spot_id})
                 
             active_log_doc.reference.update(update_data)
             
@@ -1835,5 +1640,4 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
     return {"status": "bulk_processed", "events": len(payload.data)}
 
 frontend_dir = os.path.join(os.path.dirname(__file__), "../Frontend")
-app.mount("/captures", StaticFiles(directory=captures_dir), name="captures")
 app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")

@@ -476,6 +476,18 @@ body {
 .log-message.violation { color: var(--status-violation); }
 .log-message.unidentified { color: var(--status-unidentified); }
 
+.log-action {
+    margin-top: 8px;
+}
+
+.violation-capture-img {
+    display: block;
+    max-width: 100%;
+    border-radius: 8px;
+    margin-top: 8px;
+    border: 1px solid var(--panel-border);
+}
+
 /* Animations */
 @keyframes pulse-green {
     0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }

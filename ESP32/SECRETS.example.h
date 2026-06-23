@@ -16,8 +16,6 @@ constexpr uint16_t PARKME_SERVER_PORT = 443;
 
 constexpr char PARKME_API_UPDATE_SPOT_PATH[] = "/api/v1/sensors/heartbeat";
 constexpr char PARKME_API_GATE_ENTRY_PATH[] = "/api/v1/sensors/park";
-constexpr char PARKME_API_CAMERA_POLL_PATH[] = "/api/v1/cameras/poll";
-constexpr char PARKME_API_CAMERA_RESULT_PATH[] = "/api/v1/cameras/result";
 constexpr char PARKME_API_DISPLAY_POLL_PATH[] = "/api/v1/displays/poll";
 constexpr char PARKME_API_DISPLAY_RESULT_PATH[] = "/api/v1/displays/result";
 

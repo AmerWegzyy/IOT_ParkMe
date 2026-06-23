@@ -405,6 +405,19 @@ function connectSSE(token) {
                 if (currentProfile && currentProfile.role === 'admin') {
                     fetchStats();
                 }
+            } else if (data.type === 'log_aborted') {
+                const logItem = document.getElementById(`log-item-${data.log_id}`);
+                if (logItem) {
+                    const actionDiv = logItem.querySelector('.log-action');
+                    if (actionDiv) {
+                        actionDiv.remove();
+                    }
+                    const msgSpan = logItem.querySelector('.log-message');
+                    if (msgSpan) {
+                        msgSpan.className = 'log-message';
+                        msgSpan.textContent = `Driver aborted parking at Spot ${data.spot_id}.`;
+                    }
+                }
             }
         };
     } catch (e) {
@@ -425,10 +438,9 @@ function setReviewButtonsPending(spotId, label) {
 async function submitSpotReview(spotId, action) {
     const token = localStorage.getItem('parkme_token');
     const isReject = action === 'reject';
-    const isResolve = action === 'resolve';
     setReviewButtonsPending(
         spotId,
-        isReject ? 'Rejecting...' : isResolve ? 'Resolving...' : 'Accepting...'
+        isReject ? 'Rejecting...' : 'Accepting...'
     );
     try {
         const res = await fetch(`${API_BASE}/sensors/${action}`, {
@@ -445,8 +457,8 @@ async function submitSpotReview(spotId, action) {
             if (existingSpot) {
                 updateSpotUI({
                     ...existingSpot,
-                    is_occupied: isResolve ? false : true,
-                    license_plate: isReject ? REJECTED_PLATE : isResolve ? null : MANUAL_ACCEPTED_PLATE,
+                    is_occupied: true,
+                    license_plate: isReject ? REJECTED_PLATE : MANUAL_ACCEPTED_PLATE,
                     is_violation: isReject,
                     review_capture_url: isReject ? existingSpot.review_capture_url : null,
                     review_status: null,
@@ -458,9 +470,7 @@ async function submitSpotReview(spotId, action) {
             showToast(
                 isReject
                     ? `Spot ${spotId} rejected successfully.`
-                    : isResolve
-                        ? `Spot ${spotId} resolved successfully.`
-                        : `Spot ${spotId} accepted successfully.`,
+                    : `Spot ${spotId} accepted successfully.`,
                 isReject ? 'warning' : 'info'
             );
             fetchLogs();
@@ -468,9 +478,7 @@ async function submitSpotReview(spotId, action) {
         } else {
             let detail = isReject
                 ? `Failed to reject Spot ${spotId}. Please try again.`
-                : isResolve
-                    ? `Failed to resolve Spot ${spotId}. Please try again.`
-                    : `Failed to accept Spot ${spotId}. Please try again.`;
+                : `Failed to accept Spot ${spotId}. Please try again.`;
             try {
                 const errorData = await res.json();
                 if (errorData && errorData.detail) {
@@ -486,19 +494,13 @@ async function submitSpotReview(spotId, action) {
         showToast(
             isReject
                 ? `Could not reach the backend to reject Spot ${spotId}.`
-                : isResolve
-                    ? `Could not reach the backend to resolve Spot ${spotId}.`
-                    : `Could not reach the backend to accept Spot ${spotId}.`,
+                : `Could not reach the backend to accept Spot ${spotId}.`,
             'warning'
         );
         fetchSpots();
     } finally {
         pendingReviewSpotIds.delete(spotId);
     }
-}
-
-async function resolveSpot(spotId) {
-    return submitSpotReview(spotId, 'resolve');
 }
 
 async function acceptSpot(spotId) {
@@ -655,6 +657,9 @@ function updateSpotUI(spot) {
 function appendLog(log) {
     const li = document.createElement('li');
     li.className = 'log-item';
+    if (log.log_id) {
+        li.id = `log-item-${log.log_id}`;
+    }
     
     const time = new Date(log.timestamp).toLocaleTimeString('en-US', { timeZone: 'Asia/Jerusalem' });
     let msgClass = '';
@@ -666,7 +671,37 @@ function appendLog(log) {
         <span class="log-time">${time}</span>
         <span class="log-message ${msgClass}">${log.message}</span>
     `;
+
+    if (log.type === 'violation' && log.log_id) {
+        const btnContainer = document.createElement('div');
+        btnContainer.className = 'log-action';
+        btnContainer.innerHTML = `<button class="btn-secondary btn-small" onclick="showViolationPicture('${log.log_id}', this)">Show Picture</button>`;
+        li.appendChild(btnContainer);
+    }
+
     securityLogs.prepend(li);
+}
+
+async function showViolationPicture(logId, btnElement) {
+    const container = btnElement.parentElement;
+    const token = localStorage.getItem('parkme_token');
+    try {
+        btnElement.innerText = "Loading...";
+        btnElement.disabled = true;
+        const res = await fetch(`${API_BASE}/logs/${logId}/capture`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        if (!res.ok) throw new Error("Image not found");
+        
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        
+        container.innerHTML = `<img src="${url}" class="violation-capture-img" alt="Violation Capture" />`;
+    } catch (e) {
+        btnElement.innerText = "Error loading";
+    }
 }
 
 // Initial fetch

@@ -65,13 +65,13 @@ def seed_users(db: firestore.firestore.Client) -> dict[str, str]:
     print("⏳ Seeding users …")
     users = [
         {"name": "Admin User", "email": "admin@technion.ac.il",
-         "role": "admin",                 "points": 999},
+         "role": "admin"},
         {"name": "John Doe",  "email": "student@technion.ac.il",
-         "role": "student",               "points": 10},
+         "role": "student"},
         {"name": "Dr. Smith", "email": "lecturer@technion.ac.il",
-         "role": "lecturer",              "points": 50},
+         "role": "lecturer"},
         {"name": "Jane Roe",  "email": "jane@technion.ac.il",
-         "role": "special-needs-driver",  "points": 20},
+         "role": "special-needs-driver"},
     ]
     email_to_id: dict[str, str] = {}
     for user in users:
@@ -98,53 +98,19 @@ def seed_vehicles(db: firestore.firestore.Client, email_to_id: dict[str, str]) -
         print(f"  ✅ vehicles/{doc_id}")
 
 
-def seed_parking_logs(db: firestore.firestore.Client, email_to_id: dict[str, str]) -> None:
-    """Seed the parking_logs collection."""
-    delete_collection(db, "parking_logs")
-    print("⏳ Seeding parking_logs …")
-    logs = [
-        {
-            "spot_id": "A1",
-            "license_plate": "1234567",
-            "user_id": email_to_id["student@technion.ac.il"],
-            "snapshot_role": "student",
-            "entry_time": datetime.now(timezone.utc),
-            "exit_time": None,
-            "is_violation": False,
-        },
-        {
-            "spot_id": "B1",
-            "license_plate": "UNIDENTIFIED",
-            "user_id": None,
-            "snapshot_role": None,
-            "entry_time": datetime.now(timezone.utc),
-            "exit_time": None,
-            "is_violation": True,
-        },
-        {
-            "spot_id": "C2",
-            "license_plate": "9876543",
-            "user_id": email_to_id["lecturer@technion.ac.il"],
-            "snapshot_role": "lecturer",
-            "entry_time": datetime.now(timezone.utc),
-            "exit_time": None,
-            "is_violation": False,
-        },
-    ]
-    for log in logs:
-        _, doc_ref = db.collection("parking_logs").add(log)
-        print(f"  ✅ parking_logs/{doc_ref.id}  (spot {log['spot_id']})")
-
-
 def main() -> None:
     print("🚀 ParkMe Firestore Seeder")
     print("=" * 40)
     db = get_firestore_client()
 
+    # Clean up deprecated collection
+    delete_collection(db, "camera_commands")
+
     seed_parking_spots(db)
     email_to_id = seed_users(db)
     seed_vehicles(db, email_to_id)
-    seed_parking_logs(db, email_to_id)
+    # Note: intentionally skipping parking_logs to preserve history
+
 
     print("=" * 40)
     print("🎉 Seeding complete!")
