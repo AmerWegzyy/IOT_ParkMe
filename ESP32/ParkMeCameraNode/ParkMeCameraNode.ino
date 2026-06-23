@@ -1,5 +1,6 @@
 #include "esp_camera.h"
 
+#include <esp_now.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
@@ -29,7 +30,20 @@ using namespace parkme;
 namespace {
 
 unsigned long lastWifiAttemptAtMs = 0;
-unsigned long lastCommandPollAtMs = 0;
+bool espNowReady = false;
+bool currentOccupancyActive = false;
+bool currentCycleCaptureAttempted = false;
+bool currentCycleCaptureSucceeded = false;
+bool currentCycleCaptureInProgress = false;
+uint32_t currentCycleSequence = 0;
+uint32_t pendingCaptureSequence = 0;
+bool pendingEspNowCapture = false;
+uint8_t currentSensorPeerMac[6] = {0, 0, 0, 0, 0, 0};
+
+portMUX_TYPE espNowMessageMux = portMUX_INITIALIZER_UNLOCKED;
+EspNowSensorStateMessage pendingSensorStateMessage = {};
+uint8_t pendingSensorSourceMac[6] = {0, 0, 0, 0, 0, 0};
+volatile bool hasPendingSensorStateMessage = false;
 
 }  // namespace
 
@@ -55,6 +69,156 @@ void pulseGateRelay() {
   digitalWrite(PARKME_GATE_RELAY_PIN, HIGH);
   delay(PARKME_GATE_RELAY_PULSE_MS);
   digitalWrite(PARKME_GATE_RELAY_PIN, LOW);
+}
+
+bool ensureEspNowPeer(const uint8_t peerMac[6]) {
+  if (!espNowReady) {
+    return false;
+  }
+
+  if (esp_now_is_peer_exist(peerMac)) {
+    return true;
+  }
+
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, peerMac, sizeof(peerInfo.peer_addr));
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+  return esp_now_add_peer(&peerInfo) == ESP_OK;
+}
+
+void sendEspNowAck(const uint8_t targetMac[6],
+                   uint32_t sequence,
+                   uint8_t status,
+                   const String &detail) {
+  if (!ensureEspNowPeer(targetMac)) {
+    Serial.println("ESP-NOW ack skipped because the sensor peer is unavailable.");
+    return;
+  }
+
+  EspNowCameraAckMessage message = {};
+  message.magic = PARKME_ESPNOW_PROTOCOL_MAGIC;
+  message.version = PARKME_ESPNOW_PROTOCOL_VERSION;
+  message.messageType = ESPNOW_MESSAGE_CAMERA_ACK;
+  message.sequence = sequence;
+  message.status = status;
+  copyStringToFixedBuffer(WiFi.macAddress(),
+                          message.senderMac,
+                          sizeof(message.senderMac));
+  copyStringToFixedBuffer(detail, message.detail, sizeof(message.detail));
+
+  esp_err_t sendStatus =
+      esp_now_send(targetMac, reinterpret_cast<const uint8_t *>(&message),
+                   sizeof(message));
+  if (sendStatus != ESP_OK) {
+    Serial.print("ESP-NOW ack failed with status ");
+    Serial.println(static_cast<int>(sendStatus));
+  }
+}
+
+void handleEspNowSensorStateReceived(const uint8_t *macAddress,
+                                     const uint8_t *data,
+                                     int dataLength) {
+  if (dataLength != static_cast<int>(sizeof(EspNowSensorStateMessage))) {
+    return;
+  }
+
+  EspNowSensorStateMessage message = {};
+  memcpy(&message, data, sizeof(message));
+  if (!isEspNowMessageEnvelopeValid(message, ESPNOW_MESSAGE_SENSOR_STATE)) {
+    return;
+  }
+
+  portENTER_CRITICAL(&espNowMessageMux);
+  pendingSensorStateMessage = message;
+  memcpy(pendingSensorSourceMac, macAddress, sizeof(pendingSensorSourceMac));
+  hasPendingSensorStateMessage = true;
+  portEXIT_CRITICAL(&espNowMessageMux);
+}
+
+bool takePendingSensorStateMessage(EspNowSensorStateMessage &message,
+                                   uint8_t sourceMac[6]) {
+  bool hasMessage = false;
+  portENTER_CRITICAL(&espNowMessageMux);
+  if (hasPendingSensorStateMessage) {
+    message = pendingSensorStateMessage;
+    memcpy(sourceMac, pendingSensorSourceMac, 6);
+    hasPendingSensorStateMessage = false;
+    hasMessage = true;
+  }
+  portEXIT_CRITICAL(&espNowMessageMux);
+  return hasMessage;
+}
+
+bool initEspNow() {
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init failed on camera node.");
+    return false;
+  }
+
+  esp_now_register_recv_cb(handleEspNowSensorStateReceived);
+  Serial.println("ESP-NOW ready on camera node.");
+  return true;
+}
+
+void resetOccupancyCycle(const char *reason) {
+  currentOccupancyActive = false;
+  currentCycleCaptureAttempted = false;
+  currentCycleCaptureSucceeded = false;
+  currentCycleCaptureInProgress = false;
+  pendingEspNowCapture = false;
+  pendingCaptureSequence = 0;
+  currentCycleSequence = 0;
+  memset(currentSensorPeerMac, 0, sizeof(currentSensorPeerMac));
+
+  Serial.print("Occupancy cycle reset: ");
+  Serial.println(reason);
+}
+
+void processSensorStateMessage(const EspNowSensorStateMessage &message,
+                               const uint8_t sourceMac[6]) {
+  String spotId = String(message.spotId);
+  SpotState state = static_cast<SpotState>(message.state);
+
+  if (spotId != String(PARKME_GATE_SPOT_ID)) {
+    Serial.print("Ignoring ESP-NOW packet for spot ");
+    Serial.println(spotId);
+    return;
+  }
+
+  Serial.print("ESP-NOW state for ");
+  Serial.print(spotId);
+  Serial.print(": ");
+  Serial.print(state == STATE_OCCUPIED ? "OCCUPIED" : "FREE");
+  Serial.print(" seq=");
+  Serial.println(message.sequence);
+
+  if (state == STATE_FREE) {
+    sendEspNowAck(sourceMac,
+                  message.sequence,
+                  ESPNOW_CAMERA_ACK_SPOT_FREED,
+                  "spot_freed");
+    resetOccupancyCycle("spot_freed");
+    showStatus("Spot free", "Waiting car");
+    return;
+  }
+
+  if (state != STATE_OCCUPIED) {
+    return;
+  }
+
+  currentOccupancyActive = true;
+  currentCycleSequence = message.sequence;
+  memcpy(currentSensorPeerMac, sourceMac, sizeof(currentSensorPeerMac));
+
+  if (!currentCycleCaptureAttempted && !pendingEspNowCapture) {
+    pendingEspNowCapture = true;
+    pendingCaptureSequence = message.sequence;
+    sendEspNowAck(sourceMac,
+                  message.sequence,
+                  ESPNOW_CAMERA_ACK_RECEIVED,
+                  "capture_queued");
+  }
 }
 
 bool connectWiFi() {
@@ -371,7 +535,6 @@ GateAction performGateScan() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi offline. Cannot start gate scan.");
     showStatus("WiFi offline", "Cannot scan");
-    delay(1500);
     return ACTION_UNKNOWN;
   }
 
@@ -381,67 +544,49 @@ GateAction performGateScan() {
   int httpStatusCode = -1;
 
   if (!captureAndUpload(responseBody, httpStatusCode)) {
-    Serial.println("Capture/upload failed. Will retry if attempts remain.");
-    showStatus("Upload failed", "Try again");
-    delay(PARKME_GATE_RETRY_STATUS_MS);
-    return ACTION_RETRY;
+    Serial.println("Capture/upload failed.");
+    showStatus("Upload failed", "Check backend");
+    return ACTION_UNKNOWN;
   }
 
   if (httpStatusCode < 200 || httpStatusCode >= 300) {
     Serial.println("Backend rejected the captured photo.");
     showStatus("Server rejected", "Check backend");
-    delay(PARKME_GATE_RETRY_STATUS_MS);
-    return ACTION_RETRY;
+    return ACTION_UNKNOWN;
   }
 
   return handleServerDecision(responseBody);
 }
 
-void handleServerCaptureCommand(const String &requestId,
-                                const String &spotId,
-                                const String &reason) {
-  int retries = 0;
-
-  Serial.print("Capture command received. Request ID: ");
-  Serial.println(requestId);
-  if (spotId.length() > 0) {
-    Serial.print("Target spot: ");
-    Serial.println(spotId);
-  }
-  if (reason.length() > 0) {
-    Serial.print("Reason: ");
-    Serial.println(reason);
+void handlePendingEspNowCapture() {
+  if (!pendingEspNowCapture) {
+    return;
   }
 
-  while (retries < PARKME_GATE_MAX_CAPTURE_RETRIES) {
-    GateAction result = performGateScan();
+  pendingEspNowCapture = false;
+  currentCycleCaptureAttempted = true;
+  currentCycleCaptureInProgress = true;
+  sendEspNowAck(currentSensorPeerMac,
+                pendingCaptureSequence,
+                ESPNOW_CAMERA_ACK_CAPTURE_STARTED,
+                "capture_started");
 
-    if (result == ACTION_WELCOME || result == ACTION_DENIED) {
-      Serial.println("Capture command completed with a final decision.");
-      sendCaptureCommandResult(
-          requestId,
-          "COMPLETED",
-          result == ACTION_WELCOME ? "welcome" : "denied");
-      showStatus("Ready for server", "Waiting command");
-      break;
-    }
+  GateAction result = performGateScan();
 
-    if (result == ACTION_RETRY || result == ACTION_UNKNOWN) {
-      retries++;
-      Serial.print("Capture command retry ");
-      Serial.print(retries);
-      Serial.print(" of ");
-      Serial.print(PARKME_GATE_MAX_CAPTURE_RETRIES);
-      Serial.println(".");
-      if (retries < PARKME_GATE_MAX_CAPTURE_RETRIES) {
-        showStatus("Retrying...",
-                   String(retries) + "/" + String(PARKME_GATE_MAX_CAPTURE_RETRIES));
-        delay(PARKME_GATE_RETRY_BACKOFF_MS);
-      } else {
-        sendCaptureCommandResult(requestId, "FAILED", "capture_failed");
-        showStatus("Ready for server", "Waiting command");
-      }
-    }
+  currentCycleCaptureInProgress = false;
+  if (result == ACTION_WELCOME || result == ACTION_DENIED) {
+    currentCycleCaptureSucceeded = true;
+    sendEspNowAck(currentSensorPeerMac,
+                  pendingCaptureSequence,
+                  ESPNOW_CAMERA_ACK_CAPTURE_COMPLETED,
+                  "capture_completed");
+    showStatus("Ready for sensor", "Waiting car");
+  } else {
+    sendEspNowAck(currentSensorPeerMac,
+                  pendingCaptureSequence,
+                  ESPNOW_CAMERA_ACK_CAPTURE_FAILED,
+                  "capture_failed");
+    showStatus("Capture failed", "Waiting free");
   }
 }
 
@@ -470,6 +615,7 @@ void setup() {
   Serial.println("Boot stage: WiFi init");
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
+  espNowReady = initEspNow();
   connectWiFi();
   Serial.print("Gate spot: ");
   Serial.println(PARKME_GATE_SPOT_ID);
@@ -479,30 +625,18 @@ void setup() {
   Serial.print(PARKME_SERVER_HOST);
   Serial.print(":");
   Serial.println(PARKME_SERVER_PORT);
-  showStatus("Ready for server", "Waiting command");
+  showStatus("Ready for ESP-NOW", "Waiting sensor");
 }
 
 void loop() {
   maintainWiFi();
 
-  if (WiFi.status() != WL_CONNECTED) {
-    delay(200);
-    return;
+  EspNowSensorStateMessage sensorMessage = {};
+  uint8_t sourceMac[6] = {0, 0, 0, 0, 0, 0};
+  if (takePendingSensorStateMessage(sensorMessage, sourceMac)) {
+    processSensorStateMessage(sensorMessage, sourceMac);
   }
 
-  if (millis() - lastCommandPollAtMs < PARKME_GATE_COMMAND_POLL_INTERVAL_MS) {
-    delay(50);
-    return;
-  }
-
-  lastCommandPollAtMs = millis();
-
-  String requestId;
-  String spotId;
-  String reason;
-  if (pollServerForCaptureCommand(requestId, spotId, reason)) {
-    handleServerCaptureCommand(requestId, spotId, reason);
-  } else {
-    Serial.println("No capture command available.");
-  }
+  handlePendingEspNowCapture();
+  delay(50);
 }

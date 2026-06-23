@@ -43,6 +43,11 @@ import asyncio
 import json
 from cachetools import TTLCache
 
+try:
+    from parking_logic import should_preserve_recent_active_log, seconds_since
+except ImportError:
+    from Backend.parking_logic import should_preserve_recent_active_log, seconds_since
+
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -87,6 +92,13 @@ DISPLAY_COMMANDS_COLLECTION = "display_commands"
 CAMERA_COMMAND_STALE_SECONDS = 90
 BOUNCY_DRIVER_MAX_SECONDS = 90
 LPR_DEDUP_CACHE_TTL_SECONDS = 120
+CAMERA_FIRST_HEARTBEAT_GRACE_SECONDS = 10
+CAMERA_UPLOAD_GRACE_SECONDS = 12
+DISPLAY_SCANNING_HOLD_MS = 3000
+DISPLAY_MANUAL_REVIEW_HOLD_MS = 5000
+DISPLAY_WELCOME_HOLD_MS = 5000
+DISPLAY_REJECT_HOLD_MS = 25000
+DISPLAY_SPOT_CLEARED_HOLD_MS = 1500
 UNIDENTIFIED_PLATE = "UNIDENTIFIED"
 RESOLVED_PLATE = "RESOLVED"
 REJECTED_PLATE = "REJECTED"
@@ -205,11 +217,37 @@ def build_review_capture_url(spot_data: dict):
     return f"{capture_path}?v={capture_at}" if capture_at else capture_path
 
 
+def timestamp_to_iso(value):
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value) if value is not None else None
+
+
 def clear_review_capture_fields():
     return {
         "review_capture_path": firestore.DELETE_FIELD,
         "review_capture_at": firestore.DELETE_FIELD
     }
+
+
+def clear_review_metadata_fields():
+    return {
+        "review_started_at": firestore.DELETE_FIELD,
+        "review_resolve_after": firestore.DELETE_FIELD,
+        "review_status": firestore.DELETE_FIELD
+    }
+
+
+def clear_review_flow_fields():
+    cleared_fields = clear_review_capture_fields()
+    cleared_fields.update(clear_review_metadata_fields())
+    return cleared_fields
+
+
+def build_review_deadline(review_started_at):
+    if not hasattr(review_started_at, "tzinfo"):
+        return None
+    return review_started_at + timedelta(seconds=CAMERA_UPLOAD_GRACE_SECONDS)
 
 
 def get_capture_command_for_spot(db, camera_mac: str | None, spot_id: str):
@@ -227,28 +265,41 @@ def get_capture_command_for_spot(db, camera_mac: str | None, spot_id: str):
     return command_data
 
 
-def get_review_status(license_plate: str | None, camera_command: dict | None):
+def get_review_status(license_plate: str | None, spot_data: dict, now: datetime):
     if license_plate != UNIDENTIFIED_PLATE:
-        return None
+        return None, None
 
-    command_status = (camera_command or {}).get("status")
-    if command_status in {"PENDING", "CLAIMED"}:
-        return "retrying"
+    review_capture_url = build_review_capture_url(spot_data)
+    review_resolve_after = spot_data.get("review_resolve_after")
+    if review_resolve_after is None:
+        review_started_at = spot_data.get("review_started_at")
+        if review_started_at is not None:
+            review_resolve_after = build_review_deadline(review_started_at)
 
-    return "ready"
+    if review_capture_url:
+        return "photo_review", timestamp_to_iso(review_resolve_after)
+
+    if review_resolve_after is not None:
+        overdue_seconds = seconds_since(review_resolve_after, now)
+        if overdue_seconds is not None and overdue_seconds >= 0:
+            return "missing_photo", timestamp_to_iso(review_resolve_after)
+
+    return "awaiting_capture", timestamp_to_iso(review_resolve_after)
 
 
 def build_effective_spot_state(is_occupied: bool,
                                license_plate: str | None,
                                is_violation: bool,
                                review_capture_url: str | None = None,
-                               review_status: str | None = None):
+                               review_status: str | None = None,
+                               review_resolve_after: str | None = None):
     effective = {
         "is_occupied": is_occupied,
         "license_plate": license_plate,
         "is_violation": is_violation,
         "review_capture_url": review_capture_url,
-        "review_status": review_status
+        "review_status": review_status,
+        "review_resolve_after": review_resolve_after
     }
 
     if license_plate == RESOLVED_PLATE:
@@ -257,16 +308,18 @@ def build_effective_spot_state(is_occupied: bool,
         effective["is_violation"] = False
         effective["review_capture_url"] = None
         effective["review_status"] = None
+        effective["review_resolve_after"] = None
     elif license_plate == MANUAL_ACCEPTED_PLATE:
         effective["is_occupied"] = True
         effective["is_violation"] = False
         effective["review_capture_url"] = None
         effective["review_status"] = None
+        effective["review_resolve_after"] = None
     elif license_plate == REJECTED_PLATE:
         effective["is_occupied"] = True
         effective["is_violation"] = True
-        effective["review_capture_url"] = None
         effective["review_status"] = None
+        effective["review_resolve_after"] = None
 
     return effective
 
@@ -313,9 +366,54 @@ def get_command_reference_time(command_data: dict):
 
 def is_stale_command(command_data: dict, now: datetime, stale_after_seconds: int = CAMERA_COMMAND_STALE_SECONDS):
     reference_time = get_command_reference_time(command_data)
-    if not hasattr(reference_time, "timestamp"):
+    age_seconds = seconds_since(reference_time, now)
+    if age_seconds is None:
         return True
-    return (now - reference_time.replace(tzinfo=now.tzinfo)).total_seconds() > stale_after_seconds
+    return age_seconds > stale_after_seconds
+
+
+def should_preserve_active_log_for_new_arrival(active_log_data: dict,
+                                               spot_data_before: dict,
+                                               now: datetime) -> bool:
+    return should_preserve_recent_active_log(
+        entry_time=active_log_data.get("entry_time"),
+        license_plate=active_log_data.get("license_plate"),
+        spot_last_seen=spot_data_before.get("last_seen"),
+        now=now,
+        preserve_window_seconds=CAMERA_FIRST_HEARTBEAT_GRACE_SECONDS,
+        non_preservable_plates={
+            RESOLVED_PLATE,
+            REJECTED_PLATE,
+            MANUAL_ACCEPTED_PLATE,
+            "ABORTED"
+        }
+    )
+
+
+def complete_pending_capture_command_for_spot(db,
+                                              camera_mac: str,
+                                              spot_id: str,
+                                              *,
+                                              detail: str) -> bool:
+    command_ref = get_camera_command_ref(db, camera_mac)
+    command_doc = command_ref.get()
+
+    if not command_doc.exists:
+        return False
+
+    command_data = command_doc.to_dict() or {}
+    if command_data.get("spot_id") != spot_id:
+        return False
+
+    if command_data.get("status") not in {"PENDING", "CLAIMED"}:
+        return False
+
+    command_ref.update({
+        "status": "COMPLETED",
+        "detail": detail,
+        "completed_at": get_il_time()
+    })
+    return True
 
 
 def queue_capture_command(db,
@@ -596,7 +694,6 @@ async def receive_heartbeat_data(
     if spot_doc:
         spot_data_before = spot_doc.to_dict()
         previous_is_occupied = bool(spot_data_before.get("is_occupied", False))
-        camera_mac = spot_data_before.get("camera_mac") or spot_data_before.get("mac_address")
         spot_id = spot_doc.id
         display_id = get_display_id_for_spot(spot_id, spot_data_before)
 
@@ -604,22 +701,30 @@ async def receive_heartbeat_data(
         logs_ref = db.collection("parking_logs")
         active_log_doc = get_latest_active_log_for_spot(logs_ref, spot_id)
         is_new_arrival = payload.is_occupied and not previous_is_occupied
-        should_queue_camera = False
+        created_unidentified_log = False
+        active_plate = None
 
         if payload.is_occupied:
-            # If the spot was previously free but an active log still exists,
-            # treat it as stale state and close it before starting a fresh cycle.
             if is_new_arrival and active_log_doc:
-                logger.warning(
-                    "Closing stale active log for spot %s before processing a new arrival.",
-                    spot_id
-                )
-                active_log_doc.reference.update({"exit_time": server_time})
-                active_log_doc = None
+                active_log_data = active_log_doc.to_dict() or {}
+                if should_preserve_active_log_for_new_arrival(
+                    active_log_data,
+                    spot_data_before,
+                    server_time
+                ):
+                    logger.info(
+                        "Preserving recent active log for spot %s because the camera likely uploaded before the heartbeat.",
+                        spot_id
+                    )
+                else:
+                    logger.warning(
+                        "Closing stale active log for spot %s before processing a new arrival.",
+                        spot_id
+                    )
+                    active_log_doc.reference.update({"exit_time": server_time})
+                    active_log_doc = None
 
-            # Create the ghost log on a real FREE -> OCCUPIED transition, or
-            # self-heal if occupancy is true but the active log is missing.
-            if is_new_arrival or not active_log_doc:
+            if not active_log_doc:
                 logs_ref.add({
                     "spot_id": spot_id,
                     "license_plate": UNIDENTIFIED_PLATE,
@@ -629,25 +734,44 @@ async def receive_heartbeat_data(
                     "user_id": None,
                     "snapshot_role": None
                 })
-                should_queue_camera = True
-            elif payload.is_occupied and active_log_doc:
-                logger.info(
-                    "Spot %s remains occupied with an active log; skipping duplicate camera queue.",
-                    spot_id
+                active_plate = UNIDENTIFIED_PLATE
+                created_unidentified_log = True
+                queue_display_command(
+                    db,
+                    display_id,
+                    spot_id,
+                    "Scanning",
+                    "Please wait",
+                    hold_ms=DISPLAY_SCANNING_HOLD_MS
                 )
-
+            elif active_log_doc:
+                active_log_data = active_log_doc.to_dict() or {}
+                active_plate = active_log_data.get("license_plate")
+                if active_plate == UNIDENTIFIED_PLATE:
+                    logger.info(
+                        "Spot %s remains occupied with an active UNIDENTIFIED log; keeping manual review active.",
+                        spot_id
+                    )
+                elif active_plate == REJECTED_PLATE:
+                    queue_display_command(
+                        db,
+                        display_id,
+                        spot_id,
+                        "Access denied",
+                        "Please remove car",
+                        hold_ms=DISPLAY_REJECT_HOLD_MS
+                    )
+                else:
+                    logger.info(
+                        "Spot %s already has an active recognized or manually-decided log.",
+                        spot_id
+                    )
         elif not payload.is_occupied and active_log_doc:
-            # Compute time difference in Python instead of SQL strftime
             log_data = active_log_doc.to_dict()
-            entry_time = log_data.get("entry_time")
-            
-            # Handle Firestore timestamp conversion
-            if hasattr(entry_time, 'timestamp'):
-                # entry_time is a datetime-like object from Firestore
-                duration_seconds = (server_time - entry_time.replace(tzinfo=server_time.tzinfo)).total_seconds()
-            else:
-                duration_seconds = 60  # Default to >= 60 if we can't compute
-            
+            duration_seconds = seconds_since(log_data.get("entry_time"), server_time)
+            if duration_seconds is None:
+                duration_seconds = 60
+
             update_data = {"exit_time": server_time}
             active_plate = log_data.get("license_plate")
 
@@ -655,61 +779,79 @@ async def receive_heartbeat_data(
                     active_plate not in {RESOLVED_PLATE, REJECTED_PLATE, MANUAL_ACCEPTED_PLATE}):
                 update_data["is_violation"] = False
                 update_data["license_plate"] = "ABORTED"
-            
+
             active_log_doc.reference.update(update_data)
+            if active_plate == REJECTED_PLATE:
+                queue_display_command(
+                    db,
+                    display_id,
+                    spot_id,
+                    "Spot clear",
+                    "Thank you",
+                    hold_ms=DISPLAY_SPOT_CLEARED_HOLD_MS
+                )
 
-        if not payload.is_occupied and camera_mac:
-            cancel_capture_command_for_spot(
-                db,
-                camera_mac,
-                spot_id,
-                detail="spot_freed"
-            )
-
-        # Update the parking spot
         spot_update_data = {
             "last_seen": server_time,
             "battery_level": payload.battery_level,
             "is_occupied": payload.is_occupied
         }
-        if is_new_arrival or not payload.is_occupied:
-            spot_update_data.update(clear_review_capture_fields())
+        if not payload.is_occupied:
+            spot_update_data.update(clear_review_flow_fields())
+        elif active_plate == UNIDENTIFIED_PLATE:
+            review_started_at = spot_data_before.get("review_started_at")
+            if created_unidentified_log or not hasattr(review_started_at, "tzinfo"):
+                review_started_at = server_time
+
+            review_resolve_after = spot_data_before.get("review_resolve_after")
+            if created_unidentified_log or not hasattr(review_resolve_after, "tzinfo"):
+                review_resolve_after = build_review_deadline(review_started_at)
+
+            spot_update_data.update({
+                "review_started_at": review_started_at,
+                "review_resolve_after": review_resolve_after,
+                "review_status": "photo_review" if spot_data_before.get("review_capture_path") else "awaiting_capture"
+            })
+            if created_unidentified_log:
+                spot_update_data.update(clear_review_capture_fields())
+        elif active_plate == REJECTED_PLATE:
+            spot_update_data.update(clear_review_metadata_fields())
+        else:
+            spot_update_data.update(clear_review_flow_fields())
+
         spot_doc.reference.update(spot_update_data)
 
-        if should_queue_camera and camera_mac:
-            queue_capture_command(
-                db,
-                camera_mac,
-                spot_id,
-                "occupancy_detected",
-                replace_existing=is_new_arrival
-            )
-            queue_display_command(
-                db,
-                display_id,
-                spot_id,
-                "Scanning",
-                "Please wait",
-                hold_ms=2500
-            )
-            logger.info(
-                "Queued camera capture for spot %s (camera %s) after FREE -> OCCUPIED.",
-                spot_id,
-                camera_mac
-            )
-        
-        # Build updated spot data for SSE broadcast
-        spot_data_dict = spot_data_before
+        spot_data_dict = dict(spot_data_before)
         spot_data_dict.update({
             "is_occupied": payload.is_occupied,
             "last_seen": server_time,
             "battery_level": payload.battery_level
         })
-        if is_new_arrival or not payload.is_occupied:
+
+        if not payload.is_occupied:
             spot_data_dict.pop("review_capture_path", None)
             spot_data_dict.pop("review_capture_at", None)
-        
-        # Get the current active log for broadcast
+            spot_data_dict.pop("review_started_at", None)
+            spot_data_dict.pop("review_resolve_after", None)
+            spot_data_dict.pop("review_status", None)
+        elif active_plate == UNIDENTIFIED_PLATE:
+            spot_data_dict["review_started_at"] = spot_update_data.get("review_started_at")
+            spot_data_dict["review_resolve_after"] = spot_update_data.get("review_resolve_after")
+            spot_data_dict["review_status"] = spot_update_data.get("review_status")
+            if created_unidentified_log:
+                spot_data_dict.pop("review_capture_path", None)
+                spot_data_dict.pop("review_capture_at", None)
+        elif active_plate == REJECTED_PLATE:
+            spot_data_dict.pop("review_started_at", None)
+            spot_data_dict.pop("review_resolve_after", None)
+            spot_data_dict.pop("review_status", None)
+        else:
+            spot_data_dict.pop("review_capture_path", None)
+            spot_data_dict.pop("review_capture_at", None)
+            spot_data_dict.pop("review_started_at", None)
+            spot_data_dict.pop("review_resolve_after", None)
+            spot_data_dict.pop("review_status", None)
+
         license_plate = None
         is_violation = False
         latest_active_log_doc = get_latest_active_log_for_spot(logs_ref, spot_id)
@@ -717,15 +859,22 @@ async def receive_heartbeat_data(
             log_d = latest_active_log_doc.to_dict()
             license_plate = log_d.get("license_plate")
             is_violation = log_d.get("is_violation", False)
-        camera_command = get_capture_command_for_spot(db, camera_mac, spot_id)
+        review_status, review_resolve_after = get_review_status(
+            license_plate,
+            spot_data_dict,
+            server_time
+        )
         effective_state = build_effective_spot_state(
             payload.is_occupied,
             license_plate,
             is_violation,
-            build_review_capture_url(spot_data_dict) if license_plate == UNIDENTIFIED_PLATE else None,
-            get_review_status(license_plate, camera_command)
+            build_review_capture_url(spot_data_dict)
+            if license_plate in {UNIDENTIFIED_PLATE, REJECTED_PLATE}
+            else None,
+            review_status,
+            review_resolve_after
         )
-        
+
         broadcast_spot = {
             "id": spot_id,
             "category": spot_data_dict.get("category"),
@@ -735,7 +884,8 @@ async def receive_heartbeat_data(
             "battery_level": payload.battery_level,
             "last_seen": server_time.isoformat(),
             "review_capture_url": effective_state["review_capture_url"],
-            "review_status": effective_state["review_status"]
+            "review_status": effective_state["review_status"],
+            "review_resolve_after": effective_state["review_resolve_after"]
         }
         await broadcast_event("spot_update", {"spot": broadcast_spot})
 
@@ -744,75 +894,12 @@ async def receive_heartbeat_data(
 
 @app.post("/api/v1/cameras/poll")
 async def poll_camera_command(payload: CameraPollPayload, db = Depends(get_firestore_db)):
-    command_data = claim_capture_command(db, payload.camera_mac)
-    if not command_data:
-        return {"action": "IDLE"}
-
-    queued_at = command_data.get("queued_at")
-    claimed_at = command_data.get("claimed_at")
-    return {
-        "action": command_data.get("action", "IDLE"),
-        "request_id": command_data.get("request_id"),
-        "spot_id": command_data.get("spot_id"),
-        "reason": command_data.get("reason"),
-        "queued_at": queued_at.isoformat() if hasattr(queued_at, "isoformat") else str(queued_at) if queued_at else None,
-        "claimed_at": claimed_at.isoformat() if hasattr(claimed_at, "isoformat") else str(claimed_at) if claimed_at else None
-    }
+    return {"action": "IDLE", "reason": "camera_polling_removed"}
 
 
 @app.post("/api/v1/cameras/result")
 async def complete_camera_command(payload: CameraCommandResultPayload, db = Depends(get_firestore_db)):
-    command_doc = get_camera_command_ref(db, payload.camera_mac).get()
-    command_data = command_doc.to_dict() if command_doc.exists else {}
-    success = complete_capture_command(
-        db,
-        payload.camera_mac,
-        payload.request_id,
-        payload.status,
-        payload.detail
-    )
-    if not success:
-        raise HTTPException(status_code=404, detail="Matching camera command not found")
-
-    if payload.status.upper() == "FAILED":
-        spot_id = command_data.get("spot_id")
-        if spot_id:
-            spot_doc = db.collection("parking_spots").document(spot_id).get()
-            if spot_doc.exists:
-                spot_data = spot_doc.to_dict() or {}
-                queue_display_command(
-                    db,
-                    get_display_id_for_spot(spot_id, spot_data),
-                    spot_id,
-                    "Scan failed",
-                    "See security",
-                    hold_ms=4000
-                )
-                active_log_doc = get_latest_active_log_for_spot(db.collection("parking_logs"), spot_id)
-                if active_log_doc:
-                    active_log = active_log_doc.to_dict() or {}
-                    if active_log.get("license_plate") == UNIDENTIFIED_PLATE:
-                        last_seen_raw = spot_data.get("last_seen")
-                        effective_state = build_effective_spot_state(
-                            spot_data.get("is_occupied", False),
-                            UNIDENTIFIED_PLATE,
-                            True,
-                            build_review_capture_url(spot_data),
-                            review_status="ready"
-                        )
-                        await broadcast_event("spot_update", {"spot": {
-                            "id": spot_id,
-                            "category": spot_data.get("category"),
-                            "is_occupied": effective_state["is_occupied"],
-                            "license_plate": effective_state["license_plate"],
-                            "is_violation": effective_state["is_violation"],
-                            "battery_level": spot_data.get("battery_level"),
-                            "last_seen": last_seen_raw.isoformat() if hasattr(last_seen_raw, "isoformat") else str(last_seen_raw) if last_seen_raw else None,
-                            "review_capture_url": effective_state["review_capture_url"],
-                            "review_status": effective_state["review_status"]
-                        }})
-
-    return {"status": "acknowledged", "request_id": payload.request_id}
+    return {"status": "ignored", "reason": "camera_polling_removed", "request_id": payload.request_id}
 
 
 @app.post("/api/v1/displays/poll")
@@ -852,42 +939,10 @@ async def complete_display_result(payload: DisplayCommandResultPayload, db = Dep
 
 @app.post("/api/v1/debug/cameras/trigger")
 async def debug_trigger_camera(payload: DebugCameraTriggerPayload, db = Depends(get_firestore_db)):
-    if ENVIRONMENT != "development":
-        raise HTTPException(status_code=403, detail="Debug camera trigger is disabled outside development")
-
-    camera_mac = payload.camera_mac
-    spot_id = payload.spot_id
-
-    if spot_id:
-        spot_doc = db.collection("parking_spots").document(spot_id).get()
-        if not spot_doc.exists:
-            raise HTTPException(status_code=404, detail="Spot not found")
-        spot_data = spot_doc.to_dict() or {}
-        camera_mac = camera_mac or spot_data.get("camera_mac") or spot_data.get("mac_address")
-        spot_id = spot_doc.id
-
-    if not camera_mac:
-        raise HTTPException(status_code=400, detail="Provide spot_id or camera_mac")
-
-    normalized_camera_mac = normalize_mac(camera_mac)
-    if not spot_id:
-        spots_ref = db.collection("parking_spots")
-        spot_doc = find_spot_by_mac(spots_ref, normalized_camera_mac, "camera_mac", "mac_address")
-        if not spot_doc:
-            raise HTTPException(status_code=404, detail="No parking spot found for that camera MAC")
-        spot_id = spot_doc.id
-
-    command_data = queue_capture_command(db, normalized_camera_mac, spot_id, payload.reason)
-    queued_at = command_data.get("queued_at")
-    return {
-        "status": command_data.get("status"),
-        "action": command_data.get("action"),
-        "request_id": command_data.get("request_id"),
-        "spot_id": command_data.get("spot_id"),
-        "camera_mac": command_data.get("camera_mac"),
-        "reason": command_data.get("reason"),
-        "queued_at": queued_at.isoformat() if hasattr(queued_at, "isoformat") else str(queued_at) if queued_at else None
-    }
+    raise HTTPException(
+        status_code=410,
+        detail="Server-triggered camera commands were removed. Trigger the ESP32-CAM through ESP-NOW from the sensor node."
+    )
 
 
 @app.post("/api/v1/sensors/park", status_code=status.HTTP_202_ACCEPTED)
@@ -905,52 +960,146 @@ async def receive_park_event(
     spot_doc = find_spot_by_mac(spots_ref, camera_mac, "camera_mac", "mac_address")
 
     if not spot_doc:
-        return build_gate_response("RETRY",
+        return build_gate_response("DENIED",
                                    "failed",
                                    "invalid camera",
                                    reason="invalid_camera_mac")
         
     spot_id = spot_doc.id
-    spot_data = spot_doc.to_dict()
+    spot_data = spot_doc.to_dict() or {}
     spot_category = spot_data.get("category")
     spot_ref = spot_doc.reference
     display_id = get_display_id_for_spot(spot_id, spot_data)
+    logs_ref = db.collection("parking_logs")
+    active_log_doc = get_latest_active_log_for_spot(logs_ref, spot_id)
+    active_log_data = active_log_doc.to_dict() if active_log_doc else {}
+    active_plate = active_log_data.get("license_plate")
+
+    if active_plate == MANUAL_ACCEPTED_PLATE:
+        spot_ref.update({
+            "is_occupied": True,
+            "last_seen": server_time,
+            **clear_review_flow_fields()
+        })
+        return build_gate_response("WELCOME",
+                                   "manual_accept",
+                                   "admin approved",
+                                   reason="already_manually_accepted")
+
+    if active_plate == RESOLVED_PLATE:
+        spot_ref.update({
+            "is_occupied": True,
+            "last_seen": server_time,
+            **clear_review_flow_fields()
+        })
+        return build_gate_response("DENIED",
+                                   "resolved",
+                                   "resolved by admin",
+                                   reason="already_resolved")
+
+    if active_plate == REJECTED_PLATE:
+        capture_data = save_review_capture_for_spot(spot_id, image_bytes)
+        spot_ref.update({
+            "is_occupied": True,
+            "last_seen": server_time,
+            **capture_data,
+            **clear_review_metadata_fields()
+        })
+        spot_data.update(capture_data)
+        await broadcast_event("spot_update", {"spot": {
+            "id": spot_id,
+            "category": spot_category,
+            "is_occupied": True,
+            "license_plate": REJECTED_PLATE,
+            "is_violation": True,
+            "battery_level": spot_data.get("battery_level"),
+            "last_seen": server_time.isoformat(),
+            "review_capture_url": build_review_capture_url(spot_data),
+            "review_status": None,
+            "review_resolve_after": None
+        }})
+        return build_gate_response("DENIED",
+                                   "rejected",
+                                   "please remove car",
+                                   reason="already_rejected")
+
+    if active_plate and active_plate != UNIDENTIFIED_PLATE:
+        return build_gate_response(
+            "DENIED" if active_log_data.get("is_violation", False) else "WELCOME",
+            "already_processed",
+            "already processed",
+            plate=active_plate,
+            is_violation=active_log_data.get("is_violation", False),
+            reason="already_processed"
+        )
+
     license_plate = extract_license_plate(image_bytes)
 
     if not license_plate:
         capture_data = save_review_capture_for_spot(spot_id, image_bytes)
-        spot_ref.update(capture_data)
+        if not active_log_doc:
+            logs_ref.add({
+                "spot_id": spot_id,
+                "license_plate": UNIDENTIFIED_PLATE,
+                "entry_time": server_time,
+                "exit_time": None,
+                "is_violation": True,
+                "user_id": None,
+                "snapshot_role": None
+            })
+
+        review_started_at = spot_data.get("review_started_at")
+        if not hasattr(review_started_at, "tzinfo"):
+            review_started_at = server_time
+        review_resolve_after = spot_data.get("review_resolve_after")
+        if not hasattr(review_resolve_after, "tzinfo"):
+            review_resolve_after = build_review_deadline(review_started_at)
+
+        spot_ref.update({
+            "is_occupied": True,
+            "last_seen": server_time,
+            **capture_data,
+            "review_started_at": review_started_at,
+            "review_resolve_after": review_resolve_after,
+            "review_status": "photo_review"
+        })
         spot_data.update(capture_data)
+        spot_data.update({
+            "review_started_at": review_started_at,
+            "review_resolve_after": review_resolve_after,
+            "review_status": "photo_review"
+        })
         queue_display_command(
             db,
             display_id,
             spot_id,
-            "Scan again",
-            "Hold still",
-            hold_ms=2500
+            "Admin review",
+            "Check dashboard",
+            hold_ms=DISPLAY_MANUAL_REVIEW_HOLD_MS
         )
-        return build_gate_response("RETRY",
-                                   "failed",
-                                   "scan again",
+        await broadcast_event("spot_update", {"spot": {
+            "id": spot_id,
+            "category": spot_category,
+            "is_occupied": True,
+            "license_plate": UNIDENTIFIED_PLATE,
+            "is_violation": True,
+            "battery_level": spot_data.get("battery_level"),
+            "last_seen": server_time.isoformat(),
+            "review_capture_url": build_review_capture_url(spot_data),
+            "review_status": "photo_review",
+            "review_resolve_after": timestamp_to_iso(review_resolve_after)
+        }})
+        await broadcast_event("log_event", {"log": {
+            "timestamp": server_time.isoformat(),
+            "type": "unidentified",
+            "message": f"Manual review needed at Spot {spot_id} because the plate could not be read."
+        }})
+        return build_gate_response("DENIED",
+                                   "manual_review",
+                                   "admin review",
                                    reason="could_not_read_plate")
         
     logger.info(f"Extracted plate {license_plate} from camera {camera_mac}")
-
-    last_seen = LPR_DEDUP_CACHE.get(license_plate)
-    if last_seen and (server_time - last_seen).total_seconds() < 5:
-        queue_display_command(
-            db,
-            display_id,
-            spot_id,
-            "Scan again",
-            "Retry shortly",
-            hold_ms=2500
-        )
-        return build_gate_response("RETRY",
-                                   "dropped",
-                                   "retry shortly",
-                                   plate=license_plate,
-                                   reason="duplicate_within_5s")
     LPR_DEDUP_CACHE[license_plate] = server_time
     
     # Look up the vehicle by license_plate (document ID = license_plate)
@@ -995,33 +1144,15 @@ async def receive_park_event(
             display_message = "access denied"
             logger.warning(f"Role mismatch: {snapshot_role} user {driver_name} parked in {spot_category} spot {spot_id}")
 
-    # Check if there's an active UNIDENTIFIED ghost log created by the heartbeat
-    logs_ref = db.collection("parking_logs")
-    unidentified_query = (
-        logs_ref
-        .where(filter=FieldFilter("spot_id", "==", spot_id))
-        .where(filter=FieldFilter("license_plate", "==", UNIDENTIFIED_PLATE))
-        .where(filter=FieldFilter("exit_time", "==", None))
-        .get()
-    )
-    
-    unidentified_doc = None
-    for doc in unidentified_query:
-        unidentified_doc = doc
-        break
-
-    if unidentified_doc:
-        # Overwrite the ghost log to clear the Admin UI "Resolve" button
-        unidentified_doc.reference.update({
+    if active_log_doc and active_plate == UNIDENTIFIED_PLATE:
+        active_log_doc.reference.update({
             "license_plate": license_plate,
             "user_id": user_id,
             "snapshot_role": snapshot_role,
             "is_violation": is_violation
-            # Keep original entry_time
         })
-        logger.info(f"Resolved UNIDENTIFIED ghost log for spot {spot_id} with plate {license_plate}")
+        logger.info(f"Resolved UNIDENTIFIED review log for spot {spot_id} with plate {license_plate}")
     else:
-        # Create a new parking log
         logs_ref.add({
             "spot_id": spot_id,
             "license_plate": license_plate,
@@ -1032,14 +1163,16 @@ async def receive_park_event(
             "is_violation": is_violation
         })
     
-    # Update the parking spot
     spot_ref.update({
         "is_occupied": True,
         "last_seen": server_time,
-        **clear_review_capture_fields()
+        **clear_review_flow_fields()
     })
     spot_data.pop("review_capture_path", None)
     spot_data.pop("review_capture_at", None)
+    spot_data.pop("review_started_at", None)
+    spot_data.pop("review_resolve_after", None)
+    spot_data.pop("review_status", None)
 
     broadcast_spot_data = {
         "id": spot_id,
@@ -1050,7 +1183,8 @@ async def receive_park_event(
         "battery_level": spot_data.get("battery_level"),
         "last_seen": server_time.isoformat(),
         "review_capture_url": None,
-        "review_status": None
+        "review_status": None,
+        "review_resolve_after": None
     }
     await broadcast_event("spot_update", {"spot": broadcast_spot_data})
 
@@ -1068,7 +1202,7 @@ async def receive_park_event(
         spot_id,
         "Access denied" if is_violation else "Welcome",
         display_message,
-        hold_ms=4000
+        hold_ms=DISPLAY_WELCOME_HOLD_MS
     )
     return build_gate_response(action,
                                "park_recorded",
@@ -1152,14 +1286,20 @@ async def get_all_spots(current_user: dict = Depends(get_current_user), db = Dep
         active_log = active_logs_by_spot.get(spot_id)
         license_plate = active_log.get("license_plate") if active_log else None
         is_violation = active_log.get("is_violation", False) if active_log else False
-        camera_mac = s.get("camera_mac") or s.get("mac_address")
-        camera_command = get_capture_command_for_spot(db, camera_mac, spot_id)
+        review_status, review_resolve_after = get_review_status(
+            license_plate,
+            s,
+            get_il_time()
+        )
         effective_state = build_effective_spot_state(
             is_occupied,
             license_plate,
             is_violation,
-            build_review_capture_url(s) if license_plate == UNIDENTIFIED_PLATE else None,
-            get_review_status(license_plate, camera_command)
+            build_review_capture_url(s)
+            if license_plate in {UNIDENTIFIED_PLATE, REJECTED_PLATE}
+            else None,
+            review_status,
+            review_resolve_after
         )
         
         if user_role == "admin":
@@ -1172,7 +1312,8 @@ async def get_all_spots(current_user: dict = Depends(get_current_user), db = Dep
                 "battery_level": battery_level,
                 "last_seen": last_seen.isoformat() if hasattr(last_seen, 'isoformat') else str(last_seen) if last_seen else None,
                 "review_capture_url": effective_state["review_capture_url"],
-                "review_status": effective_state["review_status"]
+                "review_status": effective_state["review_status"],
+                "review_resolve_after": effective_state["review_resolve_after"]
             })
         elif category == user_role or (current_user.get("is_special_needs") and category == "special-needs-driver"):
             result.append({
@@ -1210,7 +1351,7 @@ async def get_recent_logs(current_user: dict = Depends(get_current_user), db = D
         
         if license_plate == UNIDENTIFIED_PLATE:
             msg_type = "unidentified"
-            msg = f"Camera failure detected at Spot {spot_id}."
+            msg = f"Manual review is active at Spot {spot_id}."
         elif license_plate == RESOLVED_PLATE:
             msg_type = "info"
             msg = f"Admin resolved anomaly at Spot {spot_id}."
@@ -1370,7 +1511,6 @@ async def get_usage_stats(admin_user: dict = Depends(get_current_admin), db = De
 
 @app.put("/api/v1/sensors/resolve")
 async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_current_admin), db = Depends(get_firestore_db)):
-    # Find active logs for this spot with license_plate == 'UNIDENTIFIED'
     logs_ref = db.collection("parking_logs")
     active_logs_query = list(
         logs_ref
@@ -1386,53 +1526,60 @@ async def resolve_spot(payload: ResolvePayload, admin_user: dict = Depends(get_c
             detail=f"No active UNIDENTIFIED anomaly found for spot {payload.spot_id}"
         )
 
+    spot_ref = db.collection("parking_spots").document(payload.spot_id)
+    spot_doc = spot_ref.get()
+    if not spot_doc.exists:
+        raise HTTPException(status_code=404, detail=f"Unknown spot {payload.spot_id}")
+
+    spot_data = spot_doc.to_dict() or {}
+    if build_review_capture_url(spot_data):
+        raise HTTPException(
+            status_code=409,
+            detail="Resolve is only available when no camera image has reached the server."
+        )
+
+    review_resolve_after = spot_data.get("review_resolve_after")
+    overdue_seconds = seconds_since(review_resolve_after, get_il_time())
+    if overdue_seconds is None or overdue_seconds < 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Resolve becomes available only after the missing-camera timeout expires."
+        )
+
     for log_doc in active_logs_query:
         log_doc.reference.update({
             "is_violation": False,
             "license_plate": RESOLVED_PLATE
         })
     
-    # Get the spot for broadcast
-    spot_ref = db.collection("parking_spots").document(payload.spot_id)
-    spot_doc = spot_ref.get()
-    
-    if spot_doc.exists:
-        spot_data = spot_doc.to_dict()
-        camera_mac = spot_data.get("camera_mac") or spot_data.get("mac_address")
-        if camera_mac:
-            cancel_capture_command_for_spot(
-                db,
-                camera_mac,
-                payload.spot_id,
-                detail="admin_resolved"
-            )
-        spot_ref.update(clear_review_capture_fields())
-        queue_display_command(
-            db,
-            get_display_id_for_spot(payload.spot_id, spot_data),
-            payload.spot_id,
-            "Resolved",
-            "Admin checked",
-            hold_ms=4000
-        )
-        last_seen_raw = spot_data.get("last_seen")
-        broadcast_spot_data = {
-            "id": spot_doc.id,
-            "category": spot_data.get("category"),
-            "is_occupied": False,
-            "license_plate": None,
-            "is_violation": False,
-            "battery_level": spot_data.get("battery_level"),
-            "last_seen": last_seen_raw.isoformat() if hasattr(last_seen_raw, 'isoformat') else str(last_seen_raw) if last_seen_raw else None,
-            "review_capture_url": None,
-            "review_status": None
-        }
-        await broadcast_event("spot_update", {"spot": broadcast_spot_data})
-        await broadcast_event("log_event", {"log": {
-            "timestamp": get_il_time().isoformat(), 
-            "type": "info", 
-            "message": f"Admin {admin_user.get('name')} resolved anomaly at spot {payload.spot_id}."
-        }})
+    spot_ref.update(clear_review_flow_fields())
+    queue_display_command(
+        db,
+        get_display_id_for_spot(payload.spot_id, spot_data),
+        payload.spot_id,
+        "Resolved",
+        "Admin cleared",
+        hold_ms=DISPLAY_MANUAL_REVIEW_HOLD_MS
+    )
+    last_seen_raw = spot_data.get("last_seen")
+    broadcast_spot_data = {
+        "id": spot_doc.id,
+        "category": spot_data.get("category"),
+        "is_occupied": False,
+        "license_plate": None,
+        "is_violation": False,
+        "battery_level": spot_data.get("battery_level"),
+        "last_seen": last_seen_raw.isoformat() if hasattr(last_seen_raw, 'isoformat') else str(last_seen_raw) if last_seen_raw else None,
+        "review_capture_url": None,
+        "review_status": None,
+        "review_resolve_after": None
+    }
+    await broadcast_event("spot_update", {"spot": broadcast_spot_data})
+    await broadcast_event("log_event", {"log": {
+        "timestamp": get_il_time().isoformat(), 
+        "type": "info", 
+        "message": f"Admin {admin_user.get('name')} resolved a missing-camera review at spot {payload.spot_id}."
+    }})
         
     return {"status": "resolved", "spot_id": payload.spot_id}
 
@@ -1467,22 +1614,14 @@ async def accept_spot(payload: ResolvePayload, admin_user: dict = Depends(get_cu
 
     if spot_doc.exists:
         spot_data = spot_doc.to_dict() or {}
-        camera_mac = spot_data.get("camera_mac") or spot_data.get("mac_address")
-        if camera_mac:
-            cancel_capture_command_for_spot(
-                db,
-                camera_mac,
-                payload.spot_id,
-                detail="admin_accepted"
-            )
-        spot_ref.update(clear_review_capture_fields())
+        spot_ref.update(clear_review_flow_fields())
         queue_display_command(
             db,
             get_display_id_for_spot(payload.spot_id, spot_data),
             payload.spot_id,
-            "Allowed",
+            "Welcome",
             "Admin approved",
-            hold_ms=4000
+            hold_ms=DISPLAY_WELCOME_HOLD_MS
         )
         last_seen_raw = spot_data.get("last_seen")
         await broadcast_event("spot_update", {"spot": {
@@ -1494,7 +1633,8 @@ async def accept_spot(payload: ResolvePayload, admin_user: dict = Depends(get_cu
             "battery_level": spot_data.get("battery_level"),
             "last_seen": last_seen_raw.isoformat() if hasattr(last_seen_raw, 'isoformat') else str(last_seen_raw) if last_seen_raw else None,
             "review_capture_url": None,
-            "review_status": None
+            "review_status": None,
+            "review_resolve_after": None
         }})
         await broadcast_event("log_event", {"log": {
             "timestamp": get_il_time().isoformat(),
@@ -1533,22 +1673,15 @@ async def reject_spot(payload: ResolvePayload, admin_user: dict = Depends(get_cu
 
     if spot_doc.exists:
         spot_data = spot_doc.to_dict() or {}
-        camera_mac = spot_data.get("camera_mac") or spot_data.get("mac_address")
-        if camera_mac:
-            cancel_capture_command_for_spot(
-                db,
-                camera_mac,
-                payload.spot_id,
-                detail="admin_rejected"
-            )
-        spot_ref.update(clear_review_capture_fields())
+        review_capture_url = build_review_capture_url(spot_data)
+        spot_ref.update(clear_review_metadata_fields())
         queue_display_command(
             db,
             get_display_id_for_spot(payload.spot_id, spot_data),
             payload.spot_id,
             "Access denied",
-            "Please leave",
-            hold_ms=5000
+            "Please remove car",
+            hold_ms=DISPLAY_REJECT_HOLD_MS
         )
         last_seen_raw = spot_data.get("last_seen")
         await broadcast_event("spot_update", {"spot": {
@@ -1559,8 +1692,9 @@ async def reject_spot(payload: ResolvePayload, admin_user: dict = Depends(get_cu
             "is_violation": True,
             "battery_level": spot_data.get("battery_level"),
             "last_seen": last_seen_raw.isoformat() if hasattr(last_seen_raw, 'isoformat') else str(last_seen_raw) if last_seen_raw else None,
-            "review_capture_url": None,
-            "review_status": None
+            "review_capture_url": review_capture_url,
+            "review_status": None,
+            "review_resolve_after": None
         }})
         await broadcast_event("log_event", {"log": {
             "timestamp": get_il_time().isoformat(),
@@ -1584,7 +1718,6 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
         
     spot_id = spot_doc.id
     spot_data = spot_doc.to_dict() or {}
-    camera_mac = spot_data.get("camera_mac") or spot_data.get("mac_address")
     logs_ref = db.collection("parking_logs")
     
     events = sorted(payload.data, key=lambda x: x.t)
@@ -1606,14 +1739,10 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
                 "user_id": None,
                 "snapshot_role": None
             })
-            spot_doc.reference.update(clear_review_capture_fields())
         elif not is_occupied and active_log_doc:
             log_data = active_log_doc.to_dict()
-            entry_time = log_data.get("entry_time")
-            
-            if hasattr(entry_time, 'timestamp'):
-                duration_seconds = (event_time - entry_time.replace(tzinfo=event_time.tzinfo)).total_seconds()
-            else:
+            duration_seconds = seconds_since(log_data.get("entry_time"), event_time)
+            if duration_seconds is None:
                 duration_seconds = 60
                 
             update_data = {"exit_time": event_time}
@@ -1624,23 +1753,33 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
                 update_data["license_plate"] = "ABORTED"
                 
             active_log_doc.reference.update(update_data)
-
-        if not is_occupied and camera_mac:
-            cancel_capture_command_for_spot(
-                db,
-                camera_mac,
-                spot_id,
-                detail="spot_freed_bulk"
-            )
             
     if events:
         last_event = events[-1]
+        last_event_time = datetime.fromtimestamp(last_event.t, tz=IL_TIMEZONE) if IL_TIMEZONE else datetime.fromtimestamp(last_event.t).astimezone()
         spot_update_data = {
             "is_occupied": last_event.v,
             "last_seen": get_il_time()
         }
         if not last_event.v:
-            spot_update_data.update(clear_review_capture_fields())
+            spot_update_data.update(clear_review_flow_fields())
+        else:
+            latest_active_log_doc = get_latest_active_log_for_spot(logs_ref, spot_id)
+            latest_active_log = latest_active_log_doc.to_dict() if latest_active_log_doc else {}
+            if latest_active_log.get("license_plate") == UNIDENTIFIED_PLATE:
+                review_started_at = spot_data.get("review_started_at")
+                if not hasattr(review_started_at, "tzinfo"):
+                    review_started_at = last_event_time
+                review_resolve_after = spot_data.get("review_resolve_after")
+                if not hasattr(review_resolve_after, "tzinfo"):
+                    review_resolve_after = build_review_deadline(review_started_at)
+                spot_update_data.update({
+                    "review_started_at": review_started_at,
+                    "review_resolve_after": review_resolve_after,
+                    "review_status": "awaiting_capture"
+                })
+            else:
+                spot_update_data.update(clear_review_flow_fields())
         spot_doc.reference.update(spot_update_data)
         
         # Build updated spot data for SSE broadcast
@@ -1652,6 +1791,9 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
         if not last_event.v:
             spot_data_dict.pop("review_capture_path", None)
             spot_data_dict.pop("review_capture_at", None)
+            spot_data_dict.pop("review_started_at", None)
+            spot_data_dict.pop("review_resolve_after", None)
+            spot_data_dict.pop("review_status", None)
         
         license_plate = None
         is_violation = False
@@ -1660,13 +1802,20 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
             log_d = latest_active_log_doc.to_dict()
             license_plate = log_d.get("license_plate")
             is_violation = log_d.get("is_violation", False)
-        camera_command = get_capture_command_for_spot(db, camera_mac, spot_id)
+        review_status, review_resolve_after = get_review_status(
+            license_plate,
+            spot_data_dict,
+            get_il_time()
+        )
         effective_state = build_effective_spot_state(
             last_event.v,
             license_plate,
             is_violation,
-            build_review_capture_url(spot_data_dict) if license_plate == UNIDENTIFIED_PLATE else None,
-            get_review_status(license_plate, camera_command)
+            build_review_capture_url(spot_data_dict)
+            if license_plate in {UNIDENTIFIED_PLATE, REJECTED_PLATE}
+            else None,
+            review_status,
+            review_resolve_after
         )
         
         broadcast_spot = {
@@ -1678,7 +1827,8 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
             "battery_level": spot_data_dict.get("battery_level"),
             "last_seen": get_il_time().isoformat(),
             "review_capture_url": effective_state["review_capture_url"],
-            "review_status": effective_state["review_status"]
+            "review_status": effective_state["review_status"],
+            "review_resolve_after": effective_state["review_resolve_after"]
         }
         await broadcast_event("spot_update", {"spot": broadcast_spot})
 

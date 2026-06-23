@@ -35,11 +35,15 @@ constexpr float PARKME_SENSOR_BATTERY_EMPTY_V = 3.20f;
 constexpr float PARKME_SENSOR_BATTERY_FULL_V = 4.20f;
 constexpr float PARKME_SENSOR_VOLTAGE_DIVIDER_RATIO = 2.0f;
 
-constexpr uint32_t PARKME_SENSOR_SAMPLE_INTERVAL_MS = 1000;
-constexpr uint32_t PARKME_SENSOR_HEARTBEAT_INTERVAL_MS = 60000;
-constexpr uint32_t PARKME_SENSOR_WIFI_RETRY_INTERVAL_MS = 10000;
-constexpr uint32_t PARKME_SENSOR_HTTP_TIMEOUT_MS = 5000;
+constexpr uint32_t PARKME_SENSOR_SAMPLE_INTERVAL_MS = 500;
+constexpr uint32_t PARKME_SENSOR_HEARTBEAT_INTERVAL_MS = 20000;
+constexpr uint32_t PARKME_SENSOR_WIFI_RETRY_INTERVAL_MS = 5000;
+constexpr uint32_t PARKME_SENSOR_HTTP_TIMEOUT_MS = 2500;
 constexpr bool PARKME_SENSOR_ALLOW_FREE_HEARTBEATS = true;
+// Set this to the camera board STA MAC address to enable direct ESP-NOW
+// sensor -> camera coordination.
+constexpr char PARKME_CAMERA_ESPNOW_PEER_MAC[] = "";
+constexpr uint32_t PARKME_SENSOR_ESPNOW_STATE_SYNC_INTERVAL_MS = 2000;
 
 // Must match an actual Firestore parking_spots document ID.
 constexpr char PARKME_GATE_SPOT_ID[] = "A1";
@@ -58,13 +62,14 @@ constexpr uint8_t PARKME_GATE_LCD_COLUMNS = 16;
 constexpr uint8_t PARKME_GATE_LCD_ROWS = 2;
 
 constexpr uint32_t PARKME_GATE_DEBOUNCE_MS = 250;
-constexpr uint32_t PARKME_GATE_WIFI_RETRY_INTERVAL_MS = 10000;
-constexpr uint32_t PARKME_GATE_HTTP_TIMEOUT_MS = 10000;
-constexpr uint32_t PARKME_GATE_COMMAND_POLL_INTERVAL_MS = 2000;
-constexpr uint8_t PARKME_GATE_MAX_CAPTURE_RETRIES = 3;
-constexpr uint32_t PARKME_GATE_RETRY_STATUS_MS = 2500;
-constexpr uint32_t PARKME_GATE_RETRY_BACKOFF_MS = 2500;
+constexpr uint32_t PARKME_GATE_WIFI_RETRY_INTERVAL_MS = 5000;
+constexpr uint32_t PARKME_GATE_HTTP_TIMEOUT_MS = 7000;
+constexpr uint32_t PARKME_GATE_COMMAND_POLL_INTERVAL_MS = 0;
+constexpr uint8_t PARKME_GATE_MAX_CAPTURE_RETRIES = 1;
+constexpr uint32_t PARKME_GATE_RETRY_STATUS_MS = 1200;
+constexpr uint32_t PARKME_GATE_RETRY_BACKOFF_MS = 0;
 constexpr uint32_t PARKME_GATE_RELAY_PULSE_MS = 3000;
+constexpr bool PARKME_GATE_ENABLE_SERVER_POLL_FALLBACK = false;
 
 // Sensor-board display settings. The same ESP32 that reads the ultrasonic
 // sensor also polls the backend for user-facing screen messages.
@@ -74,8 +79,12 @@ constexpr uint8_t PARKME_DISPLAY_SDA_PIN = 21;
 constexpr uint8_t PARKME_DISPLAY_SCL_PIN = 22;
 constexpr uint8_t PARKME_DISPLAY_I2C_ADDRESS = 0x3C;
 constexpr uint8_t PARKME_DISPLAY_COLUMN_OFFSET = 2;
-constexpr uint32_t PARKME_DISPLAY_WIFI_RETRY_INTERVAL_MS = 10000;
-constexpr uint32_t PARKME_DISPLAY_HTTP_TIMEOUT_MS = 7000;
-constexpr uint32_t PARKME_DISPLAY_COMMAND_POLL_INTERVAL_MS = 1000;
+constexpr uint32_t PARKME_DISPLAY_WIFI_RETRY_INTERVAL_MS = 5000;
+constexpr uint32_t PARKME_DISPLAY_HTTP_TIMEOUT_MS = 1200;
+constexpr uint32_t PARKME_DISPLAY_COMMAND_POLL_INTERVAL_MS = 750;
+constexpr uint32_t PARKME_DISPLAY_CAMERA_QUEUED_HOLD_MS = 800;
+constexpr uint32_t PARKME_DISPLAY_CAMERA_STARTED_HOLD_MS = 1800;
+constexpr uint32_t PARKME_DISPLAY_CAMERA_COMPLETED_HOLD_MS = 1200;
+constexpr uint32_t PARKME_DISPLAY_CAMERA_FAILED_HOLD_MS = 2500;
 
 #endif

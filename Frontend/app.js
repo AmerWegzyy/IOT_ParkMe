@@ -11,6 +11,7 @@ const API_BASE = configuredApiBase
 const BACKEND_ORIGIN = API_BASE.replace(/\/api\/v1$/, '');
 const SPOT_STALE_MS = 120000;
 const STATS_REFRESH_INTERVAL_MS = 60000;
+const SPOT_DYNAMIC_REFRESH_INTERVAL_MS = 2000;
 const RESOLVED_PLATE = 'RESOLVED';
 const REJECTED_PLATE = 'REJECTED';
 const MANUAL_ACCEPTED_PLATE = 'MANUAL_ACCEPTED';
@@ -52,6 +53,7 @@ let statsRefreshInterval = null;
 let spotHealthInterval = null;
 const currentSpots = new Map();
 const offlineSpotIds = new Set();
+const pendingReviewSpotIds = new Set();
 
 function showLoginErrorMessage(message) {
     loginError.textContent = message;
@@ -115,7 +117,8 @@ function startSpotHealthMonitor() {
     stopSpotHealthMonitor();
     spotHealthInterval = setInterval(() => {
         syncOfflineState();
-    }, 15000);
+        refreshDynamicSpotCards();
+    }, SPOT_DYNAMIC_REFRESH_INTERVAL_MS);
 }
 
 function isSpotOffline(spot) {
@@ -226,6 +229,44 @@ function toBackendAssetUrl(path) {
         return path;
     }
     return `${BACKEND_ORIGIN}${path}`;
+}
+
+function getReviewResolveAfterMs(spot) {
+    if (!spot || !spot.review_resolve_after) {
+        return null;
+    }
+    const resolveAfterMs = new Date(spot.review_resolve_after).getTime();
+    return Number.isNaN(resolveAfterMs) ? null : resolveAfterMs;
+}
+
+function canResolveMissingCapture(spot) {
+    if (!spot || !spot.is_occupied || spot.license_plate !== 'UNIDENTIFIED' || spot.review_capture_url) {
+        return false;
+    }
+    const resolveAfterMs = getReviewResolveAfterMs(spot);
+    return resolveAfterMs !== null && Date.now() >= resolveAfterMs;
+}
+
+function getUnidentifiedReviewNote(spot, hasCapture) {
+    if (hasCapture) {
+        return 'Plate could not be read. Review the latest photo and accept or reject this vehicle.';
+    }
+    if (canResolveMissingCapture(spot)) {
+        return 'No camera image arrived in time. Accept or reject this vehicle manually.';
+    }
+    return 'Waiting for the camera image. You can already accept or reject manually.';
+}
+
+function refreshDynamicSpotCards() {
+    currentSpots.forEach((spot) => {
+        if (
+            spot &&
+            !pendingReviewSpotIds.has(spot.id) &&
+            (spot.license_plate === 'UNIDENTIFIED' || spot.license_plate === REJECTED_PLATE)
+        ) {
+            updateSpotUI(spot);
+        }
+    });
 }
 
 // Authentication
@@ -372,6 +413,7 @@ function connectSSE(token) {
 }
 
 function setReviewButtonsPending(spotId, label) {
+    pendingReviewSpotIds.add(spotId);
     document.querySelectorAll(`[data-review-spot="${spotId}"]`).forEach((button) => {
         button.disabled = true;
         button.style.opacity = '0.5';
@@ -406,8 +448,9 @@ async function submitSpotReview(spotId, action) {
                     is_occupied: isResolve ? false : true,
                     license_plate: isReject ? REJECTED_PLATE : isResolve ? null : MANUAL_ACCEPTED_PLATE,
                     is_violation: isReject,
-                    review_capture_url: null,
-                    review_status: null
+                    review_capture_url: isReject ? existingSpot.review_capture_url : null,
+                    review_status: null,
+                    review_resolve_after: null
                 });
             } else {
                 fetchSpots();
@@ -449,6 +492,8 @@ async function submitSpotReview(spotId, action) {
             'warning'
         );
         fetchSpots();
+    } finally {
+        pendingReviewSpotIds.delete(spotId);
     }
 }
 
@@ -556,29 +601,35 @@ function createSpotCard(spot) {
         }
         if (statusClass === 'unidentified') {
             const reviewCaptureUrl = toBackendAssetUrl(spot.review_capture_url);
-            const reviewStatus = spot.review_status || (reviewCaptureUrl ? 'ready' : 'retrying');
 
-            if (reviewStatus === 'retrying') {
-                html += `<button class="resolve-btn" disabled style="margin-top:10px; opacity:0.5; cursor:not-allowed;">Camera Retrying...</button>`;
-            } else {
-                if (reviewCaptureUrl) {
-                    html += `
-                        <div class="review-preview">
-                            <div class="review-label">Last camera image</div>
-                            <img src="${reviewCaptureUrl}" alt="Last camera image for spot ${spot.id}" class="review-image">
-                        </div>
-                    `;
-                } else {
-                    html += `<div class="device-status review-note">No camera image is available for review.</div>`;
-                }
+            if (reviewCaptureUrl) {
                 html += `
-                    <div class="review-actions">
-                        <button class="accept-btn review-btn" data-review-spot="${spot.id}" onclick="acceptSpot('${spot.id}')">Accept Vehicle</button>
-                        <button class="reject-btn review-btn" data-review-spot="${spot.id}" onclick="rejectSpot('${spot.id}')">Reject Vehicle</button>
-                        <button class="resolve-btn review-btn" data-review-spot="${spot.id}" onclick="resolveSpot('${spot.id}')">Resolve Spot</button>
+                    <div class="review-preview">
+                        <div class="review-label">Latest camera image</div>
+                        <img src="${reviewCaptureUrl}" alt="Latest camera image for spot ${spot.id}" class="review-image">
+                    </div>
+                `;
+            } else {
+                html += `<div class="device-status review-note">No camera image is available yet.</div>`;
+            }
+            html += `<div class="device-status review-note">${getUnidentifiedReviewNote(spot, Boolean(reviewCaptureUrl))}</div>`;
+            html += `
+                <div class="review-actions">
+                    <button class="accept-btn review-btn" data-review-spot="${spot.id}" onclick="acceptSpot('${spot.id}')">Accept Vehicle</button>
+                    <button class="reject-btn review-btn" data-review-spot="${spot.id}" onclick="rejectSpot('${spot.id}')">Reject Vehicle</button>
+                </div>
+            `;
+        } else if (spot.license_plate === REJECTED_PLATE) {
+            const reviewCaptureUrl = toBackendAssetUrl(spot.review_capture_url);
+            if (reviewCaptureUrl) {
+                html += `
+                    <div class="review-preview">
+                        <div class="review-label">Latest camera image</div>
+                        <img src="${reviewCaptureUrl}" alt="Rejected vehicle image for spot ${spot.id}" class="review-image">
                     </div>
                 `;
             }
+            html += `<div class="device-status review-note">Rejected by admin. This spot will clear automatically once the car leaves.</div>`;
         }
     } else if (offline) {
         html += `<div class="device-status offline-text">Temporarily unavailable.</div>`;

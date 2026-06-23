@@ -1,5 +1,6 @@
 #include <HTTPClient.h>
 #include <Preferences.h>
+#include <esp_now.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <Wire.h>
@@ -31,17 +32,42 @@ unsigned long lastWifiAttemptAtMs = 0;
 unsigned long calibrationButtonPressedAtMs = 0;
 unsigned long lastDisplayPollAtMs = 0;
 unsigned long activeMessageUntilAtMs = 0;
+unsigned long localCameraMessageUntilAtMs = 0;
+unsigned long lastEspNowStateSentAtMs = 0;
 
 float lastMeasuredDistanceCm = -1.0f;
 SpotState lastMeasuredState = STATE_UNKNOWN;
 int lastMeasuredBatteryPercent = 100;
+SpotState lastEspNowState = STATE_UNKNOWN;
+uint32_t lastEspNowSequence = 0;
 
 String currentScreenTitle = "ParkMe";
 String currentScreenMessage = "Booting";
 String lastRenderedSignature;
+String lastEspNowAckDetail;
+String localCameraScreenTitle;
+String localCameraScreenMessage;
 
 bool graphicsReady = false;
+bool espNowReady = false;
 uint8_t selectedDisplayAddress = 0;
+portMUX_TYPE espNowAckMux = portMUX_INITIALIZER_UNLOCKED;
+volatile bool hasPendingEspNowAck = false;
+volatile uint8_t pendingEspNowAckStatus = 0;
+char pendingEspNowAckDetail[24] = {0};
+const uint8_t kEspNowBroadcastPeer[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+bool addEspNowPeerIfNeeded(const uint8_t peerMac[6]) {
+  if (esp_now_is_peer_exist(peerMac)) {
+    return true;
+  }
+
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, peerMac, sizeof(peerInfo.peer_addr));
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+  return esp_now_add_peer(&peerInfo) == ESP_OK;
+}
 
 constexpr uint8_t kDisplayWidth = 128;
 constexpr uint8_t kDisplayHeight = 64;
@@ -90,6 +116,190 @@ const uint8_t FONT_Y[5] = {0x03, 0x04, 0x78, 0x04, 0x03};
 const uint8_t FONT_Z[5] = {0x61, 0x51, 0x49, 0x45, 0x43};
 
 }  // namespace
+
+void handleEspNowSend(const uint8_t *macAddress, esp_now_send_status_t status) {
+  Serial.print("ESP-NOW send to ");
+  Serial.print(formatMacAddress(macAddress));
+  Serial.print(": ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "ok" : "failed");
+}
+
+void handleEspNowReceive(const uint8_t *macAddress,
+                         const uint8_t *data,
+                         int dataLength) {
+  if (dataLength != static_cast<int>(sizeof(EspNowCameraAckMessage))) {
+    return;
+  }
+
+  EspNowCameraAckMessage message = {};
+  memcpy(&message, data, sizeof(message));
+  if (!isEspNowMessageEnvelopeValid(message, ESPNOW_MESSAGE_CAMERA_ACK)) {
+    return;
+  }
+
+  lastEspNowAckDetail = String(message.detail);
+  Serial.print("ESP-NOW ack from ");
+  Serial.print(formatMacAddress(macAddress));
+  Serial.print(" seq=");
+  Serial.print(message.sequence);
+  Serial.print(" status=");
+  Serial.print(message.status);
+  if (lastEspNowAckDetail.length() > 0) {
+    Serial.print(" detail=");
+    Serial.print(lastEspNowAckDetail);
+  }
+  Serial.println();
+
+  portENTER_CRITICAL(&espNowAckMux);
+  pendingEspNowAckStatus = message.status;
+  memcpy(pendingEspNowAckDetail, message.detail, sizeof(pendingEspNowAckDetail));
+  hasPendingEspNowAck = true;
+  portEXIT_CRITICAL(&espNowAckMux);
+}
+
+bool initEspNow() {
+  uint8_t peerMac[6];
+  bool hasConfiguredCameraPeer =
+      parseMacAddress(PARKME_CAMERA_ESPNOW_PEER_MAC, peerMac);
+
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init failed on sensor node.");
+    return false;
+  }
+
+  esp_now_register_send_cb(handleEspNowSend);
+  esp_now_register_recv_cb(handleEspNowReceive);
+
+  if (!addEspNowPeerIfNeeded(kEspNowBroadcastPeer)) {
+    Serial.println("ESP-NOW could not add the broadcast peer.");
+    return false;
+  }
+
+  if (hasConfiguredCameraPeer && !addEspNowPeerIfNeeded(peerMac)) {
+    Serial.println("ESP-NOW could not add the configured camera peer.");
+    return false;
+  }
+
+  if (hasConfiguredCameraPeer) {
+    Serial.print("ESP-NOW ready. Camera peer: ");
+    Serial.println(PARKME_CAMERA_ESPNOW_PEER_MAC);
+    Serial.println("ESP-NOW broadcast fallback is also enabled.");
+  } else {
+    Serial.println("ESP-NOW ready. Using broadcast trigger because the camera peer MAC is empty or invalid.");
+  }
+  return true;
+}
+
+bool takePendingEspNowAck(uint8_t &status, char detailBuffer[24]) {
+  bool hasAck = false;
+  portENTER_CRITICAL(&espNowAckMux);
+  if (hasPendingEspNowAck) {
+    status = pendingEspNowAckStatus;
+    memcpy(detailBuffer, pendingEspNowAckDetail, 24);
+    hasPendingEspNowAck = false;
+    hasAck = true;
+  }
+  portEXIT_CRITICAL(&espNowAckMux);
+  return hasAck;
+}
+
+bool isTimedMessageActive(unsigned long expiresAtMs) {
+  return expiresAtMs > 0 && static_cast<long>(millis() - expiresAtMs) < 0;
+}
+
+bool isServerMessageActive() {
+  return isTimedMessageActive(activeMessageUntilAtMs);
+}
+
+bool isLocalCameraMessageActive() {
+  return isTimedMessageActive(localCameraMessageUntilAtMs);
+}
+
+bool shouldSendEspNowState(SpotState state, unsigned long nowMs) {
+  if (!espNowReady || !isKnownState(state)) {
+    return false;
+  }
+
+  if (!isKnownState(lastEspNowState) || state != lastEspNowState) {
+    return true;
+  }
+
+  return nowMs - lastEspNowStateSentAtMs >=
+         PARKME_SENSOR_ESPNOW_STATE_SYNC_INTERVAL_MS;
+}
+
+void sendEspNowState(SpotState state, int batteryPercent) {
+  if (!espNowReady) {
+    return;
+  }
+
+  unsigned long nowMs = millis();
+  if (!shouldSendEspNowState(state, nowMs)) {
+    return;
+  }
+
+  if (!isKnownState(lastEspNowState) || state != lastEspNowState) {
+    lastEspNowSequence++;
+    lastEspNowState = state;
+  }
+
+  EspNowSensorStateMessage message = {};
+  message.magic = PARKME_ESPNOW_PROTOCOL_MAGIC;
+  message.version = PARKME_ESPNOW_PROTOCOL_VERSION;
+  message.messageType = ESPNOW_MESSAGE_SENSOR_STATE;
+  message.sequence = lastEspNowSequence;
+  message.state = static_cast<uint8_t>(state);
+  message.batteryPercent =
+      static_cast<uint8_t>(clampValue(batteryPercent, 0, 100));
+  copyStringToFixedBuffer(String(PARKME_GATE_SPOT_ID),
+                          message.spotId,
+                          sizeof(message.spotId));
+  copyStringToFixedBuffer(WiFi.macAddress(),
+                          message.senderMac,
+                          sizeof(message.senderMac));
+
+  bool sentSuccessfully = false;
+  bool directQueued = false;
+  bool broadcastQueued = false;
+
+  uint8_t peerMac[6];
+  if (parseMacAddress(PARKME_CAMERA_ESPNOW_PEER_MAC, peerMac)) {
+    esp_err_t directStatus =
+        esp_now_send(peerMac, reinterpret_cast<const uint8_t *>(&message),
+                     sizeof(message));
+    if (directStatus == ESP_OK) {
+      sentSuccessfully = true;
+      directQueued = true;
+    } else {
+      Serial.print("ESP-NOW direct send failed with status ");
+      Serial.println(static_cast<int>(directStatus));
+    }
+  }
+
+  esp_err_t broadcastStatus =
+      esp_now_send(kEspNowBroadcastPeer,
+                   reinterpret_cast<const uint8_t *>(&message),
+                   sizeof(message));
+  if (broadcastStatus == ESP_OK) {
+    sentSuccessfully = true;
+    broadcastQueued = true;
+  } else {
+    Serial.print("ESP-NOW broadcast send failed with status ");
+    Serial.println(static_cast<int>(broadcastStatus));
+  }
+
+  if (sentSuccessfully) {
+    lastEspNowStateSentAtMs = nowMs;
+    Serial.print("ESP-NOW state queued seq=");
+    Serial.print(message.sequence);
+    Serial.print(" state=");
+    Serial.print(state == STATE_OCCUPIED ? "OCCUPIED" : "FREE");
+    Serial.print(" direct=");
+    Serial.print(directQueued ? "yes" : "no");
+    Serial.print(" broadcast=");
+    Serial.println(broadcastQueued ? "yes" : "no");
+  }
+}
 
 const uint8_t *fontFor(char c) {
   switch (c) {
@@ -424,6 +634,69 @@ void showLocalSensorScreen() {
   showScreen(title, message);
 }
 
+void clearLocalCameraMessage() {
+  localCameraMessageUntilAtMs = 0;
+  localCameraScreenTitle = "";
+  localCameraScreenMessage = "";
+}
+
+void showPreferredLocalScreen() {
+  if (isServerMessageActive()) {
+    return;
+  }
+
+  if (isLocalCameraMessageActive()) {
+    showScreen(localCameraScreenTitle, localCameraScreenMessage);
+    return;
+  }
+
+  showLocalSensorScreen();
+}
+
+void showLocalCameraMessage(const String &title,
+                            const String &message,
+                            unsigned long holdMs) {
+  localCameraScreenTitle = title;
+  localCameraScreenMessage = message;
+  localCameraMessageUntilAtMs = millis() + holdMs;
+  showPreferredLocalScreen();
+}
+
+void handleCameraAckDisplay(uint8_t status, const char *detail) {
+  if (detail && *detail) {
+    lastEspNowAckDetail = String(detail);
+  }
+
+  switch (status) {
+    case ESPNOW_CAMERA_ACK_RECEIVED:
+      showLocalCameraMessage("Camera ready",
+                             "Queued",
+                             PARKME_DISPLAY_CAMERA_QUEUED_HOLD_MS);
+      break;
+    case ESPNOW_CAMERA_ACK_CAPTURE_STARTED:
+      showLocalCameraMessage("Taking photo",
+                             "Please hold",
+                             PARKME_DISPLAY_CAMERA_STARTED_HOLD_MS);
+      break;
+    case ESPNOW_CAMERA_ACK_CAPTURE_COMPLETED:
+      showLocalCameraMessage("Photo sent",
+                             "Checking plate",
+                             PARKME_DISPLAY_CAMERA_COMPLETED_HOLD_MS);
+      break;
+    case ESPNOW_CAMERA_ACK_CAPTURE_FAILED:
+      showLocalCameraMessage("Photo failed",
+                             "Check dashboard",
+                             PARKME_DISPLAY_CAMERA_FAILED_HOLD_MS);
+      break;
+    case ESPNOW_CAMERA_ACK_SPOT_FREED:
+      clearLocalCameraMessage();
+      showPreferredLocalScreen();
+      break;
+    default:
+      break;
+  }
+}
+
 unsigned long extractJsonUnsignedLongField(const String &payload,
                                            const char *fieldName,
                                            unsigned long fallbackValue) {
@@ -577,10 +850,22 @@ void sendDisplayResult(const String &requestId,
 }
 
 void handleDisplayPolling() {
+  bool shouldRefreshScreen = false;
+
   if (activeMessageUntilAtMs > 0 &&
       static_cast<long>(millis() - activeMessageUntilAtMs) >= 0) {
     activeMessageUntilAtMs = 0;
-    showLocalSensorScreen();
+    shouldRefreshScreen = true;
+  }
+
+  if (localCameraMessageUntilAtMs > 0 &&
+      static_cast<long>(millis() - localCameraMessageUntilAtMs) >= 0) {
+    clearLocalCameraMessage();
+    shouldRefreshScreen = true;
+  }
+
+  if (shouldRefreshScreen) {
+    showPreferredLocalScreen();
   }
 
   if (WiFi.status() != WL_CONNECTED) {
@@ -600,6 +885,7 @@ void handleDisplayPolling() {
   if (pollDisplayCommand(requestId, title, message, holdMs)) {
     Serial.print("Display command received: ");
     Serial.println(requestId);
+    clearLocalCameraMessage();
     activeMessageUntilAtMs = millis() + holdMs;
     showScreen(title.length() > 0 ? title : "ParkMe", message);
     sendDisplayResult(requestId, "DISPLAYED", "rendered");
@@ -852,6 +1138,7 @@ void flushPendingTelemetry() {
 
 void publishCurrentState(float distanceCm, SpotState state) {
   int batteryPercent = readBatteryPercent();
+  SpotState previousState = lastMeasuredState;
   lastMeasuredDistanceCm = distanceCm;
   lastMeasuredState = state;
   lastMeasuredBatteryPercent = batteryPercent;
@@ -865,9 +1152,15 @@ void publishCurrentState(float distanceCm, SpotState state) {
   Serial.print("% | State: ");
   Serial.println(state == STATE_OCCUPIED ? "OCCUPIED" : "FREE");
 
-  if (activeMessageUntilAtMs == 0) {
+  if (state == STATE_FREE && previousState != STATE_FREE) {
+    clearLocalCameraMessage();
+  }
+
+  if (!isServerMessageActive() && !isLocalCameraMessageActive()) {
     showLocalSensorScreen();
   }
+
+  sendEspNowState(state, batteryPercent);
 
   if (!shouldSendTelemetry(state, millis())) {
     return;
@@ -947,16 +1240,23 @@ void setup() {
 
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
+  espNowReady = initEspNow();
   connectWiFi();
 }
 
 void loop() {
   maintainWiFi();
-  flushPendingTelemetry();
-  handleDisplayPolling();
   handleCalibrationButton();
 
+  uint8_t pendingAckStatus = 0;
+  char pendingAckDetail[24] = {0};
+  if (takePendingEspNowAck(pendingAckStatus, pendingAckDetail)) {
+    handleCameraAckDisplay(pendingAckStatus, pendingAckDetail);
+  }
+
   if (millis() - lastSampleAtMs < PARKME_SENSOR_SAMPLE_INTERVAL_MS) {
+    flushPendingTelemetry();
+    handleDisplayPolling();
     return;
   }
   lastSampleAtMs = millis();
@@ -974,8 +1274,12 @@ void loop() {
     Serial.print(freeDistanceLimitCm);
     Serial.print(" cm | Baseline: ");
     Serial.println(baselineDistanceCm);
+    flushPendingTelemetry();
+    handleDisplayPolling();
     return;
   }
 
   publishCurrentState(distanceCm, state);
+  flushPendingTelemetry();
+  handleDisplayPolling();
 }

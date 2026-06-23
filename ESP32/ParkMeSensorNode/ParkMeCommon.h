@@ -19,6 +19,45 @@ enum GateAction : uint8_t {
   ACTION_RETRY = 3
 };
 
+enum EspNowMessageType : uint8_t {
+  ESPNOW_MESSAGE_SENSOR_STATE = 1,
+  ESPNOW_MESSAGE_CAMERA_ACK = 2
+};
+
+enum EspNowCameraAckStatus : uint8_t {
+  ESPNOW_CAMERA_ACK_RECEIVED = 1,
+  ESPNOW_CAMERA_ACK_CAPTURE_STARTED = 2,
+  ESPNOW_CAMERA_ACK_CAPTURE_COMPLETED = 3,
+  ESPNOW_CAMERA_ACK_CAPTURE_FAILED = 4,
+  ESPNOW_CAMERA_ACK_SPOT_FREED = 5
+};
+
+constexpr uint32_t PARKME_ESPNOW_PROTOCOL_MAGIC = 0x504D4553UL;
+constexpr uint8_t PARKME_ESPNOW_PROTOCOL_VERSION = 1;
+
+struct EspNowSensorStateMessage {
+  uint32_t magic;
+  uint8_t version;
+  uint8_t messageType;
+  uint16_t reserved;
+  uint32_t sequence;
+  uint8_t state;
+  uint8_t batteryPercent;
+  char spotId[16];
+  char senderMac[18];
+};
+
+struct EspNowCameraAckMessage {
+  uint32_t magic;
+  uint8_t version;
+  uint8_t messageType;
+  uint16_t reserved;
+  uint32_t sequence;
+  uint8_t status;
+  char senderMac[18];
+  char detail[24];
+};
+
 template <typename T>
 constexpr T clampValue(T value, T minimum, T maximum) {
   return value < minimum ? minimum : (value > maximum ? maximum : value);
@@ -128,6 +167,72 @@ inline String buildServerUrl(const char *scheme,
 
 inline String buildServerUrl(const char *host, uint16_t port, const char *path) {
   return buildServerUrl("http", host, port, path);
+}
+
+inline void copyStringToFixedBuffer(const String &value,
+                                    char *buffer,
+                                    size_t bufferSize) {
+  if (bufferSize == 0) {
+    return;
+  }
+
+  size_t copyLength = value.length();
+  if (copyLength >= bufferSize) {
+    copyLength = bufferSize - 1;
+  }
+
+  memcpy(buffer, value.c_str(), copyLength);
+  buffer[copyLength] = '\0';
+}
+
+inline bool parseMacAddress(const char *macAddress, uint8_t output[6]) {
+  if (!macAddress) {
+    return false;
+  }
+
+  int values[6] = {0, 0, 0, 0, 0, 0};
+  if (sscanf(macAddress,
+             "%x:%x:%x:%x:%x:%x",
+             &values[0],
+             &values[1],
+             &values[2],
+             &values[3],
+             &values[4],
+             &values[5]) != 6) {
+    return false;
+  }
+
+  for (size_t index = 0; index < 6; ++index) {
+    output[index] = static_cast<uint8_t>(values[index]);
+  }
+
+  return true;
+}
+
+inline bool parseMacAddress(const String &macAddress, uint8_t output[6]) {
+  return parseMacAddress(macAddress.c_str(), output);
+}
+
+inline String formatMacAddress(const uint8_t macAddress[6]) {
+  char buffer[18];
+  snprintf(buffer,
+           sizeof(buffer),
+           "%02X:%02X:%02X:%02X:%02X:%02X",
+           macAddress[0],
+           macAddress[1],
+           macAddress[2],
+           macAddress[3],
+           macAddress[4],
+           macAddress[5]);
+  return String(buffer);
+}
+
+template <typename TMessage>
+constexpr bool isEspNowMessageEnvelopeValid(const TMessage &message,
+                                            uint8_t expectedMessageType) {
+  return message.magic == PARKME_ESPNOW_PROTOCOL_MAGIC &&
+         message.version == PARKME_ESPNOW_PROTOCOL_VERSION &&
+         message.messageType == expectedMessageType;
 }
 
 
