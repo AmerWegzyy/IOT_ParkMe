@@ -46,7 +46,7 @@ constexpr char PARKME_CAMERA_ESPNOW_PEER_MAC[] = "";
 constexpr uint32_t PARKME_SENSOR_ESPNOW_STATE_SYNC_INTERVAL_MS = 2000;
 
 // Must match an actual Firestore parking_spots document ID.
-constexpr char PARKME_GATE_SPOT_ID[] = "A1";
+constexpr char PARKME_GATE_SPOT_ID[] = "C1";
 constexpr int8_t PARKME_GATE_TRIG_PIN = 12;
 constexpr int8_t PARKME_GATE_ECHO_PIN = 13;
 constexpr int8_t PARKME_GATE_FLASH_LED_PIN = 4;

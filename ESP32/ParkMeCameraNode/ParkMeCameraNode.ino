@@ -180,11 +180,7 @@ void processSensorStateMessage(const EspNowSensorStateMessage &message,
   String spotId = String(message.spotId);
   SpotState state = static_cast<SpotState>(message.state);
 
-  if (spotId != String(PARKME_GATE_SPOT_ID)) {
-    Serial.print("Ignoring ESP-NOW packet for spot ");
-    Serial.println(spotId);
-    return;
-  }
+  // Simplified: Accept ESP-NOW trigger from any sensor without spotId matching
 
   Serial.print("ESP-NOW state for ");
   Serial.print(spotId);
@@ -342,69 +338,6 @@ bool sendJsonRequest(const char *path,
   return true;
 }
 
-bool pollServerForCaptureCommand(String &requestId,
-                                 String &spotId,
-                                 String &reason) {
-  String payload = "{\"camera_mac\":\"";
-  payload += WiFi.macAddress();
-  payload += "\"}";
-
-  String responseBody;
-  int httpStatusCode = -1;
-  if (!sendJsonRequest(PARKME_API_CAMERA_POLL_PATH,
-                       payload,
-                       responseBody,
-                       httpStatusCode)) {
-    Serial.println("Camera poll failed.");
-    return false;
-  }
-
-  if (httpStatusCode < 200 || httpStatusCode >= 300) {
-    Serial.print("Camera poll rejected with HTTP ");
-    Serial.println(httpStatusCode);
-    return false;
-  }
-
-  String action = extractJsonStringField(responseBody, "action");
-  action.toUpperCase();
-  if (action != "CAPTURE") {
-    return false;
-  }
-
-  requestId = extractJsonStringField(responseBody, "request_id");
-  spotId = extractJsonStringField(responseBody, "spot_id");
-  reason = extractJsonStringField(responseBody, "reason");
-  return requestId.length() > 0;
-}
-
-void sendCaptureCommandResult(const String &requestId,
-                              const String &statusText,
-                              const String &detail) {
-  String payload = "{\"camera_mac\":\"";
-  payload += WiFi.macAddress();
-  payload += "\",\"request_id\":\"";
-  payload += requestId;
-  payload += "\",\"status\":\"";
-  payload += statusText;
-  payload += "\",\"detail\":\"";
-  payload += detail;
-  payload += "\"}";
-
-  String responseBody;
-  int httpStatusCode = -1;
-  if (!sendJsonRequest(PARKME_API_CAMERA_RESULT_PATH,
-                       payload,
-                       responseBody,
-                       httpStatusCode)) {
-    Serial.println("Failed to report capture result to backend.");
-    return;
-  }
-
-  Serial.print("Result ACK HTTP ");
-  Serial.print(httpStatusCode);
-  Serial.print(" | ");
-  Serial.println(responseBody);
-}
 
 bool captureAndUpload(String &responseBody, int &httpStatusCode) {
   camera_fb_t *frame = nullptr;

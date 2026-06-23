@@ -9,12 +9,12 @@ The mark of a production-ready IoT system is how it handles physical chaos. This
 ### A. Network Disconnection & Caching (Sensor Node)
 If the ultrasonic node loses WiFi exactly when a car arrives, the state change is queued in non-volatile storage (NVS) via `queuePendingTelemetry()`. When connectivity restores, `flushPendingTelemetry()` pushes the cached states. Cached data survives power loss.
 
-### B. Adaptive Calibration (Sensor Node)
-Holding the boot button (GPIO 0) for 4 seconds triggers a calibration sequence. It samples the exact distance to the concrete floor 15 times, averages it, and computes a baseline minus a 30cm delta (with an 8cm hard floor). This prevents false positives regardless of ceiling height.
+### B. Fixed Threshold (Sensor Node)
+To simplify the project, the dynamic calibration delta has been removed. The ultrasonic sensor relies on a strict, hardcoded 20 cm threshold to determine if a vehicle is occupying the spot. 
 
-### C. Capture Commands & Retries (Camera Node)
-* **Backend-triggered capture:** The camera no longer decides on its own from a local gate sensor. It polls the backend for a capture command and only takes a picture when the backend queues one.
-* **Retries:** If the OCR fails or network drops, the camera reports the failed attempt and retries up to 3 captures before marking the command as failed.
+### C. Capture Commands (Camera Node)
+* **ESP-NOW-triggered capture:** The camera does not poll the backend for commands. It listens directly for an ESP-NOW protocol trigger from the sensor node. When the sensor detects a vehicle, it instantly signals the camera node to capture a photo.
+* **No Retries:** To simplify the project, all retry logic has been removed. The camera attempts to capture and upload the image exactly once per trigger.
 
 ---
 

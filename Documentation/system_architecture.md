@@ -20,7 +20,7 @@ The system uses an **Edge-Push Architecture** rather than heavy polling.
 ### A. The "Park" Event (ESP32-CAM)
 1. **Trigger:** The parking spot ultrasonic sensor reports a real `FREE -> OCCUPIED` transition.
 2. **Action:** The backend updates Firestore and queues a camera capture command for the mapped `camera_mac`.
-3. **Camera Polling:** The ESP32-CAM polls `/api/v1/cameras/poll`. When the backend replies with `CAPTURE`, the camera snaps a JPEG (VGA or QVGA depending on PSRAM).
+3. **Camera Trigger:** The ESP32-CAM listens for an ESP-NOW broadcast from the ultrasonic sensor. Upon receipt, the camera immediately snaps a JPEG (VGA or QVGA depending on PSRAM).
 4. **Upload:** The camera sends the image to `POST /api/v1/sensors/park` together with the `camera_mac`.
 5. **Processing:** The backend uses Google Cloud Vision to extract the license plate.
 6. **Validation:** The backend maps `camera_mac` to a logical spot, looks up the vehicle owner, and checks their Role-Based Access Control (RBAC) permissions against the spot's designated category.

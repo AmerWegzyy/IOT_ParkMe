@@ -943,18 +943,12 @@ void loadPendingTelemetry() {
 void loadCalibration() {
   baselineDistanceCm =
       preferences.getFloat("base_cm", PARKME_SENSOR_DEFAULT_BASELINE_CM);
-  occupiedThresholdCm = computeOccupiedThreshold(
-      baselineDistanceCm,
-      PARKME_SENSOR_OCCUPIED_DELTA_CM,
-      PARKME_SENSOR_MIN_THRESHOLD_CM);
+  occupiedThresholdCm = 20.0f;
 }
 
 void saveCalibration(float baselineCm) {
   baselineDistanceCm = baselineCm;
-  occupiedThresholdCm = computeOccupiedThreshold(
-      baselineDistanceCm,
-      PARKME_SENSOR_OCCUPIED_DELTA_CM,
-      PARKME_SENSOR_MIN_THRESHOLD_CM);
+  occupiedThresholdCm = 20.0f;
   preferences.putFloat("base_cm", baselineDistanceCm);
 }
 
