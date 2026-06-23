@@ -608,17 +608,19 @@ function createSpotCard(spot) {
                 html += `
                     <div class="review-preview">
                         <div class="review-label">Latest camera image</div>
-                        <img src="${reviewCaptureUrl}" alt="Latest camera image for spot ${spot.id}" class="review-image">
+                        <img src="${reviewCaptureUrl}" alt="Latest camera image for spot ${spot.id}" class="review-image" onerror="document.querySelectorAll('[data-review-spot=\\'${spot.id}\\']').forEach(b => { b.disabled=true; b.title='Image failed to load'; b.style.opacity='0.5'; b.style.cursor='not-allowed'; })">
                     </div>
                 `;
             } else {
                 html += `<div class="device-status review-note">No camera image is available yet.</div>`;
             }
             html += `<div class="device-status review-note">${getUnidentifiedReviewNote(spot, Boolean(reviewCaptureUrl))}</div>`;
+            
+            const buttonsDisabledAttr = !reviewCaptureUrl ? 'disabled title="Waiting for camera capture..." style="opacity: 0.5; cursor: not-allowed;"' : '';
             html += `
                 <div class="review-actions">
-                    <button class="accept-btn review-btn" data-review-spot="${spot.id}" onclick="acceptSpot('${spot.id}')">Accept Vehicle</button>
-                    <button class="reject-btn review-btn" data-review-spot="${spot.id}" onclick="rejectSpot('${spot.id}')">Reject Vehicle</button>
+                    <button class="accept-btn review-btn" ${buttonsDisabledAttr} data-review-spot="${spot.id}" onclick="acceptSpot('${spot.id}')">Accept Vehicle</button>
+                    <button class="reject-btn review-btn" ${buttonsDisabledAttr} data-review-spot="${spot.id}" onclick="rejectSpot('${spot.id}')">Reject Vehicle</button>
                 </div>
             `;
         } else if (spot.license_plate === REJECTED_PLATE) {

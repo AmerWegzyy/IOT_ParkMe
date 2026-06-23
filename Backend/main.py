@@ -670,6 +670,8 @@ async def receive_heartbeat_data(
         }
         if not payload.is_occupied:
             spot_update_data.update(clear_review_flow_fields())
+            safe_spot_id = "".join(ch for ch in spot_id.strip().lower() if ch.isalnum() or ch in {"-", "_"}) or "spot"
+            db.collection("spot_captures").document(safe_spot_id).delete()
         elif active_plate == UNIDENTIFIED_PLATE:
             review_started_at = spot_data_before.get("review_started_at")
             if created_unidentified_log or not hasattr(review_started_at, "tzinfo"):
