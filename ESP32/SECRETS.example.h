@@ -40,7 +40,7 @@ constexpr uint32_t PARKME_SENSOR_HTTP_TIMEOUT_MS = 2500;
 constexpr bool PARKME_SENSOR_ALLOW_FREE_HEARTBEATS = true;
 // Set this to the camera board STA MAC address to enable direct ESP-NOW
 // sensor -> camera coordination.
-constexpr char PARKME_CAMERA_ESPNOW_PEER_MAC[] = "";
+constexpr char PARKME_CAMERA_ESPNOW_PEER_MAC[] = "24:6F:28:47:F9:E8";
 constexpr uint32_t PARKME_SENSOR_ESPNOW_STATE_SYNC_INTERVAL_MS = 2000;
 
 // Must match an actual Firestore parking_spots document ID.
