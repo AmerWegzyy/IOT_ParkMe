@@ -144,6 +144,13 @@ As the backend processes the image and runs the Google Vision OCR, it queues com
 - **"Access denied" / "Please remove car"**: Displayed if the plate is recognized but belongs to an unauthorized/unregistered user (Violation).
 - **"Admin review" / "Check dashboard"**: Displayed if the OCR fails to read the plate and the backend routes the log to an Admin for manual Accept/Reject.
 
+**3. Concurrency and Race Condition Safety (FreeRTOS Dual-Core)**
+To prevent race conditions when both a local ESP-NOW message and a server SSE message attempt to update the LCD simultaneously, the system uses a strict FreeRTOS dual-core split and priority model:
+- **Core Assignment**: 
+  - **Core 0 (Network Task)** manages the backend SSE stream. When a message arrives, it takes a FreeRTOS mutex (`sharedStateMutex`), copies the text into a volatile struct (`sharedDisplay`), flags it as new, and releases the lock. It never directly touches the display hardware.
+  - **Core 1 (Main Loop)** is solely responsible for rendering to the I2C LCD screen. It periodically checks the struct. This guarantees memory safety and prevents I2C bus collisions.
+- **Priority Override**: Server messages are considered the definitive truth. If an ESP-NOW message attempts to display while a server message is already holding on the screen, the local message is silently ignored. Conversely, if a server message arrives while an ephemeral local message is displaying, Core 1 instantly clears the local message and overwrites the screen with the server's definitive command.
+
 ## 11. API Endpoints Documentation
 The backend exposes a FastAPI REST architecture. Below is the comprehensive list of all active endpoints, the two communicating sides, and their use cases:
 
