@@ -22,5 +22,10 @@ This document outlines the major cleanup, feature additions, and bug fixes made 
 ## 4. Documentation Overhaul
 - **Ground Truth Restoration**: Restored `Documentation/PROJECT_STATE_CURRENT.md` as the definitive guide to the system.
 - **Edge Cases & Timings**: Documented the 10-second camera grace period, the 90-second bouncy driver window, network loss telemetry caching, and manual UI timeouts.
-- **Database Schema**: Documented the 6 active Firestore collections (`parking_spots`, `users`, `vehicles`, `parking_logs`, `display_commands`, `spot_captures`).
+- **Database Schema**: Documented the active Firestore collections (`parking_spots`, `users`, `vehicles`, `parking_logs`, `spot_captures`).
 - **Hardware Team Guide**: Authored `hardware-code-upload-guide.md` to clearly instruct teammates on how to flash the `ParkMeSensorNode` (standard ESP32) and `ParkMeCameraNode` (ESP32-CAM), including IDE configurations and the shared `SECRETS.h`.
+
+## 5. SSE & Dual-Core Architecture Upgrade
+- **Zero-Latency Displays**: Replaced the Firestore-based polling queue for the LCD displays with a direct Server-Sent Events (SSE) stream (`/api/v1/displays/stream`), pushing display updates instantly from the backend to the hardware without database latency.
+- **FreeRTOS Dual-Core Split**: Upgraded the `ParkMeSensorNode` firmware to run its network operations (WiFi, SSE stream, Telemetry) on Core 0 as a background task, ensuring the main loop on Core 1 remains 100% responsive for ultrasonic sampling and OLED rendering.
+- **In-Memory Fallback**: Replaced the Firestore `display_commands` collection with an in-memory dictionary. If the SSE stream disconnects, the ESP32 gracefully falls back to polling the in-memory store until it reconnects with exponential backoff.

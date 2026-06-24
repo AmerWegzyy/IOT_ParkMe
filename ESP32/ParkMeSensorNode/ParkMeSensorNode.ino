@@ -57,6 +57,43 @@ volatile uint8_t pendingEspNowAckStatus = 0;
 char pendingEspNowAckDetail[24] = {0};
 const uint8_t kEspNowBroadcastPeer[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
+// FreeRTOS inter-core shared state
+SemaphoreHandle_t sharedStateMutex = nullptr;
+
+struct SharedSensorData {
+  SpotState state;
+  int batteryPercent;
+  bool needsTelemetry;
+};
+
+struct SharedDisplayCommand {
+  char title[24];
+  char message[48];
+  unsigned long holdMs;
+  bool hasNew;
+  bool needsAck;
+  char requestId[40];
+};
+
+struct SharedNetworkStatus {
+  bool wifiConnected;
+  bool sseConnected;
+  unsigned long lastTelemetrySentAtMs;
+};
+
+volatile SharedSensorData sharedSensor = {STATE_UNKNOWN, 100, false};
+volatile SharedDisplayCommand sharedDisplay = {{0}, {0}, 0, false, false, {0}};
+volatile SharedNetworkStatus sharedNetwork = {false, false, 0};
+
+// SSE connection state
+unsigned long sseReconnectDelayMs = 3000;
+constexpr unsigned long SSE_RECONNECT_MAX_DELAY_MS = 30000;
+constexpr unsigned long SSE_RECONNECT_BASE_DELAY_MS = 3000;
+unsigned long lastSseAttemptAtMs = 0;
+bool sseStreamActive = false;
+TaskHandle_t networkTaskHandle = nullptr;
+constexpr uint32_t NETWORK_TASK_STACK_SIZE = 8192;
+
 bool addEspNowPeerIfNeeded(const uint8_t peerMac[6]) {
   if (esp_now_is_peer_exist(peerMac)) {
     return true;
@@ -1185,6 +1222,310 @@ void handleCalibrationButton() {
   }
 }
 
+void handleSseDisplayCommand(const String &jsonData) {
+  String eventType = extractJsonStringField(jsonData, "type");
+  if (eventType != "display_command") {
+    return;
+  }
+  String title = extractJsonStringField(jsonData, "title");
+  String message = extractJsonStringField(jsonData, "message");
+  String requestId = extractJsonStringField(jsonData, "request_id");
+  unsigned long holdMs = extractJsonUnsignedLongField(jsonData, "hold_ms", 4000);
+
+  Serial.print("[SSE] Display command: ");
+  Serial.print(title);
+  Serial.print(" | ");
+  Serial.println(message);
+
+  if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
+    copyStringToFixedBuffer(title, const_cast<char *>(sharedDisplay.title), sizeof(sharedDisplay.title));
+    copyStringToFixedBuffer(message, const_cast<char *>(sharedDisplay.message), sizeof(sharedDisplay.message));
+    copyStringToFixedBuffer(requestId, const_cast<char *>(sharedDisplay.requestId), sizeof(sharedDisplay.requestId));
+    sharedDisplay.holdMs = holdMs;
+    sharedDisplay.hasNew = true;
+    xSemaphoreGive(sharedStateMutex);
+  }
+}
+
+bool connectAndReadSseStream() {
+  WiFiClient plainClient;
+  WiFiClientSecure secureClient;
+  bool usingHttps = String(PARKME_SERVER_SCHEME).equalsIgnoreCase("https");
+  Client *client = usingHttps ? static_cast<Client *>(&secureClient) : static_cast<Client *>(&plainClient);
+  if (usingHttps) {
+    secureClient.setInsecure();
+  }
+
+  if (!client->connect(PARKME_SERVER_HOST, PARKME_SERVER_PORT)) {
+    Serial.println("[SSE] Cannot reach backend.");
+    return false;
+  }
+
+  String request = "GET /api/v1/displays/stream?display_id=";
+  request += PARKME_DISPLAY_ID;
+  request += " HTTP/1.1\r\n";
+  request += "Host: ";
+  request += PARKME_SERVER_HOST;
+  request += "\r\n";
+  request += "Accept: text/event-stream\r\n";
+  request += "Connection: keep-alive\r\n\r\n";
+  client->print(request);
+
+  unsigned long headerWaitStart = millis();
+  while (!client->available() && client->connected() && millis() - headerWaitStart < 5000) {
+    delay(10);
+  }
+  if (!client->available()) {
+    client->stop();
+    Serial.println("[SSE] No response from server.");
+    return false;
+  }
+
+  String statusLine = client->readStringUntil('\n');
+  int statusCode = parseHttpStatusCode(statusLine);
+  if (statusCode != 200) {
+    Serial.print("[SSE] Server returned HTTP ");
+    Serial.println(statusCode);
+    client->stop();
+    return false;
+  }
+
+  while (client->connected()) {
+    String headerLine = client->readStringUntil('\n');
+    if (headerLine == "\r" || headerLine.length() == 0) {
+      break;
+    }
+  }
+
+  Serial.println("[SSE] Stream connected.");
+  sseStreamActive = true;
+  sseReconnectDelayMs = SSE_RECONNECT_BASE_DELAY_MS;
+
+  if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
+    sharedNetwork.sseConnected = true;
+    xSemaphoreGive(sharedStateMutex);
+  }
+
+  String dataBuffer = "";
+  while (client->connected()) {
+    if (client->available()) {
+      String line = client->readStringUntil('\n');
+      line.trim();
+      if (line.startsWith("data: ")) {
+        dataBuffer = line.substring(6);
+      } else if (line.length() == 0 && dataBuffer.length() > 0) {
+        handleSseDisplayCommand(dataBuffer);
+        dataBuffer = "";
+      }
+    } else {
+      delay(10);
+    }
+  }
+
+  client->stop();
+  sseStreamActive = false;
+  Serial.println("[SSE] Stream disconnected.");
+
+  if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
+    sharedNetwork.sseConnected = false;
+    xSemaphoreGive(sharedStateMutex);
+  }
+
+  return true;
+}
+
+void handleDisplayPollingFallback() {
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+  if (millis() - lastDisplayPollAtMs < PARKME_DISPLAY_COMMAND_POLL_INTERVAL_MS) {
+    return;
+  }
+  lastDisplayPollAtMs = millis();
+
+  String requestId;
+  String title;
+  String message;
+  unsigned long holdMs = 4000;
+  if (pollDisplayCommand(requestId, title, message, holdMs)) {
+    Serial.print("[Poll Fallback] Display command: ");
+    Serial.println(requestId);
+    if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
+      copyStringToFixedBuffer(title, const_cast<char *>(sharedDisplay.title), sizeof(sharedDisplay.title));
+      copyStringToFixedBuffer(message, const_cast<char *>(sharedDisplay.message), sizeof(sharedDisplay.message));
+      copyStringToFixedBuffer(requestId, const_cast<char *>(sharedDisplay.requestId), sizeof(sharedDisplay.requestId));
+      sharedDisplay.holdMs = holdMs;
+      sharedDisplay.hasNew = true;
+      xSemaphoreGive(sharedStateMutex);
+    }
+    sendDisplayResult(requestId, "DISPLAYED", "rendered");
+  }
+}
+
+void networkTask(void *parameter) {
+  Serial.print("[Network] Task started on core ");
+  Serial.println(xPortGetCoreID());
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(100);
+  }
+
+  for (;;) {
+    if (WiFi.status() != WL_CONNECTED) {
+      if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
+        sharedNetwork.wifiConnected = false;
+        sharedNetwork.sseConnected = false;
+        xSemaphoreGive(sharedStateMutex);
+      }
+      delay(1000);
+      continue;
+    }
+
+    if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
+      sharedNetwork.wifiConnected = true;
+      xSemaphoreGive(sharedStateMutex);
+    }
+
+    flushPendingTelemetry();
+
+    bool shouldSend = false;
+    SpotState stateToSend = STATE_UNKNOWN;
+    int batteryToSend = 100;
+    if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
+      if (sharedSensor.needsTelemetry) {
+        shouldSend = true;
+        stateToSend = sharedSensor.state;
+        batteryToSend = sharedSensor.batteryPercent;
+        sharedSensor.needsTelemetry = false;
+      }
+      xSemaphoreGive(sharedStateMutex);
+    }
+
+    if (shouldSend) {
+      if (postTelemetry(stateToSend, batteryToSend)) {
+        if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
+          sharedNetwork.lastTelemetrySentAtMs = millis();
+          xSemaphoreGive(sharedStateMutex);
+        }
+        markTelemetrySent(stateToSend);
+        clearPendingTelemetry();
+      } else {
+        queuePendingTelemetry(stateToSend, batteryToSend);
+      }
+    }
+
+    if (!sseStreamActive) {
+      unsigned long now = millis();
+      if (now - lastSseAttemptAtMs >= sseReconnectDelayMs) {
+        lastSseAttemptAtMs = now;
+        bool wasConnected = connectAndReadSseStream();
+        if (!wasConnected) {
+          sseReconnectDelayMs = min(sseReconnectDelayMs * 2, SSE_RECONNECT_MAX_DELAY_MS);
+          Serial.print("[SSE] Next retry in ");
+          Serial.print(sseReconnectDelayMs);
+          Serial.println("ms");
+        }
+      } else {
+        handleDisplayPollingFallback();
+      }
+    }
+
+    // Check if we need to send an ACK for a rendered display command
+    bool shouldAck = false;
+    String ackRequestId = "";
+    if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
+      if (sharedDisplay.needsAck) {
+        shouldAck = true;
+        ackRequestId = String(sharedDisplay.requestId);
+        sharedDisplay.needsAck = false;
+      }
+      xSemaphoreGive(sharedStateMutex);
+    }
+    
+    if (shouldAck && ackRequestId.length() > 0) {
+      sendDisplayResult(ackRequestId, "DISPLAYED", "rendered");
+    }
+
+    delay(50);
+  }
+}
+
+void checkSharedDisplayCommand() {
+  if (!xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(10))) {
+    return;
+  }
+  if (!sharedDisplay.hasNew) {
+    xSemaphoreGive(sharedStateMutex);
+    return;
+  }
+  String title = String(sharedDisplay.title);
+  String message = String(sharedDisplay.message);
+  unsigned long holdMs = sharedDisplay.holdMs;
+  sharedDisplay.hasNew = false;
+  sharedDisplay.needsAck = true;
+  xSemaphoreGive(sharedStateMutex);
+
+  Serial.print("[Display] Server command: ");
+  Serial.print(title);
+  Serial.print(" | ");
+  Serial.println(message);
+
+  clearLocalCameraMessage();
+  activeMessageUntilAtMs = millis() + holdMs;
+  showScreen(title.length() > 0 ? title : "ParkMe", message);
+}
+
+void handleTimedMessageExpiry() {
+  bool shouldRefreshScreen = false;
+  if (activeMessageUntilAtMs > 0 &&
+      static_cast<long>(millis() - activeMessageUntilAtMs) >= 0) {
+    activeMessageUntilAtMs = 0;
+    shouldRefreshScreen = true;
+  }
+  if (localCameraMessageUntilAtMs > 0 &&
+      static_cast<long>(millis() - localCameraMessageUntilAtMs) >= 0) {
+    clearLocalCameraMessage();
+    shouldRefreshScreen = true;
+  }
+  if (shouldRefreshScreen) {
+    showPreferredLocalScreen();
+  }
+}
+
+void publishCurrentStateLocal(float distanceCm, SpotState state) {
+  int batteryPercent = readBatteryPercent();
+  SpotState previousState = lastMeasuredState;
+  lastMeasuredDistanceCm = distanceCm;
+  lastMeasuredState = state;
+  lastMeasuredBatteryPercent = batteryPercent;
+
+  Serial.print("Distance: ");
+  Serial.print(distanceCm);
+  Serial.print(" cm | Threshold: ");
+  Serial.print(occupiedThresholdCm);
+  Serial.print(" cm | Battery: ");
+  Serial.print(batteryPercent);
+  Serial.print("% | State: ");
+  Serial.println(state == STATE_OCCUPIED ? "OCCUPIED" : "FREE");
+
+  if (state == STATE_FREE && previousState != STATE_FREE) {
+    clearLocalCameraMessage();
+  }
+  if (!isServerMessageActive() && !isLocalCameraMessageActive()) {
+    showLocalSensorScreen();
+  }
+  sendEspNowState(state, batteryPercent);
+
+  if (shouldSendTelemetry(state, millis())) {
+    if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(10))) {
+      sharedSensor.state = state;
+      sharedSensor.batteryPercent = batteryPercent;
+      sharedSensor.needsTelemetry = true;
+      xSemaphoreGive(sharedStateMutex);
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(200);
@@ -1236,10 +1577,20 @@ void setup() {
   WiFi.setAutoReconnect(true);
   espNowReady = initEspNow();
   connectWiFi();
+
+  sharedStateMutex = xSemaphoreCreateMutex();
+  xTaskCreatePinnedToCore(
+      networkTask,
+      "NetworkTask",
+      NETWORK_TASK_STACK_SIZE,
+      nullptr,
+      1,
+      &networkTaskHandle,
+      0
+  );
 }
 
 void loop() {
-  maintainWiFi();
   handleCalibrationButton();
 
   uint8_t pendingAckStatus = 0;
@@ -1248,18 +1599,17 @@ void loop() {
     handleCameraAckDisplay(pendingAckStatus, pendingAckDetail);
   }
 
+  checkSharedDisplayCommand();
+  handleTimedMessageExpiry();
+
   if (millis() - lastSampleAtMs < PARKME_SENSOR_SAMPLE_INTERVAL_MS) {
-    flushPendingTelemetry();
-    handleDisplayPolling();
     return;
   }
   lastSampleAtMs = millis();
 
   float distanceCm = sampleAverageDistance(3);
   float freeDistanceLimitCm = currentFreeDistanceLimitCm();
-  SpotState state = classifyDistanceCm(distanceCm,
-                                       occupiedThresholdCm,
-                                       freeDistanceLimitCm);
+  SpotState state = classifyDistanceCm(distanceCm, occupiedThresholdCm, freeDistanceLimitCm);
 
   if (!isKnownState(state)) {
     Serial.print("Sensor reading invalid. Distance: ");
@@ -1268,12 +1618,8 @@ void loop() {
     Serial.print(freeDistanceLimitCm);
     Serial.print(" cm | Baseline: ");
     Serial.println(baselineDistanceCm);
-    flushPendingTelemetry();
-    handleDisplayPolling();
     return;
   }
 
-  publishCurrentState(distanceCm, state);
-  flushPendingTelemetry();
-  handleDisplayPolling();
+  publishCurrentStateLocal(distanceCm, state);
 }

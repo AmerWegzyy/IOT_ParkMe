@@ -4,7 +4,7 @@ This document archives important architectural and edge-case Q&A decisions discu
 ### Q: Does the LCD show messages like "camera scanning"?
 **A:** Yes, the system actually coordinates messages from both the local microcontrollers (instantly) and the backend server. When a vehicle pulls into a spot, the LCD cycles through:
 1. **Instant Local Hardware Updates (Via ESP-NOW)**: "Taking photo", "Photo sent", or "Photo failed".
-2. **Backend Server Updates (Via Polling)**: "Scanning" (during OCR), "Welcome [Name]", "Access denied", or "Admin review" (if the plate is unreadable).
+2. **Backend Server Updates (Via SSE Stream)**: "Scanning" (during OCR), "Welcome [Name]", "Access denied", or "Admin review" (if the plate is unreadable).
 
 ### Q: When a plate is successfully read but results in a violation, where is the picture saved?
 **A:** The picture is saved directly into the `parking_logs` collection. The raw JPEG bytes are Base64 encoded and stored under the `capture_base64` field of the newly created parking log document. It completely bypasses the temporary `spot_captures` collection (which is exclusively used to hold images *while* the Admin is deciding what to do with blurry/unreadable plates).

@@ -11,7 +11,7 @@ The architecture follows an **Edge-Push** model:
 4. **Heartbeats & Telemetry**: The Sensor Node also connects to WiFi to send heartbeats (`/api/v1/sensors/heartbeat`). If offline during an event, it caches telemetry and bulk-uploads it later (`/api/v1/telemetry/bulk`).
 5. **Backend Processing**: The FastAPI backend receives the image, calls Google Cloud Vision to extract the license plate, maps the camera's MAC address to a logical Spot ID in Firestore, and verifies the plate against the `vehicles` and `users` collections.
 6. **Live Frontend Updates**: The backend broadcasts updates via Server-Sent Events (SSE) on `/api/v1/stream`. The Vanilla JS frontend (`app.js`) listens to these events to instantly update the UI without polling.
-7. **LCD Displays**: Both ESP32 nodes poll the backend (`/api/v1/displays/poll`) to fetch text commands to show on their attached I2C LCD screens.
+7. **LCD Displays (Zero-Latency)**: The `ParkMeSensorNode` connects to a dedicated SSE stream (`/api/v1/displays/stream`) to instantly receive and render text commands on the I2C LCD screen without polling delays. Network operations run on a background FreeRTOS core.
 
 ## 3. Directory Structure
 ```text
@@ -36,8 +36,8 @@ The architecture follows an **Edge-Push** model:
 - **Key contents**:
   - `receive_heartbeat_data` & `receive_bulk_data`: Resolves spots by MAC and updates Firestore.
   - `receive_park_event`: Extracts plates via Google Vision OCR. Contains logic for "Ghost Logs" (unidentified plates) requiring admin review.
-  - `stream_events`: Manages SSE clients.
-  - `poll_display_command` & `complete_display_result`: Manages LCD message queues.
+  - `stream_events` & `stream_display_events`: Manages SSE clients for the web frontend and hardware displays.
+  - `poll_display_command_endpoint` & `complete_display_result`: Manages in-memory LCD message queues and acknowledgments.
   - `get_capture`: Serves `/api/v1/captures/{spot_id}` which dynamically decodes Base64 images directly from Firestore.
 - **Depends on**: `google-cloud-vision`, `firebase-admin`, `fastapi`, `cachetools`.
 
@@ -56,8 +56,10 @@ The architecture follows an **Edge-Push** model:
   - Dynamic spot cards, Admin Security Logs, and Admin manual Accept/Reject buttons.
 
 ### ESP32/ParkMeSensorNode/ParkMeSensorNode.ino
-- **Purpose**: Monitors the ultrasonic sensor.
-- **Key contents**: Fixed 20cm threshold check. Sends `EspNowSensorStateMessage` via ESP-NOW. Sends HTTP JSON heartbeats. Caches offline states.
+- **Purpose**: Monitors the ultrasonic sensor and maintains network connectivity using a FreeRTOS dual-core architecture.
+- **Key contents**: 
+  - **Core 1 (Main Loop)**: Handles ultrasonic sampling (20cm threshold), ESP-NOW broadcasts, and OLED display rendering without blocking.
+  - **Core 0 (Network Task)**: Maintains WiFi, connects to the SSE display stream, and uploads HTTP JSON telemetry in the background. Caches offline states.
 
 ### ESP32/ParkMeCameraNode/ParkMeCameraNode.ino
 - **Purpose**: Listens for ESP-NOW triggers and uploads photos.
@@ -68,7 +70,7 @@ The architecture follows an **Edge-Push** model:
 
 ## 5. External Integrations
 - **Firebase Auth**: Used by the frontend for user login. Backend verifies JWT tokens.
-- **Firestore**: Source of truth for `parking_spots`, `parking_logs`, `users`, `vehicles`, `display_commands`, and `spot_captures`.
+- **Firestore**: Source of truth for `parking_spots`, `parking_logs`, `users`, `vehicles`, and `spot_captures`.
 - **Google Cloud Vision API**: Backend uses `ImageAnnotatorClient.text_detection` and `document_text_detection` for License Plate Recognition.
 
 ## 6. Project Health Note
@@ -122,11 +124,7 @@ The backend relies entirely on Firestore as the central source of truth. The dat
    - **Fields**: `spot_id`, `license_plate`, `user_id`, `snapshot_role`, `entry_time`, `exit_time`, `is_violation`, `capture_base64`.
    - **Purpose**: Maintains the historical log of all parking events. As of recent features, confirmed violations directly include the encoded image in `capture_base64` for realtime frontend display.
 
-5. **`display_commands`** (Document ID: `display_id`, normalized MAC address)
-   - **Fields**: `action`, `status`, `display_id`, `spot_id`, `title`, `message`, `hold_ms`, `queued_at`.
-   - **Purpose**: Acts as a queue for commands that the ESP32 LCD screens poll and execute.
-
-6. **`spot_captures`** (Document ID: `spot_id`)
+5. **`spot_captures`** (Document ID: `spot_id`)
    - **Fields**: `image_base64`.
    - **Purpose**: Temporarily holds the Base64 representation of a camera capture strictly during the manual review phase for `UNIDENTIFIED` plates.
 
@@ -139,8 +137,8 @@ Because the sensor triggers the camera instantly, the camera board communicates 
 - **"Photo sent" / "Checking plate"**: The image capture was successful and is being uploaded to the server.
 - **"Photo failed" / "Check dashboard"**: The camera failed to capture the image locally.
 
-**2. Backend Server Updates (Via Polling)**
-As the backend processes the image and runs the Google Vision OCR, it queues commands in the `display_commands` collection, which the LCD polls and displays:
+**2. Backend Server Updates (Via SSE Stream)**
+As the backend processes the image and runs the Google Vision OCR, it queues commands in memory and pushes them instantly via the `/api/v1/displays/stream` SSE endpoint to the ESP32's background network task:
 - **"Scanning" / "Please wait"**: Displayed during the initial server processing window while OCR and Firestore checks are running.
 - **"Welcome [Driver Name]"**: Displayed if the plate is successfully recognized and the user is authorized.
 - **"Access denied" / "Please remove car"**: Displayed if the plate is recognized but belongs to an unauthorized/unregistered user (Violation).
@@ -159,12 +157,15 @@ The backend exposes a FastAPI REST architecture. Below is the comprehensive list
 - **`POST /api/v1/telemetry/bulk`**:
   - **Caller**: `ParkMeSensorNode` (ESP32) -> Backend
   - **Use Case**: Used to flush offline-cached sensor events (timestamps and occupancy states) back to the server once the ESP32 regains Wi-Fi connection.
+- **`GET /api/v1/displays/stream`**:
+  - **Caller**: `ParkMeSensorNode` (ESP32) -> Backend
+  - **Use Case**: Establishes a real-time SSE stream where the backend pushes display commands directly to the ESP32 with zero latency.
 - **`POST /api/v1/displays/poll`**:
   - **Caller**: `ParkMeSensorNode` (ESP32) -> Backend
-  - **Use Case**: The node polls this endpoint to fetch queued text commands for its local I2C LCD screen.
+  - **Use Case**: Acts as a fallback mechanism. The node polls this endpoint to fetch in-memory queued text commands if the SSE stream disconnects.
 - **`POST /api/v1/displays/result`**:
   - **Caller**: `ParkMeSensorNode` (ESP32) -> Backend
-  - **Use Case**: Sent immediately after the ESP32 successfully renders an LCD command to remove it from the backend's queue.
+  - **Use Case**: Sent by the ESP32's background network task immediately after the ESP32 successfully renders an LCD command, acknowledging it.
 
 ### Frontend-to-Backend Endpoints
 - **`GET /api/v1/stream`**:

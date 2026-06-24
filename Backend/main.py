@@ -86,7 +86,13 @@ app.add_middleware(
 
 # SSE Broadcaster
 sse_clients = []
-DISPLAY_COMMANDS_COLLECTION = "display_commands"
+# Display SSE Broadcaster (for hardware LCD nodes)
+display_sse_clients = []
+DISPLAY_SSE_KEEPALIVE_SECONDS = 15
+
+# In-memory display command store (poll fallback)
+display_command_store: dict[str, dict] = {}
+display_command_store_lock = asyncio.Lock()
 BOUNCY_DRIVER_MAX_SECONDS = 90
 LPR_DEDUP_CACHE_TTL_SECONDS = 120
 CAMERA_FIRST_HEARTBEAT_GRACE_SECONDS = 10
@@ -111,6 +117,14 @@ async def broadcast_event(event_type: str, data: dict):
             if spot_cat == client["role"] or (client.get("is_special_needs") and spot_cat == "special-needs-driver"):
                 await client["queue"].put(message)
         # Log events are only pushed to admins
+
+
+async def broadcast_display_command(display_id: str, command_data: dict):
+    normalized_id = normalize_identity(display_id)
+    message = json.dumps({"type": "display_command", **command_data})
+    for client in display_sse_clients:
+        if client["display_id"] == normalized_id:
+            await client["queue"].put(message)
 
 # ==========================================
 # PYDANTIC SCHEMAS
@@ -351,20 +365,7 @@ def normalize_identity(identity: str) -> str:
     return identity.strip().lower()
 
 
-def get_display_command_ref(db, display_id: str):
-    return db.collection(DISPLAY_COMMANDS_COLLECTION).document(normalize_identity(display_id))
 
-
-def get_command_reference_time(command_data: dict):
-    return command_data.get("claimed_at") or command_data.get("queued_at")
-
-
-def is_stale_command(command_data: dict, now: datetime, stale_after_seconds: int = 30):
-    reference_time = get_command_reference_time(command_data)
-    age_seconds = seconds_since(reference_time, now)
-    if age_seconds is None:
-        return True
-    return age_seconds > stale_after_seconds
 
 
 def should_preserve_active_log_for_new_arrival(active_log_data: dict,
@@ -385,89 +386,28 @@ def should_preserve_active_log_for_new_arrival(active_log_data: dict,
     )
 
 
-def queue_display_command(db,
-                          display_id: str,
-                          spot_id: str,
-                          title: str,
-                          message: str,
-                          *,
-                          action: str = "SHOW_MESSAGE",
-                          hold_ms: int = 4000):
+async def queue_display_command(display_id: str,
+                                spot_id: str,
+                                title: str,
+                                message: str,
+                                *,
+                                action: str = "SHOW_MESSAGE",
+                                hold_ms: int = 4000):
     normalized_display_id = normalize_identity(display_id)
-    command_ref = get_display_command_ref(db, normalized_display_id)
-    existing_doc = command_ref.get()
-    now = get_il_time()
-
-    if existing_doc.exists:
-        existing_data = existing_doc.to_dict() or {}
-        if existing_data.get("status") in {"PENDING", "CLAIMED"} and not is_stale_command(existing_data, now):
-            command_ref.update({
-                "request_id": str(uuid.uuid4()),
-                "action": action,
-                "status": "PENDING",
-                "display_id": normalized_display_id,
-                "spot_id": spot_id,
-                "title": title,
-                "message": message,
-                "hold_ms": hold_ms,
-                "queued_at": now
-            })
-            refreshed_doc = command_ref.get()
-            return refreshed_doc.to_dict() or {}
-
     command_data = {
         "request_id": str(uuid.uuid4()),
         "action": action,
-        "status": "PENDING",
         "display_id": normalized_display_id,
         "spot_id": spot_id,
         "title": title,
         "message": message,
         "hold_ms": hold_ms,
-        "queued_at": now
+        "queued_at": get_il_time().isoformat()
     }
-    command_ref.set(command_data)
+    async with display_command_store_lock:
+        display_command_store[normalized_display_id] = command_data.copy()
+    await broadcast_display_command(normalized_display_id, command_data)
     return command_data
-
-
-def claim_display_command(db, display_id: str):
-    command_ref = get_display_command_ref(db, display_id)
-    command_doc = command_ref.get()
-
-    if not command_doc.exists:
-        return None
-
-    command_data = command_doc.to_dict() or {}
-    if command_data.get("status") != "PENDING":
-        return None
-
-    claimed_at = get_il_time()
-    command_ref.update({
-        "status": "CLAIMED",
-        "claimed_at": claimed_at
-    })
-    command_data["status"] = "CLAIMED"
-    command_data["claimed_at"] = claimed_at
-    return command_data
-
-
-def complete_display_command(db, display_id: str, request_id: str, status_text: str, detail: str | None):
-    command_ref = get_display_command_ref(db, display_id)
-    command_doc = command_ref.get()
-
-    if not command_doc.exists:
-        return False
-
-    command_data = command_doc.to_dict() or {}
-    if command_data.get("request_id") != request_id:
-        return False
-
-    command_ref.update({
-        "status": status_text.upper(),
-        "detail": detail,
-        "completed_at": get_il_time()
-    })
-    return True
 
 # ==========================================
 # LPR PROCESSING (SERVER-SIDE)
@@ -607,8 +547,7 @@ async def receive_heartbeat_data(
                 })
                 active_plate = UNIDENTIFIED_PLATE
                 created_unidentified_log = True
-                queue_display_command(
-                    db,
+                await queue_display_command(
                     display_id,
                     spot_id,
                     "Scanning",
@@ -624,8 +563,7 @@ async def receive_heartbeat_data(
                         spot_id
                     )
                 elif active_plate == REJECTED_PLATE:
-                    queue_display_command(
-                        db,
+                    await queue_display_command(
                         display_id,
                         spot_id,
                         "Access denied",
@@ -654,8 +592,7 @@ async def receive_heartbeat_data(
 
             active_log_doc.reference.update(update_data)
             if active_plate == REJECTED_PLATE:
-                queue_display_command(
-                    db,
+                await queue_display_command(
                     display_id,
                     spot_id,
                     "Spot clear",
@@ -768,13 +705,12 @@ async def receive_heartbeat_data(
 
 
 @app.post("/api/v1/displays/poll")
-async def poll_display_command(payload: DisplayPollPayload, db = Depends(get_firestore_db)):
-    command_data = claim_display_command(db, payload.display_id)
+async def poll_display_command_endpoint(payload: DisplayPollPayload):
+    normalized_id = normalize_identity(payload.display_id)
+    async with display_command_store_lock:
+        command_data = display_command_store.pop(normalized_id, None)
     if not command_data:
         return {"action": "IDLE"}
-
-    queued_at = command_data.get("queued_at")
-    claimed_at = command_data.get("claimed_at")
     return {
         "action": command_data.get("action", "IDLE"),
         "request_id": command_data.get("request_id"),
@@ -782,23 +718,16 @@ async def poll_display_command(payload: DisplayPollPayload, db = Depends(get_fir
         "title": command_data.get("title"),
         "message": command_data.get("message"),
         "hold_ms": command_data.get("hold_ms", 4000),
-        "queued_at": queued_at.isoformat() if hasattr(queued_at, "isoformat") else str(queued_at) if queued_at else None,
-        "claimed_at": claimed_at.isoformat() if hasattr(claimed_at, "isoformat") else str(claimed_at) if claimed_at else None
+        "queued_at": command_data.get("queued_at"),
     }
 
 
 @app.post("/api/v1/displays/result")
-async def complete_display_result(payload: DisplayCommandResultPayload, db = Depends(get_firestore_db)):
-    success = complete_display_command(
-        db,
-        payload.display_id,
-        payload.request_id,
-        payload.status,
-        payload.detail
+async def complete_display_result(payload: DisplayCommandResultPayload):
+    logger.info(
+        "Display %s acknowledged command %s: %s (%s)",
+        payload.display_id, payload.request_id, payload.status, payload.detail
     )
-    if not success:
-        raise HTTPException(status_code=404, detail="Matching display command not found")
-
     return {"status": "acknowledged", "request_id": payload.request_id}
 
 
@@ -926,8 +855,7 @@ async def receive_park_event(
             "review_resolve_after": review_resolve_after,
             "review_status": "photo_review"
         })
-        queue_display_command(
-            db,
+        await queue_display_command(
             display_id,
             spot_id,
             "Admin review",
@@ -1065,8 +993,7 @@ async def receive_park_event(
         }})
 
     action = "DENIED" if is_violation else "WELCOME"
-    queue_display_command(
-        db,
+    await queue_display_command(
         display_id,
         spot_id,
         "Access denied" if is_violation else "Welcome",
@@ -1249,6 +1176,36 @@ async def get_recent_logs(current_user: dict = Depends(get_current_user), db = D
             "message": msg
         })
     return {"logs": result}
+
+
+@app.get("/api/v1/displays/stream")
+async def stream_display_events(display_id: str):
+    if not display_id or not display_id.strip():
+        raise HTTPException(status_code=400, detail="display_id query parameter is required")
+    normalized_id = normalize_identity(display_id)
+    q = asyncio.Queue()
+    client = {"queue": q, "display_id": normalized_id}
+    display_sse_clients.append(client)
+    logger.info("Display SSE client connected: %s", normalized_id)
+
+    async def event_generator():
+        try:
+            while True:
+                try:
+                    message = await asyncio.wait_for(q.get(), timeout=DISPLAY_SSE_KEEPALIVE_SECONDS)
+                    yield f"data: {message}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if client in display_sse_clients:
+                display_sse_clients.remove(client)
+            logger.info("Display SSE client disconnected: %s", normalized_id)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @app.get("/api/v1/stream")
 async def stream_events(token: str = None):
     if not token:
@@ -1411,8 +1368,7 @@ async def accept_spot(payload: ResolvePayload, admin_user: dict = Depends(get_cu
     if spot_doc.exists:
         spot_data = spot_doc.to_dict() or {}
         spot_ref.update(clear_review_flow_fields())
-        queue_display_command(
-            db,
+        await queue_display_command(
             get_display_id_for_spot(payload.spot_id, spot_data),
             payload.spot_id,
             "Welcome",
@@ -1480,8 +1436,7 @@ async def reject_spot(payload: ResolvePayload, admin_user: dict = Depends(get_cu
         spot_data = spot_doc.to_dict() or {}
         review_capture_url = build_review_capture_url(spot_data)
         spot_ref.update(clear_review_metadata_fields())
-        queue_display_command(
-            db,
+        await queue_display_command(
             get_display_id_for_spot(payload.spot_id, spot_data),
             payload.spot_id,
             "Access denied",
