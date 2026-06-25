@@ -328,7 +328,7 @@ bool sendJsonRequest(const char *path,
 
   while (client->connected()) {
     String headerLine = client->readStringUntil('\n');
-    if (headerLine == "\r") {
+    if (headerLine == "\r" || headerLine.length() == 0) {
       break;
     }
   }
@@ -421,7 +421,7 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
 
   while (client->connected()) {
     String headerLine = client->readStringUntil('\n');
-    if (headerLine == "\r") {
+    if (headerLine == "\r" || headerLine.length() == 0) {
       break;
     }
   }
