@@ -1554,7 +1554,7 @@ void setup() {
   Serial.print("MAC: ");
   Serial.println(WiFi.macAddress());
   Serial.print("Spot ID: ");
-  Serial.println(PARKME_SENSOR_SPOT_ID);
+  Serial.println(PARKME_GATE_SPOT_ID);
   Serial.print("Backend: ");
   Serial.print(PARKME_SERVER_SCHEME);
   Serial.print("://");
