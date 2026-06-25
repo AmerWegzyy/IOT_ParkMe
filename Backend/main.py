@@ -220,7 +220,11 @@ async def get_capture(spot_id: str, db = Depends(get_firestore_db)):
         raise HTTPException(status_code=404, detail="Capture data missing")
     
     image_bytes = base64.b64decode(image_base64)
-    return Response(content=image_bytes, media_type="image/jpeg")
+    return Response(
+        content=image_bytes,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
+    )
 
 
 @app.get("/api/v1/logs/{log_id}/capture")
@@ -234,7 +238,11 @@ async def get_log_capture(log_id: str, db = Depends(get_firestore_db)):
         raise HTTPException(status_code=404, detail="No capture associated with this log")
     
     image_bytes = base64.b64decode(capture_base64)
-    return Response(content=image_bytes, media_type="image/jpeg")
+    return Response(
+        content=image_bytes,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
+    )
 
 
 def build_review_capture_url(spot_data: dict):

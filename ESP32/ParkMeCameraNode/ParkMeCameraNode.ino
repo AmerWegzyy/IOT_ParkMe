@@ -346,9 +346,17 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
 
   if (PARKME_GATE_FLASH_LED_PIN >= 0) {
     digitalWrite(PARKME_GATE_FLASH_LED_PIN, HIGH);
+    // Wait for the flash to illuminate and auto-exposure to adjust
     delay(80);
   }
 
+  // Dummy grab to flush the stale frame from the camera's FIFO buffer
+  frame = esp_camera_fb_get();
+  if (frame) {
+    esp_camera_fb_return(frame);
+  }
+
+  // Grab the fresh frame
   frame = esp_camera_fb_get();
 
   if (PARKME_GATE_FLASH_LED_PIN >= 0) {
