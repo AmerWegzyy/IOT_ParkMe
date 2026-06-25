@@ -12,6 +12,7 @@ const BACKEND_ORIGIN = API_BASE.replace(/\/api\/v1$/, '');
 const SPOT_STALE_MS = 120000;
 const STATS_REFRESH_INTERVAL_MS = 60000;
 const SPOT_DYNAMIC_REFRESH_INTERVAL_MS = 2000;
+const SPOT_FULL_REFRESH_INTERVAL_MS = 5000;
 const RESOLVED_PLATE = 'RESOLVED';
 const REJECTED_PLATE = 'REJECTED';
 const MANUAL_ACCEPTED_PLATE = 'MANUAL_ACCEPTED';
@@ -51,6 +52,7 @@ let eventSource = null;
 let currentProfile = null;
 let statsRefreshInterval = null;
 let spotHealthInterval = null;
+let spotFullRefreshInterval = null;
 const currentSpots = new Map();
 const offlineSpotIds = new Set();
 const pendingReviewSpotIds = new Set();
@@ -119,6 +121,20 @@ function startSpotHealthMonitor() {
         syncOfflineState();
         refreshDynamicSpotCards();
     }, SPOT_DYNAMIC_REFRESH_INTERVAL_MS);
+}
+
+function stopSpotFullRefresh() {
+    if (spotFullRefreshInterval) {
+        clearInterval(spotFullRefreshInterval);
+        spotFullRefreshInterval = null;
+    }
+}
+
+function startSpotFullRefresh() {
+    stopSpotFullRefresh();
+    spotFullRefreshInterval = setInterval(() => {
+        fetchSpots();
+    }, SPOT_FULL_REFRESH_INTERVAL_MS);
 }
 
 function isSpotOffline(spot) {
@@ -259,11 +275,7 @@ function getUnidentifiedReviewNote(spot, hasCapture) {
 
 function refreshDynamicSpotCards() {
     currentSpots.forEach((spot) => {
-        if (
-            spot &&
-            !pendingReviewSpotIds.has(spot.id) &&
-            (spot.license_plate === 'UNIDENTIFIED' || spot.license_plate === REJECTED_PLATE)
-        ) {
+        if (spot && !pendingReviewSpotIds.has(spot.id)) {
             updateSpotUI(spot);
         }
     });
@@ -301,6 +313,7 @@ logoutBtn.addEventListener('click', () => {
     offlineSpotIds.clear();
     stopStatsRefresh();
     stopSpotHealthMonitor();
+    stopSpotFullRefresh();
     localStorage.removeItem('parkme_profile');
     localStorage.removeItem('parkme_token');
     if (eventSource) eventSource.close();
@@ -359,6 +372,7 @@ async function initDashboard() {
         }
 
         startSpotHealthMonitor();
+        startSpotFullRefresh();
 
         // Connect SSE
         connectSSE(token);
@@ -373,6 +387,7 @@ async function initDashboard() {
         offlineSpotIds.clear();
         stopStatsRefresh();
         stopSpotHealthMonitor();
+        stopSpotFullRefresh();
         localStorage.removeItem('parkme_profile');
         localStorage.removeItem('parkme_token');
         loginScreen.classList.remove('hidden');
@@ -382,7 +397,10 @@ async function initDashboard() {
 }
 
 function connectSSE(token) {
-    // Attempting to connect to SSE (Endpoint to be implemented on backend)
+    if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+    }
     try {
         eventSource = new EventSource(`${API_BASE}/stream?token=${token}`);
         
@@ -392,7 +410,13 @@ function connectSSE(token) {
 
         eventSource.onerror = () => {
             document.getElementById('connection-status').style.background = 'var(--status-violation)';
-            console.error("SSE Connection issue (Likely because backend /api/v1/stream is not built yet)");
+            console.error("SSE Connection issue. Will auto-reconnect.");
+            eventSource.close();
+            eventSource = null;
+            setTimeout(() => {
+                const t = localStorage.getItem('parkme_token');
+                if (t) connectSSE(t);
+            }, 3000);
         };
 
         eventSource.onmessage = (event) => {
@@ -720,13 +744,41 @@ async function fetchSpots() {
         
         const data = await res.json();
         
-        currentSpots.clear();
-        offlineSpotIds.clear();
-        spotsGrid.innerHTML = '';
-        data.spots.forEach(updateSpotUI);
+        const isFirstLoad = currentSpots.size === 0;
+        if (isFirstLoad) {
+            spotsGrid.innerHTML = '';
+        }
+        
+        const freshSpotIds = new Set();
+        data.spots.forEach((spot) => {
+            freshSpotIds.add(spot.id);
+            const existing = currentSpots.get(spot.id);
+            const changed = !existing ||
+                existing.is_occupied !== spot.is_occupied ||
+                existing.license_plate !== spot.license_plate ||
+                existing.is_violation !== spot.is_violation ||
+                existing.review_capture_url !== spot.review_capture_url ||
+                existing.review_status !== spot.review_status ||
+                existing.battery_level !== spot.battery_level ||
+                existing.last_seen !== spot.last_seen;
+            if (changed) {
+                updateSpotUI(spot);
+            }
+        });
+
+        // Remove cards for spots that no longer exist in the backend
+        currentSpots.forEach((_, spotId) => {
+            if (!freshSpotIds.has(spotId)) {
+                currentSpots.delete(spotId);
+                offlineSpotIds.delete(spotId);
+                const card = document.getElementById(`spot-${spotId}`);
+                if (card) card.remove();
+            }
+        });
+
         syncOfflineState();
     } catch (e) {
-        console.error("Failed to fetch initial spots", e);
+        console.error("Failed to fetch spots", e);
     }
 }
 
