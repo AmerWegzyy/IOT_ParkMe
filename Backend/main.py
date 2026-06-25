@@ -492,7 +492,7 @@ def get_display_id_for_spot(spot_id: str, spot_data: dict) -> str:
 # ENDPOINTS
 # ==========================================
 @app.post("/api/v1/sensors/heartbeat", status_code=status.HTTP_202_ACCEPTED)
-async def receive_heartbeat_data(
+def receive_heartbeat_data(
     payload: HeartbeatPayload, 
     db = Depends(get_firestore_db)
 ):
@@ -547,13 +547,13 @@ async def receive_heartbeat_data(
                 })
                 active_plate = UNIDENTIFIED_PLATE
                 created_unidentified_log = True
-                await queue_display_command(
+                run_async_in_main(queue_display_command(
                     display_id,
                     spot_id,
                     "Scanning",
                     "Please wait",
                     hold_ms=DISPLAY_SCANNING_HOLD_MS
-                )
+                ))
             elif active_log_doc:
                 active_log_data = active_log_doc.to_dict() or {}
                 active_plate = active_log_data.get("license_plate")
@@ -563,13 +563,13 @@ async def receive_heartbeat_data(
                         spot_id
                     )
                 elif active_plate == REJECTED_PLATE:
-                    await queue_display_command(
+                    run_async_in_main(queue_display_command(
                         display_id,
                         spot_id,
                         "Access denied",
                         "Please remove car",
                         hold_ms=DISPLAY_REJECT_HOLD_MS
-                    )
+                    ))
                 else:
                     logger.info(
                         "Spot %s already has an active recognized or manually-decided log.",
@@ -588,17 +588,17 @@ async def receive_heartbeat_data(
                     active_plate not in {RESOLVED_PLATE, REJECTED_PLATE, MANUAL_ACCEPTED_PLATE}):
                 update_data["is_violation"] = False
                 update_data["license_plate"] = "ABORTED"
-                await broadcast_event("log_aborted", {"log_id": active_log_doc.id, "spot_id": spot_id})
+                run_async_in_main(broadcast_event("log_aborted", {"log_id": active_log_doc.id, "spot_id": spot_id}))
 
             active_log_doc.reference.update(update_data)
             if active_plate == REJECTED_PLATE:
-                await queue_display_command(
+                run_async_in_main(queue_display_command(
                     display_id,
                     spot_id,
                     "Spot clear",
                     "Thank you",
                     hold_ms=DISPLAY_SPOT_CLEARED_HOLD_MS
-                )
+                ))
 
         spot_update_data = {
             "last_seen": server_time,
@@ -698,7 +698,7 @@ async def receive_heartbeat_data(
             "review_status": effective_state["review_status"],
             "review_resolve_after": effective_state["review_resolve_after"]
         }
-        await broadcast_event("spot_update", {"spot": broadcast_spot})
+        run_async_in_main(broadcast_event("spot_update", {"spot": broadcast_spot}))
 
     return {"status": "heartbeat_processed", "timestamp": server_time.isoformat()}
 
@@ -732,7 +732,7 @@ async def complete_display_result(payload: DisplayCommandResultPayload):
 
 
 @app.post("/api/v1/sensors/park", status_code=status.HTTP_202_ACCEPTED)
-async def receive_park_event(
+def receive_park_event(
     camera_mac: str = Form(..., description="The MAC address of the camera node"),
     file: UploadFile = File(..., description="Image file from the ESP32-CAM"),
     db = Depends(get_firestore_db)
@@ -792,7 +792,7 @@ async def receive_park_event(
             **clear_review_metadata_fields()
         })
         spot_data.update(capture_data)
-        await broadcast_event("spot_update", {"spot": {
+        run_async_in_main(broadcast_event("spot_update", {"spot": {
             "id": spot_id,
             "category": spot_category,
             "is_occupied": True,
@@ -803,7 +803,7 @@ async def receive_park_event(
             "review_capture_url": build_review_capture_url(spot_data),
             "review_status": None,
             "review_resolve_after": None
-        }})
+        }}))
         return build_gate_response("DENIED",
                                    "rejected",
                                    "please remove car",
@@ -855,14 +855,14 @@ async def receive_park_event(
             "review_resolve_after": review_resolve_after,
             "review_status": "photo_review"
         })
-        await queue_display_command(
+        run_async_in_main(queue_display_command(
             display_id,
             spot_id,
             "Admin review",
             "Check dashboard",
             hold_ms=DISPLAY_MANUAL_REVIEW_HOLD_MS
-        )
-        await broadcast_event("spot_update", {"spot": {
+        ))
+        run_async_in_main(broadcast_event("spot_update", {"spot": {
             "id": spot_id,
             "category": spot_category,
             "is_occupied": True,
@@ -873,12 +873,12 @@ async def receive_park_event(
             "review_capture_url": build_review_capture_url(spot_data),
             "review_status": "photo_review",
             "review_resolve_after": timestamp_to_iso(review_resolve_after)
-        }})
-        await broadcast_event("log_event", {"log": {
+        }}))
+        run_async_in_main(broadcast_event("log_event", {"log": {
             "timestamp": server_time.isoformat(),
             "type": "unidentified",
             "message": f"Manual review needed at Spot {spot_id} because the plate could not be read."
-        }})
+        }}))
         return build_gate_response("DENIED",
                                    "manual_review",
                                    "admin review",
@@ -981,25 +981,25 @@ async def receive_park_event(
         "review_status": None,
         "review_resolve_after": None
     }
-    await broadcast_event("spot_update", {"spot": broadcast_spot_data})
+    run_async_in_main(broadcast_event("spot_update", {"spot": broadcast_spot_data}))
 
     if is_violation:
-        await broadcast_event("log_event", {"log": {
+        run_async_in_main(broadcast_event("log_event", {"log": {
             "log_id": log_id,
             "spot_id": spot_id,
             "timestamp": server_time.isoformat(), 
             "type": "unidentified" if license_plate == UNIDENTIFIED_PLATE else "violation", 
             "message": f"Violation at Spot {spot_id} by {license_plate}"
-        }})
+        }}))
 
     action = "DENIED" if is_violation else "WELCOME"
-    await queue_display_command(
+    run_async_in_main(queue_display_command(
         display_id,
         spot_id,
         "Access denied" if is_violation else "Welcome",
         display_message,
         hold_ms=DISPLAY_WELCOME_HOLD_MS
-    )
+    ))
     return build_gate_response(action,
                                "park_recorded",
                                display_message,
@@ -1338,7 +1338,7 @@ async def get_usage_stats(admin_user: dict = Depends(get_current_admin), db = De
 
 
 @app.put("/api/v1/sensors/accept")
-async def accept_spot(payload: ResolvePayload, admin_user: dict = Depends(get_current_admin), db = Depends(get_firestore_db)):
+def accept_spot(payload: ResolvePayload, admin_user: dict = Depends(get_current_admin), db = Depends(get_firestore_db)):
     logs_ref = db.collection("parking_logs")
     active_logs_query = list(
         logs_ref
@@ -1368,15 +1368,15 @@ async def accept_spot(payload: ResolvePayload, admin_user: dict = Depends(get_cu
     if spot_doc.exists:
         spot_data = spot_doc.to_dict() or {}
         spot_ref.update(clear_review_flow_fields())
-        await queue_display_command(
+        run_async_in_main(queue_display_command(
             get_display_id_for_spot(payload.spot_id, spot_data),
             payload.spot_id,
             "Welcome",
             "Admin approved",
             hold_ms=DISPLAY_WELCOME_HOLD_MS
-        )
+        ))
         last_seen_raw = spot_data.get("last_seen")
-        await broadcast_event("spot_update", {"spot": {
+        run_async_in_main(broadcast_event("spot_update", {"spot": {
             "id": spot_doc.id,
             "category": spot_data.get("category"),
             "is_occupied": True,
@@ -1387,18 +1387,18 @@ async def accept_spot(payload: ResolvePayload, admin_user: dict = Depends(get_cu
             "review_capture_url": None,
             "review_status": None,
             "review_resolve_after": None
-        }})
-        await broadcast_event("log_event", {"log": {
+        }}))
+        run_async_in_main(broadcast_event("log_event", {"log": {
             "timestamp": get_il_time().isoformat(),
             "type": "info",
             "message": f"Admin {admin_user.get('name')} manually accepted vehicle at spot {payload.spot_id}."
-        }})
+        }}))
 
     return {"status": "accepted", "spot_id": payload.spot_id}
 
 
 @app.put("/api/v1/sensors/reject")
-async def reject_spot(payload: ResolvePayload, admin_user: dict = Depends(get_current_admin), db = Depends(get_firestore_db)):
+def reject_spot(payload: ResolvePayload, admin_user: dict = Depends(get_current_admin), db = Depends(get_firestore_db)):
     logs_ref = db.collection("parking_logs")
     active_logs_query = list(
         logs_ref
@@ -1436,15 +1436,15 @@ async def reject_spot(payload: ResolvePayload, admin_user: dict = Depends(get_cu
         spot_data = spot_doc.to_dict() or {}
         review_capture_url = build_review_capture_url(spot_data)
         spot_ref.update(clear_review_metadata_fields())
-        await queue_display_command(
+        run_async_in_main(queue_display_command(
             get_display_id_for_spot(payload.spot_id, spot_data),
             payload.spot_id,
             "Access denied",
             "Please remove car",
             hold_ms=DISPLAY_REJECT_HOLD_MS
-        )
+        ))
         last_seen_raw = spot_data.get("last_seen")
-        await broadcast_event("spot_update", {"spot": {
+        run_async_in_main(broadcast_event("spot_update", {"spot": {
             "id": spot_doc.id,
             "category": spot_data.get("category"),
             "is_occupied": spot_data.get("is_occupied", False),
@@ -1455,18 +1455,18 @@ async def reject_spot(payload: ResolvePayload, admin_user: dict = Depends(get_cu
             "review_capture_url": review_capture_url,
             "review_status": None,
             "review_resolve_after": None
-        }})
-        await broadcast_event("log_event", {"log": {
+        }}))
+        run_async_in_main(broadcast_event("log_event", {"log": {
             "log_id": log_doc.id,
             "timestamp": get_il_time().isoformat(),
             "type": "violation",
             "message": f"Violation at Spot {payload.spot_id} (Unidentified Plate)"
-        }})
+        }}))
 
     return {"status": "rejected", "spot_id": payload.spot_id}
 
 @app.post("/api/v1/telemetry/bulk", status_code=status.HTTP_202_ACCEPTED)
-async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)):
+def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)):
     logger.info(f"Received {len(payload.data)} cached events from {payload.mac_address}")
     
     # Support both the new sensor_mac schema and the older mac_address field.
@@ -1512,7 +1512,7 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
                     active_plate not in {RESOLVED_PLATE, REJECTED_PLATE, MANUAL_ACCEPTED_PLATE}):
                 update_data["is_violation"] = False
                 update_data["license_plate"] = "ABORTED"
-                await broadcast_event("log_aborted", {"log_id": active_log_doc.id, "spot_id": spot_id})
+                run_async_in_main(broadcast_event("log_aborted", {"log_id": active_log_doc.id, "spot_id": spot_id}))
                 
             active_log_doc.reference.update(update_data)
             
@@ -1592,7 +1592,7 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
             "review_status": effective_state["review_status"],
             "review_resolve_after": effective_state["review_resolve_after"]
         }
-        await broadcast_event("spot_update", {"spot": broadcast_spot})
+        run_async_in_main(broadcast_event("spot_update", {"spot": broadcast_spot}))
 
     return {"status": "bulk_processed", "events": len(payload.data)}
 

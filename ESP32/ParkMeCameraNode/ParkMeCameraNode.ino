@@ -349,6 +349,12 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
     delay(80);
   }
 
+  // Dummy grab to flush stale frame from PSRAM FIFO buffer
+  frame = esp_camera_fb_get();
+  if (frame) {
+    esp_camera_fb_return(frame);
+  }
+
   frame = esp_camera_fb_get();
 
   if (PARKME_GATE_FLASH_LED_PIN >= 0) {
