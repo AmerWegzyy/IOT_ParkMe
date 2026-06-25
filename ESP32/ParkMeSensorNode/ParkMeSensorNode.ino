@@ -1247,6 +1247,51 @@ void handleSseDisplayCommand(const String &jsonData) {
   }
 }
 
+void processPendingTelemetryAndAcks() {
+  flushPendingTelemetry();
+
+  bool shouldSend = false;
+  SpotState stateToSend = STATE_UNKNOWN;
+  int batteryToSend = 100;
+  if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
+    if (sharedSensor.needsTelemetry) {
+      shouldSend = true;
+      stateToSend = sharedSensor.state;
+      batteryToSend = sharedSensor.batteryPercent;
+      sharedSensor.needsTelemetry = false;
+    }
+    xSemaphoreGive(sharedStateMutex);
+  }
+
+  if (shouldSend) {
+    if (postTelemetry(stateToSend, batteryToSend)) {
+      if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
+        sharedNetwork.lastTelemetrySentAtMs = millis();
+        xSemaphoreGive(sharedStateMutex);
+      }
+      markTelemetrySent(stateToSend);
+      clearPendingTelemetry();
+    } else {
+      queuePendingTelemetry(stateToSend, batteryToSend);
+    }
+  }
+
+  bool shouldAck = false;
+  String ackRequestId = "";
+  if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
+    if (sharedDisplay.needsAck) {
+      shouldAck = true;
+      ackRequestId = String((const char*)sharedDisplay.requestId);
+      sharedDisplay.needsAck = false;
+    }
+    xSemaphoreGive(sharedStateMutex);
+  }
+  
+  if (shouldAck && ackRequestId.length() > 0) {
+    sendDisplayResult(ackRequestId, "DISPLAYED", "rendered");
+  }
+}
+
 bool connectAndReadSseStream() {
   WiFiClient plainClient;
   WiFiClientSecure secureClient;
@@ -1307,6 +1352,7 @@ bool connectAndReadSseStream() {
   }
 
   String dataBuffer = "";
+  unsigned long lastTaskCheckMs = millis();
   while (client->connected()) {
     if (client->available()) {
       String line = client->readStringUntil('\n');
@@ -1319,6 +1365,11 @@ bool connectAndReadSseStream() {
       }
     } else {
       delay(10);
+    }
+
+    if (millis() - lastTaskCheckMs > 100) {
+      lastTaskCheckMs = millis();
+      processPendingTelemetryAndAcks();
     }
   }
 
@@ -1386,33 +1437,7 @@ void networkTask(void *parameter) {
       xSemaphoreGive(sharedStateMutex);
     }
 
-    flushPendingTelemetry();
-
-    bool shouldSend = false;
-    SpotState stateToSend = STATE_UNKNOWN;
-    int batteryToSend = 100;
-    if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
-      if (sharedSensor.needsTelemetry) {
-        shouldSend = true;
-        stateToSend = sharedSensor.state;
-        batteryToSend = sharedSensor.batteryPercent;
-        sharedSensor.needsTelemetry = false;
-      }
-      xSemaphoreGive(sharedStateMutex);
-    }
-
-    if (shouldSend) {
-      if (postTelemetry(stateToSend, batteryToSend)) {
-        if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
-          sharedNetwork.lastTelemetrySentAtMs = millis();
-          xSemaphoreGive(sharedStateMutex);
-        }
-        markTelemetrySent(stateToSend);
-        clearPendingTelemetry();
-      } else {
-        queuePendingTelemetry(stateToSend, batteryToSend);
-      }
-    }
+    processPendingTelemetryAndAcks();
 
     if (!sseStreamActive) {
       unsigned long now = millis();
@@ -1428,22 +1453,6 @@ void networkTask(void *parameter) {
       } else {
         handleDisplayPollingFallback();
       }
-    }
-
-    // Check if we need to send an ACK for a rendered display command
-    bool shouldAck = false;
-    String ackRequestId = "";
-    if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
-      if (sharedDisplay.needsAck) {
-        shouldAck = true;
-        ackRequestId = String((const char*)sharedDisplay.requestId);
-        sharedDisplay.needsAck = false;
-      }
-      xSemaphoreGive(sharedStateMutex);
-    }
-    
-    if (shouldAck && ackRequestId.length() > 0) {
-      sendDisplayResult(ackRequestId, "DISPLAYED", "rendered");
     }
 
     delay(50);
