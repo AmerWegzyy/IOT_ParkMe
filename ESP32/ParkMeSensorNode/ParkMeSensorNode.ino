@@ -1435,8 +1435,8 @@ void networkTask(void *parameter) {
     String ackRequestId = "";
     if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
       if (sharedDisplay.needsAck) {
-        shouldAck = true;
-        ackRequestId = String(sharedDisplay.requestId);
+        // Acknowledge the request
+        ackRequestId = String((const char*)sharedDisplay.requestId);
         sharedDisplay.needsAck = false;
       }
       xSemaphoreGive(sharedStateMutex);
@@ -1458,8 +1458,8 @@ void checkSharedDisplayCommand() {
     xSemaphoreGive(sharedStateMutex);
     return;
   }
-  String title = String(sharedDisplay.title);
-  String message = String(sharedDisplay.message);
+  String title = String((const char*)sharedDisplay.title);
+  String message = String((const char*)sharedDisplay.message);
   unsigned long holdMs = sharedDisplay.holdMs;
   sharedDisplay.hasNew = false;
   sharedDisplay.needsAck = true;
