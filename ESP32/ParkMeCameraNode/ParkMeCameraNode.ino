@@ -45,6 +45,9 @@ EspNowSensorStateMessage pendingSensorStateMessage = {};
 uint8_t pendingSensorSourceMac[6] = {0, 0, 0, 0, 0, 0};
 volatile bool hasPendingSensorStateMessage = false;
 
+uint8_t* cachedFailedPhoto = nullptr;
+size_t cachedFailedPhotoLen = 0;
+
 }  // namespace
 
 void printStatus(const String &line1, const String &line2 = "") {
@@ -190,6 +193,12 @@ void processSensorStateMessage(const EspNowSensorStateMessage &message,
   Serial.println(message.sequence);
 
   if (state == STATE_FREE) {
+    if (cachedFailedPhoto) {
+      free(cachedFailedPhoto);
+      cachedFailedPhoto = nullptr;
+      cachedFailedPhotoLen = 0;
+      Serial.println("Spot became free. Discarded cached photo.");
+    }
     sendEspNowAck(sourceMac,
                   message.sequence,
                   ESPNOW_CAMERA_ACK_SPOT_FREED,
@@ -341,83 +350,102 @@ bool sendJsonRequest(const char *path,
 
 bool captureAndUpload(String &responseBody, int &httpStatusCode) {
   camera_fb_t *frame = nullptr;
+  uint8_t *uploadBuf = nullptr;
+  size_t uploadLen = 0;
 
-  Serial.println("Server requested capture. Taking photo...");
+  if (cachedFailedPhoto != nullptr && cachedFailedPhotoLen > 0) {
+    Serial.println("Server requested capture. Using previously cached failed photo...");
+    uploadBuf = cachedFailedPhoto;
+    uploadLen = cachedFailedPhotoLen;
+  } else {
+    Serial.println("Server requested capture. Taking photo...");
 
-  if (PARKME_GATE_FLASH_LED_PIN >= 0) {
-    digitalWrite(PARKME_GATE_FLASH_LED_PIN, HIGH);
-    delay(80);
+    if (PARKME_GATE_FLASH_LED_PIN >= 0) {
+      digitalWrite(PARKME_GATE_FLASH_LED_PIN, HIGH);
+      delay(80);
+    }
+
+    frame = esp_camera_fb_get();
+    if (frame) esp_camera_fb_return(frame);
+
+    // Second dummy grab (required because config.fb_count can be 2)
+    frame = esp_camera_fb_get();
+    if (frame) esp_camera_fb_return(frame);
+
+    frame = esp_camera_fb_get();
+
+    if (PARKME_GATE_FLASH_LED_PIN >= 0) {
+      digitalWrite(PARKME_GATE_FLASH_LED_PIN, LOW);
+    }
+
+    if (!frame) {
+      Serial.println("Camera capture failed.");
+      return false;
+    }
+
+    Serial.print("Photo captured successfully. Size: ");
+    Serial.print(frame->len);
+    Serial.println(" bytes");
+
+    uploadBuf = frame->buf;
+    uploadLen = frame->len;
   }
-
-  // Dummy grab to flush stale frame from PSRAM FIFO buffer
-  frame = esp_camera_fb_get();
-  if (frame) {
-    esp_camera_fb_return(frame);
-  }
-
-  frame = esp_camera_fb_get();
-
-  if (PARKME_GATE_FLASH_LED_PIN >= 0) {
-    digitalWrite(PARKME_GATE_FLASH_LED_PIN, LOW);
-  }
-
-  if (!frame) {
-    Serial.println("Camera capture failed.");
-    return false;
-  }
-
-  Serial.print("Photo captured successfully. Size: ");
-  Serial.print(frame->len);
-  Serial.println(" bytes");
 
   WiFiClient plainClient;
   WiFiClientSecure secureClient;
-  Client *client =
-      String(PARKME_SERVER_SCHEME) == "https" ? &secureClient : &plainClient;
-  secureClient.setInsecure();
+  Client *client = String(PARKME_SERVER_SCHEME) == "https" ? static_cast<Client*>(&secureClient) : static_cast<Client*>(&plainClient);
+  if (String(PARKME_SERVER_SCHEME) == "https") secureClient.setInsecure();
   client->setTimeout(PARKME_GATE_HTTP_TIMEOUT_MS);
 
   Serial.println("Uploading photo to backend...");
 
   if (!client->connect(PARKME_SERVER_HOST, PARKME_SERVER_PORT)) {
-    esp_camera_fb_return(frame);
+    if (frame && !cachedFailedPhoto) {
+      cachedFailedPhoto = (uint8_t*)ps_malloc(uploadLen);
+      if (cachedFailedPhoto) {
+        memcpy(cachedFailedPhoto, uploadBuf, uploadLen);
+        cachedFailedPhotoLen = uploadLen;
+        Serial.println("Cached failed photo in PSRAM for next retry.");
+      }
+    }
+    if (frame) esp_camera_fb_return(frame);
     Serial.println("Cannot connect to backend.");
     return false;
   }
 
   const String boundary = "----ParkMeBoundary7MA4YWxkTrZu0gW";
-  String part1 = "--" + boundary +
-                 "\r\nContent-Disposition: form-data; name=\"camera_mac\"\r\n\r\n" +
-                 WiFi.macAddress() + "\r\n";
-  String part2 = "--" + boundary +
-                 "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"capture.jpg\"\r\n"
-                 "Content-Type: image/jpeg\r\n\r\n";
+  String part1 = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"camera_mac\"\r\n\r\n" + WiFi.macAddress() + "\r\n";
+  String part2 = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"capture.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
   String closing = "\r\n--" + boundary + "--\r\n";
 
-  size_t contentLength =
-      part1.length() + part2.length() + frame->len + closing.length();
+  size_t contentLength = part1.length() + part2.length() + uploadLen + closing.length();
 
   client->print(String("POST ") + PARKME_API_GATE_ENTRY_PATH + " HTTP/1.1\r\n");
   client->print(String("Host: ") + PARKME_SERVER_HOST + "\r\n");
   client->print("Connection: close\r\n");
-  client->print("Content-Type: multipart/form-data; boundary=" + boundary +
-               "\r\n");
+  client->print("Content-Type: multipart/form-data; boundary=" + boundary + "\r\n");
   client->print("Content-Length: " + String(contentLength) + "\r\n\r\n");
   client->print(part1);
   client->print(part2);
-  client->write(frame->buf, frame->len);
+  client->write(uploadBuf, uploadLen);
   client->print(closing);
 
-  esp_camera_fb_return(frame);
-
   unsigned long waitStartedAtMs = millis();
-  while (!client->available() && client->connected() &&
-         millis() - waitStartedAtMs < PARKME_GATE_HTTP_TIMEOUT_MS) {
+  while (!client->available() && client->connected() && millis() - waitStartedAtMs < PARKME_GATE_HTTP_TIMEOUT_MS) {
     delay(10);
   }
 
   if (!client->available()) {
     client->stop();
+    if (frame && !cachedFailedPhoto) {
+      cachedFailedPhoto = (uint8_t*)ps_malloc(uploadLen);
+      if (cachedFailedPhoto) {
+        memcpy(cachedFailedPhoto, uploadBuf, uploadLen);
+        cachedFailedPhotoLen = uploadLen;
+        Serial.println("Cached failed photo in PSRAM for next retry.");
+      }
+    }
+    if (frame) esp_camera_fb_return(frame);
     Serial.println("Backend response timeout.");
     return false;
   }
@@ -434,6 +462,26 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
 
   responseBody = client->readString();
   client->stop();
+
+  if (httpStatusCode < 200 || httpStatusCode >= 300) {
+    if (frame && !cachedFailedPhoto) {
+      cachedFailedPhoto = (uint8_t*)ps_malloc(uploadLen);
+      if (cachedFailedPhoto) {
+        memcpy(cachedFailedPhoto, uploadBuf, uploadLen);
+        cachedFailedPhotoLen = uploadLen;
+        Serial.println("Cached failed photo in PSRAM due to HTTP error.");
+      }
+    }
+  } else {
+    if (cachedFailedPhoto) {
+      free(cachedFailedPhoto);
+      cachedFailedPhoto = nullptr;
+      cachedFailedPhotoLen = 0;
+      Serial.println("Upload succeeded. Cleared cached photo.");
+    }
+  }
+
+  if (frame) esp_camera_fb_return(frame);
 
   Serial.print("HTTP ");
   Serial.print(httpStatusCode);
@@ -526,6 +574,7 @@ void handlePendingEspNowCapture() {
                   ESPNOW_CAMERA_ACK_CAPTURE_FAILED,
                   "capture_failed");
     showStatus("Capture failed", "Waiting free");
+    currentCycleCaptureAttempted = false;
   }
 }
 

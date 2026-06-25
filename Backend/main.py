@@ -84,6 +84,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+main_loop = None
+
+@app.on_event("startup")
+async def startup_event():
+    global main_loop
+    main_loop = asyncio.get_running_loop()
+
+def run_async_in_main(coro):
+    if main_loop and not main_loop.is_closed():
+        asyncio.run_coroutine_threadsafe(coro, main_loop)
+
+
 # SSE Broadcaster
 sse_clients = []
 # Display SSE Broadcaster (for hardware LCD nodes)
@@ -107,8 +119,10 @@ RESOLVED_PLATE = "RESOLVED"
 REJECTED_PLATE = "REJECTED"
 MANUAL_ACCEPTED_PLATE = "MANUAL_ACCEPTED"
 
+from fastapi.encoders import jsonable_encoder
+
 async def broadcast_event(event_type: str, data: dict):
-    message = json.dumps({"type": event_type, **data})
+    message = json.dumps(jsonable_encoder({"type": event_type, **data}))
     for client in sse_clients:
         if client["role"] == "admin":
             await client["queue"].put(message)
@@ -121,7 +135,7 @@ async def broadcast_event(event_type: str, data: dict):
 
 async def broadcast_display_command(display_id: str, command_data: dict):
     normalized_id = normalize_identity(display_id)
-    message = json.dumps({"type": "display_command", **command_data})
+    message = json.dumps(jsonable_encoder({"type": "display_command", **command_data}))
     for client in display_sse_clients:
         if client["display_id"] == normalized_id:
             await client["queue"].put(message)
@@ -739,7 +753,7 @@ def receive_park_event(
 ):
     server_time = get_il_time()
 
-    image_bytes = await file.read()
+    image_bytes = file.file.read()
 
     # Support both the new camera_mac schema and the older mac_address field.
     spots_ref = db.collection("parking_spots")
