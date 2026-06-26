@@ -356,6 +356,12 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
     esp_camera_fb_return(frame);
   }
 
+  // Second dummy grab (required because config.fb_count can be 2)
+  frame = esp_camera_fb_get();
+  if (frame) {
+    esp_camera_fb_return(frame);
+  }
+
   // Grab the fresh frame
   frame = esp_camera_fb_get();
 
@@ -372,70 +378,78 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
   Serial.print(frame->len);
   Serial.println(" bytes");
 
-  WiFiClient plainClient;
-  WiFiClientSecure secureClient;
-  Client *client =
-      String(PARKME_SERVER_SCHEME) == "https" ? &secureClient : &plainClient;
-  secureClient.setInsecure();
-  client->setTimeout(PARKME_GATE_HTTP_TIMEOUT_MS);
-
-  Serial.println("Uploading photo to backend...");
-
-  if (!client->connect(PARKME_SERVER_HOST, PARKME_SERVER_PORT)) {
-    esp_camera_fb_return(frame);
-    Serial.println("Cannot connect to backend.");
-    return false;
-  }
-
   const String boundary = "----ParkMeBoundary7MA4YWxkTrZu0gW";
-  String part1 = "--" + boundary +
-                 "\r\nContent-Disposition: form-data; name=\"camera_mac\"\r\n\r\n" +
-                 WiFi.macAddress() + "\r\n";
-  String part2 = "--" + boundary +
-                 "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"capture.jpg\"\r\n"
-                 "Content-Type: image/jpeg\r\n\r\n";
+  String part1 = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"camera_mac\"\r\n\r\n" + WiFi.macAddress() + "\r\n";
+  String part2 = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"capture.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
   String closing = "\r\n--" + boundary + "--\r\n";
 
-  size_t contentLength =
-      part1.length() + part2.length() + frame->len + closing.length();
+  size_t contentLength = part1.length() + part2.length() + frame->len + closing.length();
 
-  client->print(String("POST ") + PARKME_API_GATE_ENTRY_PATH + " HTTP/1.1\r\n");
-  client->print(String("Host: ") + PARKME_SERVER_HOST + "\r\n");
-  client->print("Connection: close\r\n");
-  client->print("Content-Type: multipart/form-data; boundary=" + boundary +
-               "\r\n");
-  client->print("Content-Length: " + String(contentLength) + "\r\n\r\n");
-  client->print(part1);
-  client->print(part2);
-  client->write(frame->buf, frame->len);
-  client->print(closing);
+  WiFiClient plainClient;
+  WiFiClientSecure secureClient;
+  if (String(PARKME_SERVER_SCHEME) == "https") secureClient.setInsecure();
+
+  int maxRetries = 3;
+  bool success = false;
+
+  for (int attempt = 1; attempt <= maxRetries; attempt++) {
+    Serial.print("Uploading photo to backend (Attempt ");
+    Serial.print(attempt);
+    Serial.println(")...");
+
+    Client *client = String(PARKME_SERVER_SCHEME) == "https" ? static_cast<Client*>(&secureClient) : static_cast<Client*>(&plainClient);
+    client->setTimeout(PARKME_GATE_HTTP_TIMEOUT_MS);
+
+    if (!client->connect(PARKME_SERVER_HOST, PARKME_SERVER_PORT)) {
+      Serial.println("Cannot connect to backend.");
+      delay(1000);
+      continue;
+    }
+
+    client->print(String("POST ") + PARKME_API_GATE_ENTRY_PATH + " HTTP/1.1\r\n");
+    client->print(String("Host: ") + PARKME_SERVER_HOST + "\r\n");
+    client->print("Connection: close\r\n");
+    client->print("Content-Type: multipart/form-data; boundary=" + boundary + "\r\n");
+    client->print("Content-Length: " + String(contentLength) + "\r\n\r\n");
+    client->print(part1);
+    client->print(part2);
+    client->write(frame->buf, frame->len);
+    client->print(closing);
+
+    unsigned long waitStartedAtMs = millis();
+    while (!client->available() && client->connected() && millis() - waitStartedAtMs < PARKME_GATE_HTTP_TIMEOUT_MS) {
+      delay(10);
+    }
+
+    if (!client->available()) {
+      client->stop();
+      Serial.println("Backend response timeout.");
+      delay(1000);
+      continue;
+    }
+
+    String statusLine = client->readStringUntil('\n');
+    httpStatusCode = parseHttpStatusCode(statusLine);
+
+    while (client->connected()) {
+      String headerLine = client->readStringUntil('\n');
+      if (headerLine == "\r" || headerLine.length() == 0) {
+        break;
+      }
+    }
+
+    responseBody = client->readString();
+    client->stop();
+    success = true;
+    break; // Upload succeeded, exit retry loop!
+  }
 
   esp_camera_fb_return(frame);
 
-  unsigned long waitStartedAtMs = millis();
-  while (!client->available() && client->connected() &&
-         millis() - waitStartedAtMs < PARKME_GATE_HTTP_TIMEOUT_MS) {
-    delay(10);
-  }
-
-  if (!client->available()) {
-    client->stop();
-    Serial.println("Backend response timeout.");
+  if (!success) {
+    Serial.println("All upload attempts failed.");
     return false;
   }
-
-  String statusLine = client->readStringUntil('\n');
-  httpStatusCode = parseHttpStatusCode(statusLine);
-
-  while (client->connected()) {
-    String headerLine = client->readStringUntil('\n');
-    if (headerLine == "\r" || headerLine.length() == 0) {
-      break;
-    }
-  }
-
-  responseBody = client->readString();
-  client->stop();
 
   Serial.print("HTTP ");
   Serial.print(httpStatusCode);
