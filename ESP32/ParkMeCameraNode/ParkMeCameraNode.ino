@@ -150,6 +150,16 @@ bool takePendingSensorStateMessage(EspNowSensorStateMessage &message,
   return hasMessage;
 }
 
+bool checkIfSpotBecameFree() {
+  bool isFree = false;
+  portENTER_CRITICAL(&espNowMessageMux);
+  if (hasPendingSensorStateMessage && pendingSensorStateMessage.state == STATE_FREE) {
+    isFree = true;
+  }
+  portEXIT_CRITICAL(&espNowMessageMux);
+  return isFree;
+}
+
 bool initEspNow() {
   if (esp_now_init() != ESP_OK) {
     Serial.println("ESP-NOW init failed on camera node.");
@@ -393,6 +403,11 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
   bool success = false;
 
   for (int attempt = 1; attempt <= maxRetries; attempt++) {
+    if (checkIfSpotBecameFree()) {
+      Serial.println("Spot became free before retry. Aborting upload.");
+      break;
+    }
+
     Serial.print("Uploading photo to backend (Attempt ");
     Serial.print(attempt);
     Serial.println(")...");
@@ -402,7 +417,11 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
 
     if (!client->connect(PARKME_SERVER_HOST, PARKME_SERVER_PORT)) {
       Serial.println("Cannot connect to backend.");
-      delay(1000);
+      unsigned long delayStart = millis();
+      while (millis() - delayStart < 1000) {
+        if (checkIfSpotBecameFree()) break;
+        delay(10);
+      }
       continue;
     }
 
@@ -418,13 +437,26 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
 
     unsigned long waitStartedAtMs = millis();
     while (!client->available() && client->connected() && millis() - waitStartedAtMs < PARKME_GATE_HTTP_TIMEOUT_MS) {
+      if (checkIfSpotBecameFree()) {
+        client->stop();
+        break;
+      }
       delay(10);
+    }
+
+    if (checkIfSpotBecameFree()) {
+      Serial.println("Spot became free during HTTP wait. Aborting upload.");
+      break;
     }
 
     if (!client->available()) {
       client->stop();
       Serial.println("Backend response timeout.");
-      delay(1000);
+      unsigned long delayStart = millis();
+      while (millis() - delayStart < 1000) {
+        if (checkIfSpotBecameFree()) break;
+        delay(10);
+      }
       continue;
     }
 
