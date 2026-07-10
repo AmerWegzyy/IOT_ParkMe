@@ -8,7 +8,7 @@ Usage:
 """
 
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, auth
 from datetime import datetime, timezone
 from pathlib import Path
 from dotenv import load_dotenv
@@ -106,6 +106,69 @@ def seed_vehicles(db: firestore.firestore.Client, email_to_id: dict[str, str]) -
         print(f"  ✅ vehicles/{doc_id}")
 
 
+def seed_additional_test_users_and_vehicles(db: firestore.firestore.Client) -> None:
+    """Add up to 5 test users and vehicles idempotently based on tests/test_pics/."""
+    print("⏳ Seeding additional test users & vehicles (idempotent) …")
+    test_pics_dir = _backend_dir.parent / "tests" / "test_pics"
+    extracted_plates = []
+    if test_pics_dir.exists():
+        extracted_plates = sorted(
+            p.stem for p in test_pics_dir.iterdir() if p.is_file() and p.stem.isdigit()
+        )
+    fallback_plates = ["1234590", "12823303", "1762438", "1777765", "26205301"]
+    plates = extracted_plates if len(extracted_plates) >= 5 else fallback_plates
+
+    new_test_users = [
+        {"name": "Test Student 1", "email": "test.student1@technion.ac.il", "role": "student", "plate": plates[0]},
+        {"name": "Test Lecturer 1", "email": "test.lecturer1@technion.ac.il", "role": "lecturer", "plate": plates[1]},
+        {"name": "Test Staff 1", "email": "test.staff1@technion.ac.il", "role": "staff", "plate": plates[2]},
+        {"name": "Test Special Needs 1", "email": "test.special1@technion.ac.il", "role": "special-needs-driver", "plate": plates[3]},
+        {"name": "Test Student 2", "email": "test.student2@technion.ac.il", "role": "student", "plate": plates[4]},
+    ]
+
+    for item in new_test_users:
+        user_email = item["email"]
+        user_doc_ref = db.collection("users").document(user_email)
+        if not user_doc_ref.get().exists:
+            user_data = {
+                "name": item["name"],
+                "email": user_email,
+                "role": item["role"],
+                "created_at": datetime.now(timezone.utc),
+            }
+            user_doc_ref.set(user_data)
+            print(f"  ✅ users/{user_email} ({item['name']} - {item['role']})")
+        else:
+            print(f"  ℹ️ users/{user_email} already exists (skipping)")
+
+        plate_num = item["plate"]
+        veh_doc_ref = db.collection("vehicles").document(plate_num)
+        if not veh_doc_ref.get().exists:
+            veh_data = {
+                "license_plate": plate_num,
+                "user_id": user_email,
+                "created_at": datetime.now(timezone.utc),
+            }
+            veh_doc_ref.set(veh_data)
+            print(f"  ✅ vehicles/{plate_num} -> {user_email}")
+        else:
+            print(f"  ℹ️ vehicles/{plate_num} already exists (skipping)")
+
+        # Create Firebase Auth account if not exists
+        try:
+            auth.create_user(
+                email=user_email,
+                password="password123",
+                display_name=item["name"],
+            )
+            print(f"  ✅ Auth user created: {user_email}")
+        except Exception as e:
+            if "ALREADY_EXISTS" in str(e) or "already exists" in str(e).lower() or "EmailAlreadyExists" in type(e).__name__:
+                print(f"  ℹ️ Auth user {user_email} already exists (skipping)")
+            else:
+                print(f"  ⚠️ Could not create auth user {user_email}: {e}")
+
+
 def main() -> None:
     print("🚀 ParkMe Firestore Seeder")
     print("=" * 40)
@@ -117,6 +180,7 @@ def main() -> None:
     seed_parking_spots(db)
     email_to_id = seed_users(db)
     seed_vehicles(db, email_to_id)
+    seed_additional_test_users_and_vehicles(db)
     # Note: intentionally skipping parking_logs to preserve history
 
 
