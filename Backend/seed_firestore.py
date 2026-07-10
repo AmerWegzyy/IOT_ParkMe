@@ -120,10 +120,9 @@ def seed_additional_test_users_and_vehicles(db: firestore.firestore.Client) -> N
 
     new_test_users = [
         {"name": "Test Student 1", "email": "test.student1@technion.ac.il", "role": "student", "plate": plates[0]},
-        {"name": "Test Lecturer 1", "email": "test.lecturer1@technion.ac.il", "role": "lecturer", "plate": plates[1]},
-        {"name": "Test Staff 1", "email": "test.staff1@technion.ac.il", "role": "staff", "plate": plates[2]},
-        {"name": "Test Special Needs 1", "email": "test.special1@technion.ac.il", "role": "special-needs-driver", "plate": plates[3]},
-        {"name": "Test Student 2", "email": "test.student2@technion.ac.il", "role": "student", "plate": plates[4]},
+        {"name": "Test Staff 1", "email": "test.staff1@technion.ac.il", "role": "staff", "plate": plates[1]},
+        {"name": "Test Special Needs 1", "email": "test.special1@technion.ac.il", "role": "special-needs-driver", "plate": plates[2]},
+        {"name": "Test Student 2", "email": "test.student2@technion.ac.il", "role": "student", "plate": plates[3]},
     ]
 
     for item in new_test_users:
