@@ -1,7 +1,47 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Iterable
+
+# Israeli license plates contain only digits: 7 (pre-2017) or 8 (2017+).
+PLATE_MIN_DIGITS = 7
+PLATE_MAX_DIGITS = 8
+
+# A run of digits optionally separated by dash-like characters, matching how
+# plates are printed (e.g. "12-345-67", "123-45-678").
+_PLATE_TOKEN_PATTERN = re.compile(r"\d(?:[-–—.·]?\d)+")
+
+
+def is_valid_plate_number(digits: str) -> bool:
+    return digits.isdigit() and PLATE_MIN_DIGITS <= len(digits) <= PLATE_MAX_DIGITS
+
+
+def extract_plate_from_ocr_text(raw_text: str) -> str:
+    """Extract a plausible Israeli plate (7-8 digits) from OCR text.
+
+    Unlike naive digit concatenation, this refuses to merge digits from
+    unrelated text (permit stickers, phone numbers), so a legitimate plate is
+    never corrupted by surrounding noise. Returns "" when no candidate looks
+    like a real plate, which routes the event to manual admin review.
+    """
+    if not raw_text:
+        return ""
+
+    # Pass 1: contiguous digit tokens, dashes/dots allowed ("123-45-678").
+    for match in _PLATE_TOKEN_PATTERN.finditer(raw_text):
+        digits = "".join(ch for ch in match.group() if ch.isdigit())
+        if is_valid_plate_number(digits):
+            return digits
+
+    # Pass 2: OCR sometimes renders plate separators as spaces; join digits
+    # within a single line only (never across lines).
+    for line in raw_text.splitlines():
+        digits = "".join(ch for ch in line if ch.isdigit())
+        if is_valid_plate_number(digits):
+            return digits
+
+    return ""
 
 
 def normalize_datetime_for_comparison(value, now: datetime):

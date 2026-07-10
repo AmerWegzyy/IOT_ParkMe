@@ -16,6 +16,7 @@ Before flashing:
 
 1. Edit `SECRETS.h`.
    Set `PARKME_CAMERA_ESPNOW_PEER_MAC` on the sensor board to the ESP32-CAM STA MAC address if you want direct board-to-board triggering.
-2. For the sensor node, leave the spot empty and hold the calibration button during boot to store a baseline distance.
+2. For the sensor node, calibrate the empty-spot baseline: leave the parking spot empty, then hold the calibration button for 4 seconds while the node is running. The node averages the empty distance, stores it in flash, derives the occupied threshold from that baseline, and shows CALIBRATE PASS/FAIL on the OLED. Recalibrate any time the same way — no re-flash needed.
 3. For the sensor+screen node, confirm the display ID and I2C pins in `SECRETS.h`.
 4. The sensor sketch now uses the same low-level OLED style as `Unit Tests/HW_OLED_SSD1306_I2C_Test`. If text is shifted, adjust `PARKME_DISPLAY_COLUMN_OFFSET` in `SECRETS.h` between `0` and `2`.
+

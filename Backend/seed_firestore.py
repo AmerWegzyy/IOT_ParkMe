@@ -10,8 +10,16 @@ Usage:
 import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime, timezone
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()
+
+# Load Backend/.env or Backend/env (same lookup main.py uses), regardless of cwd.
+_backend_dir = Path(__file__).resolve().parent
+for _env_name in (".env", "env"):
+    _env_path = _backend_dir / _env_name
+    if _env_path.exists():
+        load_dotenv(_env_path)
+        break
 
 
 def get_firestore_client() -> firestore.firestore.Client:

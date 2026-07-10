@@ -22,10 +22,16 @@ constexpr char PARKME_API_DISPLAY_RESULT_PATH[] = "/api/v1/displays/result";
 constexpr uint8_t PARKME_SENSOR_TRIG_PIN = 5;
 constexpr uint8_t PARKME_SENSOR_ECHO_PIN = 18;
 constexpr int8_t PARKME_SENSOR_BATTERY_PIN = 34;
-constexpr int8_t PARKME_SENSOR_CALIBRATE_PIN = 0;
+// Dedicated calibration push-button: one leg to this GPIO, other leg to GND.
+// Uses the internal pull-up, so no resistor is needed. Set to 0 to reuse the
+// onboard BOOT button instead (runtime 4s-hold only; boot-hold enters flash mode).
+constexpr int8_t PARKME_SENSOR_CALIBRATE_PIN = 13;
 
 constexpr float PARKME_SENSOR_DEFAULT_BASELINE_CM = 80.0f;
 constexpr float PARKME_SENSOR_OCCUPIED_DELTA_CM = 30.0f;
+// Default occupied threshold, used until a technician calibrates the node.
+// Calibration (hold the button 4s with the spot empty) stores the free-space
+// baseline, then derives the occupied threshold as baseline - delta.
 constexpr float PARKME_SENSOR_OCCUPIED_THRESHOLD_CM = 20.0f;
 constexpr float PARKME_SENSOR_MIN_THRESHOLD_CM = 8.0f;
 constexpr float PARKME_SENSOR_MAX_RELIABLE_DISTANCE_CM = 350.0f;
@@ -86,3 +92,4 @@ constexpr uint32_t PARKME_DISPLAY_CAMERA_COMPLETED_HOLD_MS = 1200;
 constexpr uint32_t PARKME_DISPLAY_CAMERA_FAILED_HOLD_MS = 2500;
 
 #endif
+

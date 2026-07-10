@@ -488,6 +488,12 @@ GateAction handleServerDecision(const String &responseBody) {
 
 GateAction performGateScan() {
   if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi offline before capture. Attempting reconnect...");
+    showStatus("WiFi offline", "Reconnecting");
+    connectWiFi();
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi offline. Cannot start gate scan.");
     showStatus("WiFi offline", "Cannot scan");
     return ACTION_UNKNOWN;
@@ -537,11 +543,15 @@ void handlePendingEspNowCapture() {
                   "capture_completed");
     showStatus("Ready for sensor", "Waiting car");
   } else {
+    // Do not deadlock the cycle after an upload failure. The sensor re-broadcasts
+    // OCCUPIED every few seconds, so clearing this latch allows an automatic retry
+    // on the next sync instead of waiting forever for a FREE transition.
+    currentCycleCaptureAttempted = false;
     sendEspNowAck(currentSensorPeerMac,
                   pendingCaptureSequence,
                   ESPNOW_CAMERA_ACK_CAPTURE_FAILED,
                   "capture_failed");
-    showStatus("Capture failed", "Waiting free");
+    showStatus("Capture failed", "Retry next ping");
   }
 }
 
@@ -595,3 +605,4 @@ void loop() {
   handlePendingEspNowCapture();
   delay(50);
 }
+

@@ -24,8 +24,19 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
+      # SSE streams are long-lived requests; default 300s timeout would kill them.
+      - '--timeout'
+      - '3600'
+      # SSE clients and display commands live in process memory: exactly 1 instance.
+      - '--max-instances'
+      - '1'
+      # Keep one instance warm so cold starts don't exceed the camera's 7s HTTP timeout.
+      - '--min-instances'
+      - '1'
+      - '--memory'
+      - '512Mi'
       - '--set-env-vars'
-      - 'ENVIRONMENT=production'
+      - 'ENVIRONMENT=production,FIREBASE_PROJECT_ID=parkme-technion-f280b'
 
 images:
   - 'gcr.io/$PROJECT_ID/parkme-backend'

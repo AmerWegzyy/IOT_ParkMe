@@ -978,14 +978,26 @@ void loadPendingTelemetry() {
 }
 
 void loadCalibration() {
-  baselineDistanceCm =
-      preferences.getFloat("base_cm", PARKME_SENSOR_DEFAULT_BASELINE_CM);
-  occupiedThresholdCm = 20.0f;
+  float storedBaselineCm = preferences.getFloat("base_cm", -1.0f);
+  if (storedBaselineCm > 0.0f) {
+    baselineDistanceCm = storedBaselineCm;
+    occupiedThresholdCm =
+        computeOccupiedThreshold(baselineDistanceCm,
+                                 PARKME_SENSOR_OCCUPIED_DELTA_CM,
+                                 PARKME_SENSOR_MIN_THRESHOLD_CM);
+    return;
+  }
+
+  baselineDistanceCm = PARKME_SENSOR_DEFAULT_BASELINE_CM;
+  occupiedThresholdCm = PARKME_SENSOR_OCCUPIED_THRESHOLD_CM;
 }
 
 void saveCalibration(float baselineCm) {
   baselineDistanceCm = baselineCm;
-  occupiedThresholdCm = 20.0f;
+  occupiedThresholdCm =
+      computeOccupiedThreshold(baselineDistanceCm,
+                               PARKME_SENSOR_OCCUPIED_DELTA_CM,
+                               PARKME_SENSOR_MIN_THRESHOLD_CM);
   preferences.putFloat("base_cm", baselineDistanceCm);
 }
 
@@ -1007,19 +1019,27 @@ float sampleAverageDistance(uint8_t sampleCount) {
 
 void runCalibrationMode() {
   Serial.println("Calibration mode started. Leave the parking spot empty.");
+  showScreen("Calibrating", "Measuring empty");
   float baselineCm = sampleAverageDistance(15);
 
   if (baselineCm <= 0.0f) {
-    Serial.println("Calibration failed. Keeping previous baseline.");
+    Serial.println("Calibration FAILED: no echo received. Keeping previous baseline.");
+    showScreen("Calibrate FAIL", "No echo");
+    delay(3000);
+    showLocalSensorScreen();
     return;
   }
 
   saveCalibration(baselineCm);
-  Serial.print("Baseline saved: ");
+  Serial.print("Calibration PASS. Baseline saved: ");
   Serial.print(baselineDistanceCm);
-  Serial.print(" cm | Occupied threshold: ");
+  Serial.print(" cm | New occupied threshold: ");
   Serial.print(occupiedThresholdCm);
-  Serial.println(" cm");
+  Serial.println(" cm (saved to flash)");
+  showScreen("Calibrate PASS",
+             "Trigger " + String(occupiedThresholdCm, 0) + "cm");
+  delay(3000);
+  showLocalSensorScreen();
 }
 
 float readBatteryVoltage() {
@@ -1632,3 +1652,4 @@ void loop() {
 
   publishCurrentStateLocal(distanceCm, state);
 }
+

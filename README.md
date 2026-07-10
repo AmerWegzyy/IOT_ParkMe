@@ -16,20 +16,17 @@ The current production architecture is:
 - `Backend/` — FastAPI backend, Firestore seeding script, Dockerfile, and Cloud Build deployment config
 - `Frontend/` — HTML/CSS/JS dashboard
 - `ESP32/` — sensor firmware, camera firmware, and shared Arduino libraries
-- `Documentation/` — current setup, migration, and architecture docs
-- `docs/` — older design notes and historical writeups
+- `Documentation/` — the project overview doc (`PROJECT_OVERVIEW.md`)
+- `Unit Tests/` — hardware validation sketches (ultrasonic, camera, OLED)
+- `tests/` — Python unit tests for the backend logic
 
 ## Start Here
 
-Use the current docs in `Documentation/`:
-
-- `Documentation/setup_guide.md` — first-time Google Cloud + Firebase setup
-- `Documentation/google_cloud_firebase_team_checklist.md` — shared team checklist
-- `Documentation/how_to_run_locally.md` — local backend/frontend workflow
-- `Documentation/migration_to_google_cloud_and_firebase.md` — migration summary and file-level diff
-- `Documentation/firestore_database_structure.md` — Firestore collections and indexes
-- `Documentation/system_architecture_and_workflow.md` — current end-to-end architecture
-- `Documentation/why_we_migrated.md` — short explanation of the migration and its impact
+- `Documentation/PROJECT_OVERVIEW.md` — the complete, code-verified guide: architecture, backend logic, database schema, firmware, frontend, timings, edge cases, local run/seed/deploy instructions, and testing assets
+- `Documentation/LOCAL_TESTING_GUIDE.md` — flash the boards, run the backend locally, verify end-to-end, then the exact steps to move to the cloud
+- `Documentation/CLOUD_DEPLOYMENT_GUIDE.md` — deploying the backend to Google Cloud Run: prerequisites, required code fixes, deploy commands, troubleshooting, and the full `SECRETS.h` checklist
+- `ESP32/hardware-upload-guide.md` — how to configure `SECRETS.h` and flash both microcontrollers
+- `Unit Tests/README.md` — hardware validation sketches and expected results
 
 ## Important Security Notes
 

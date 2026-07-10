@@ -1,0 +1,10 @@
+# Never bake credentials or local-only files into the container image.
+serviceAccountKey.json
+env
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.requirements_installed
+run_local_backend.ps1

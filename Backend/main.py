@@ -45,9 +45,17 @@ import json
 from cachetools import TTLCache
 
 try:
-    from parking_logic import should_preserve_recent_active_log, seconds_since
+    from parking_logic import (
+        should_preserve_recent_active_log,
+        seconds_since,
+        extract_plate_from_ocr_text,
+    )
 except ImportError:
-    from Backend.parking_logic import should_preserve_recent_active_log, seconds_since
+    from Backend.parking_logic import (
+        should_preserve_recent_active_log,
+        seconds_since,
+        extract_plate_from_ocr_text,
+    )
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
@@ -422,8 +430,14 @@ async def queue_display_command(display_id: str,
 # ==========================================
 def _extract_plate_digits(raw_text: str, detection_mode: str) -> str:
     logger.info(f"[OCR] {detection_mode} detected raw text:\n{raw_text}")
-    plate = "".join(character for character in raw_text if character.isdigit())
-    logger.info(f"[OCR] {detection_mode} extracted digits: '{plate}'")
+    plate = extract_plate_from_ocr_text(raw_text)
+    if plate:
+        logger.info(f"[OCR] {detection_mode} extracted valid 7-8 digit plate: '{plate}'")
+    else:
+        logger.info(
+            f"[OCR] {detection_mode} found no plausible 7-8 digit plate in the text. "
+            "Treating the plate as unreadable."
+        )
     return plate
 
 
@@ -1604,5 +1618,11 @@ async def receive_bulk_data(payload: BulkPayload, db = Depends(get_firestore_db)
 
     return {"status": "bulk_processed", "events": len(payload.data)}
 
+# Serve the dashboard locally; on Cloud Run the Frontend folder is not in the
+# image (Firebase Hosting serves it), so the mount must be conditional or the
+# container crashes at startup.
 frontend_dir = os.path.join(os.path.dirname(__file__), "../Frontend")
-app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+if os.path.isdir(frontend_dir):
+    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+else:
+    logger.info("Frontend directory not found; running API-only (cloud mode).")
