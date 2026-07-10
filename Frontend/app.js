@@ -6,7 +6,7 @@ const isFirebaseHostedOrigin = window.location.hostname.endsWith('.web.app') ||
 const API_BASE = configuredApiBase
     ? configuredApiBase.replace(/\/$/, '')
     : isFirebaseHostedOrigin
-        ? 'https://YOUR_CLOUD_RUN_URL/api/v1'
+        ? 'https://parkme-backend-31114651685.me-west1.run.app/api/v1'
         : `${window.location.origin}/api/v1`;
 const BACKEND_ORIGIN = API_BASE.replace(/\/api\/v1$/, '');
 const SPOT_STALE_MS = 120000;
