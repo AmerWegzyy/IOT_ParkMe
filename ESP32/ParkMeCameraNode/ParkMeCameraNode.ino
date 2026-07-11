@@ -40,6 +40,14 @@ uint32_t pendingCaptureSequence = 0;
 bool pendingEspNowCapture = false;
 uint8_t currentSensorPeerMac[6] = {0, 0, 0, 0, 0, 0};
 
+// Photo captured for the current occupancy cycle, copied out of the camera
+// driver's buffer so it survives WiFi outages: the SAME frame taken at the
+// moment the car arrived is re-sent after reconnection instead of
+// re-photographing whatever the camera sees later. Freed once the backend
+// answers (success or rejection) or when the spot becomes free again.
+uint8_t *pendingPhotoBuffer = nullptr;
+size_t pendingPhotoLength = 0;
+
 portMUX_TYPE espNowMessageMux = portMUX_INITIALIZER_UNLOCKED;
 EspNowSensorStateMessage pendingSensorStateMessage = {};
 uint8_t pendingSensorSourceMac[6] = {0, 0, 0, 0, 0, 0};
@@ -161,7 +169,20 @@ bool initEspNow() {
   return true;
 }
 
+void freePendingPhoto(const char *reason) {
+  if (pendingPhotoBuffer == nullptr) {
+    return;
+  }
+  free(pendingPhotoBuffer);
+  pendingPhotoBuffer = nullptr;
+  pendingPhotoLength = 0;
+  Serial.print("Pending photo discarded: ");
+  Serial.println(reason);
+}
+
 void resetOccupancyCycle(const char *reason) {
+  // A stale photo must never be sent for a car that already left.
+  freePendingPhoto(reason);
   currentOccupancyActive = false;
   currentCycleCaptureAttempted = false;
   currentCycleCaptureSucceeded = false;
@@ -339,10 +360,17 @@ bool sendJsonRequest(const char *path,
 }
 
 
-bool captureAndUpload(String &responseBody, int &httpStatusCode) {
+bool capturePendingPhoto() {
+  if (pendingPhotoBuffer != nullptr) {
+    // A photo from earlier in this occupancy cycle is still waiting to be
+    // sent (WiFi outage); reuse it instead of photographing again.
+    Serial.println("Reusing photo captured earlier this cycle.");
+    return true;
+  }
+
   camera_fb_t *frame = nullptr;
 
-  Serial.println("Server requested capture. Taking photo...");
+  Serial.println("Capture requested. Taking photo...");
 
   if (PARKME_GATE_FLASH_LED_PIN >= 0) {
     digitalWrite(PARKME_GATE_FLASH_LED_PIN, HIGH);
@@ -374,16 +402,40 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
     return false;
   }
 
+  // Copy the JPEG out of the driver's buffer (PSRAM when available) so the
+  // driver buffer can be released immediately and the photo survives until
+  // the backend has actually received it.
+  uint8_t *copyBuffer = static_cast<uint8_t *>(
+      psramFound() ? ps_malloc(frame->len) : malloc(frame->len));
+  if (copyBuffer == nullptr) {
+    Serial.println("Not enough memory to hold the photo. Will retry on next ping.");
+    esp_camera_fb_return(frame);
+    return false;
+  }
+
+  memcpy(copyBuffer, frame->buf, frame->len);
+  pendingPhotoLength = frame->len;
+  pendingPhotoBuffer = copyBuffer;
+  esp_camera_fb_return(frame);
+
   Serial.print("Photo captured successfully. Size: ");
-  Serial.print(frame->len);
+  Serial.print(pendingPhotoLength);
   Serial.println(" bytes");
+  return true;
+}
+
+bool uploadPendingPhoto(String &responseBody, int &httpStatusCode) {
+  if (pendingPhotoBuffer == nullptr) {
+    Serial.println("No pending photo to upload.");
+    return false;
+  }
 
   const String boundary = "----ParkMeBoundary7MA4YWxkTrZu0gW";
   String part1 = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"camera_mac\"\r\n\r\n" + WiFi.macAddress() + "\r\n";
   String part2 = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"capture.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
   String closing = "\r\n--" + boundary + "--\r\n";
 
-  size_t contentLength = part1.length() + part2.length() + frame->len + closing.length();
+  size_t contentLength = part1.length() + part2.length() + pendingPhotoLength + closing.length();
 
   WiFiClient plainClient;
   WiFiClientSecure secureClient;
@@ -413,7 +465,7 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
     client->print("Content-Length: " + String(contentLength) + "\r\n\r\n");
     client->print(part1);
     client->print(part2);
-    client->write(frame->buf, frame->len);
+    client->write(pendingPhotoBuffer, pendingPhotoLength);
     client->print(closing);
 
     unsigned long waitStartedAtMs = millis();
@@ -444,12 +496,18 @@ bool captureAndUpload(String &responseBody, int &httpStatusCode) {
     break; // Upload succeeded, exit retry loop!
   }
 
-  esp_camera_fb_return(frame);
-
   if (!success) {
-    Serial.println("All upload attempts failed.");
+    // No HTTP response at all (connect failure / timeout): keep the photo so
+    // the exact same frame is re-sent once WiFi comes back.
+    Serial.println("All upload attempts failed. Photo kept for retry after reconnect.");
     return false;
   }
+
+  // The backend answered, so connectivity was fine; whether it accepted or
+  // rejected the photo, re-sending the same bytes adds nothing.
+  freePendingPhoto(httpStatusCode >= 200 && httpStatusCode < 300
+                       ? "upload complete"
+                       : "server rejected photo");
 
   Serial.print("HTTP ");
   Serial.print(httpStatusCode);
@@ -487,26 +545,33 @@ GateAction handleServerDecision(const String &responseBody) {
 }
 
 GateAction performGateScan() {
+  // Photograph the car at the moment of arrival even if WiFi is down; the
+  // persisted frame is re-sent unchanged once connectivity returns.
+  showStatus("Capturing...", "Hold still");
+  if (!capturePendingPhoto()) {
+    Serial.println("Capture failed.");
+    showStatus("Capture failed", "Check camera");
+    return ACTION_UNKNOWN;
+  }
+
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi offline before capture. Attempting reconnect...");
+    Serial.println("WiFi offline after capture. Attempting reconnect...");
     showStatus("WiFi offline", "Reconnecting");
     connectWiFi();
   }
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi offline. Cannot start gate scan.");
-    showStatus("WiFi offline", "Cannot scan");
+    Serial.println("WiFi still offline. Photo saved; will send after reconnect.");
+    showStatus("WiFi offline", "Photo saved");
     return ACTION_UNKNOWN;
   }
-
-  showStatus("Capturing...", "Hold still");
 
   String responseBody;
   int httpStatusCode = -1;
 
-  if (!captureAndUpload(responseBody, httpStatusCode)) {
-    Serial.println("Capture/upload failed.");
-    showStatus("Upload failed", "Check backend");
+  if (!uploadPendingPhoto(responseBody, httpStatusCode)) {
+    Serial.println("Upload failed. Photo saved; will retry on next ping.");
+    showStatus("Upload failed", "Retry next ping");
     return ACTION_UNKNOWN;
   }
 

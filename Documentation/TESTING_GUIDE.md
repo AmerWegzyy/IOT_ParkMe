@@ -32,7 +32,7 @@ How to test every part of the system: automated tests, hardware tests, end-to-en
 | Display SSE reconnect backoff | 3 s doubling to max 30 s | sensor firmware |
 | Camera Wi-Fi retry | every 5 s | camera firmware |
 
-> ⚠️ **Before ANY test session: never run `Backend/seed_firestore.py` casually.** It deletes and recreates all parking spots, replacing C1's real hardware MACs with placeholders — the boards will silently stop being recognized (this has happened twice). If someone reseeded, restore C1's MACs first (see §8).
+> ⚠️ **Before ANY test session: never run `Backend/seed_firestore.py` casually.** It deletes and recreates all parking spots, replacing C1's real hardware MACs with placeholders — the boards will silently stop being recognized (this has happened twice). If someone reseeded, restore C1's MACs first (see §9).
 
 ---
 
@@ -149,7 +149,8 @@ Use the three sketches in `Unit Tests/` when hardware misbehaves — each prints
 2. Trigger occupancy. Expected sequence:
    - Sensor posts OCCUPIED normally; camera capture fails → OLED/camera serial shows "Capture failed / Retry next ping"; the cycle **un-latches** instead of deadlocking.
    - Dashboard: C1 occupied in "scanning" state; if no photo arrives within **30 s**, the Security Log shows a manual-review entry.
-   - Restore camera Wi-Fi (retries every 5 s): the sensor's 2-second OCCUPIED re-broadcast makes the camera **retry the photo automatically** — watch the late upload land. (Correct endpoint: `POST /api/v1/sensors/park` — there is no `/api/v1/camera/upload`.)
+   - The camera still **takes the photo at the moment the car arrives** even with Wi-Fi down (serial: "Photo saved; will send after reconnect") and holds it in memory.
+   - Restore camera Wi-Fi (retries every 5 s): the sensor's 2-second OCCUPIED re-broadcast makes the camera retry — and it uploads the **original photo taken at arrival**, not a new capture (serial: "Reusing photo captured earlier this cycle"). If the car leaves before Wi-Fi returns, the stale photo is discarded instead of sent (serial: "Pending photo discarded: spot_freed"). (Correct endpoint: `POST /api/v1/sensors/park` — there is no `/api/v1/camera/upload`.)
 
 ### F-5: Dashboard network loss (browser side)
 1. With the dashboard open, disconnect the laptop's network for ~20 s, then restore.
@@ -176,7 +177,26 @@ Use the three sketches in `Unit Tests/` when hardware misbehaves — each prints
 
 ---
 
-## 7. Demo-Day Smoke Checklist (5 minutes, run in order)
+## 7. Multi-Spot Simulation (one command = a whole parking lot)
+
+We own one physical sensor+camera (C1). `Backend/simulate_spots.py` impersonates the other five seeded spots through the **same endpoints the real boards use** — real heartbeats, real photo uploads from `tests/test_pics/`, real OCR, real authorization — so the dashboard shows a live, busy lot.
+
+```powershell
+# against the live cloud backend (default) — open the dashboard and watch
+python Backend/simulate_spots.py
+
+# quick demo pacing / only some spots / no Vision API usage
+python Backend/simulate_spots.py --fast
+python Backend/simulate_spots.py --spots A1,B1
+python Backend/simulate_spots.py --no-photos     # note: occupied spots then hit the 30s manual-review deadline (that's correct system behavior)
+
+# demonstrate OFFLINE detection: A2 goes silent for 3 minutes mid-run
+python Backend/simulate_spots.py --offline-demo A2
+```
+
+What you'll see: cars randomly arrive (spot flips OCCUPIED + a photo appears with a WELCOME/DENIED/manual-review outcome depending on which test plate was chosen), stay 2–5 minutes, and leave (session closes with an exit time; stays under 90s log ABORTED — correct). Battery values drain slowly. `Ctrl+C` cleans up by sending a final FREE heartbeat for every simulated spot. It never touches C1 unless you explicitly include it, and never seeds or deletes anything.
+
+## 8. Demo-Day Smoke Checklist (5 minutes, run in order)
 
 1. `python -m unittest tests.test_plate_extraction tests.test_backend_parking_logic` → 16 OK.
 2. `curl https://parkme-backend-31114651685.me-west1.run.app/docs` → 200.
@@ -186,7 +206,7 @@ Use the three sketches in `Unit Tests/` when hardware misbehaves — each prints
 6. Blank paper → manual review appears; Accept resolves it.
 7. Remove object → spot FREE, session closed (ABORTED if under 90 s — that's correct behavior, be ready to explain it).
 
-## 8. If C1 Suddenly Shows OFFLINE and Nothing Works
+## 9. If C1 Suddenly Shows OFFLINE and Nothing Works
 
 90% chance someone re-ran the seeder and wiped the real MACs. Fix (from `Backend/`):
 

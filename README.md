@@ -13,20 +13,20 @@ The current production architecture is:
 
 ## Repository Layout
 
-- `Backend/` — FastAPI backend, Firestore seeding script, Dockerfile, and Cloud Build deployment config
+- `Backend/` — FastAPI backend, Firestore seeding script, multi-spot simulator (`simulate_spots.py`), Dockerfile, and Cloud Build deployment config
 - `Frontend/` — HTML/CSS/JS dashboard
 - `ESP32/` — sensor firmware, camera firmware, and shared Arduino libraries
-- `Documentation/` — the project overview doc (`PROJECT_OVERVIEW.md`)
+- `Documentation/` — all project docs; start at `Documentation/README.md`
 - `Unit Tests/` — hardware validation sketches (ultrasonic, camera, OLED)
-- `tests/` — Python unit tests for the backend logic
+- `tests/` — Python unit tests + the 31-image LPR pipeline suite
 
 ## Start Here
 
-- `Documentation/PROJECT_OVERVIEW.md` — the complete, code-verified guide: architecture, backend logic, database schema, firmware, frontend, timings, edge cases, local run/seed/deploy instructions, and testing assets
-- `Documentation/LOCAL_TESTING_GUIDE.md` — flash the boards, run the backend locally, verify end-to-end, then the exact steps to move to the cloud
-- `Documentation/CLOUD_DEPLOYMENT_GUIDE.md` — deploying the backend to Google Cloud Run: prerequisites, required code fixes, deploy commands, troubleshooting, and the full `SECRETS.h` checklist
+- `Documentation/README.md` — **the documentation index**: which doc to read for what, in order
+- `Documentation/SYSTEM_EXPLAINED.md` — the full technical deep dive: ESP-NOW design rationale, dual-core firmware, calibration, WiFi-loss handling, memory/buffers, and how every component talks to the others
+- `Documentation/PROJECT_OVERVIEW.md` — the complete reference: architecture, backend logic, database schema, firmware, frontend, timings, edge cases
+- `Documentation/TESTING_GUIDE.md` — how to test everything, including simulating a full parking lot with `Backend/simulate_spots.py`
 - `ESP32/hardware-upload-guide.md` — how to configure `SECRETS.h` and flash both microcontrollers
-- `Unit Tests/README.md` — hardware validation sketches and expected results
 
 ## Important Security Notes
 
