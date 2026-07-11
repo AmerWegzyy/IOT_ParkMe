@@ -980,27 +980,21 @@ void loadPendingTelemetry() {
 }
 
 void loadCalibration() {
-  float storedBaselineCm = preferences.getFloat("base_cm", -1.0f);
-  if (storedBaselineCm > 0.0f) {
-    baselineDistanceCm = storedBaselineCm;
-    occupiedThresholdCm =
-        computeOccupiedThreshold(baselineDistanceCm,
-                                 PARKME_SENSOR_OCCUPIED_DELTA_CM,
-                                 PARKME_SENSOR_MIN_THRESHOLD_CM);
-    return;
-  }
-
   baselineDistanceCm = PARKME_SENSOR_DEFAULT_BASELINE_CM;
-  occupiedThresholdCm = PARKME_SENSOR_OCCUPIED_THRESHOLD_CM;
+  // Technician-set trigger distance; compiled default until calibrated once.
+  occupiedThresholdCm =
+      preferences.getFloat("thr_cm", PARKME_SENSOR_OCCUPIED_THRESHOLD_CM);
 }
 
-void saveCalibration(float baselineCm) {
-  baselineDistanceCm = baselineCm;
+void saveCalibration(float measuredTargetCm) {
+  // The measured target distance itself becomes the trigger (plus a small
+  // margin), so the technician freely chooses any trigger distance by simply
+  // placing the target where a car should be detected.
   occupiedThresholdCm =
-      computeOccupiedThreshold(baselineDistanceCm,
-                               PARKME_SENSOR_OCCUPIED_DELTA_CM,
-                               PARKME_SENSOR_MIN_THRESHOLD_CM);
-  preferences.putFloat("base_cm", baselineDistanceCm);
+      clampValue(measuredTargetCm + PARKME_SENSOR_CALIBRATION_MARGIN_CM,
+                 PARKME_SENSOR_MIN_THRESHOLD_CM,
+                 PARKME_SENSOR_CALIBRATION_MAX_TARGET_CM);
+  preferences.putFloat("thr_cm", occupiedThresholdCm);
 }
 
 float sampleAverageDistance(uint8_t sampleCount) {
@@ -1020,22 +1014,37 @@ float sampleAverageDistance(uint8_t sampleCount) {
 }
 
 void runCalibrationMode() {
-  Serial.println("Calibration mode started. Leave the parking spot empty.");
-  showScreen("Calibrating", "Measuring empty");
-  float baselineCm = sampleAverageDistance(15);
+  Serial.println(
+      "Calibration mode started. Place an object at the desired trigger "
+      "distance (up to 50 cm).");
+  showScreen("Calibrating", "Measuring target");
+  float measuredCm = sampleAverageDistance(15);
 
-  if (baselineCm <= 0.0f) {
-    Serial.println("Calibration FAILED: no echo received. Keeping previous baseline.");
+  if (measuredCm <= 0.0f) {
+    Serial.println(
+        "Calibration FAILED: no echo received. Keeping previous threshold.");
     showScreen("Calibrate FAIL", "No echo");
     delay(3000);
     showLocalSensorScreen();
     return;
   }
 
-  saveCalibration(baselineCm);
-  Serial.print("Calibration PASS. Baseline saved: ");
-  Serial.print(baselineDistanceCm);
-  Serial.print(" cm | New occupied threshold: ");
+  if (measuredCm > PARKME_SENSOR_CALIBRATION_MAX_TARGET_CM) {
+    Serial.print("Calibration FAILED: target measured at ");
+    Serial.print(measuredCm);
+    Serial.print(" cm, beyond the ");
+    Serial.print(PARKME_SENSOR_CALIBRATION_MAX_TARGET_CM);
+    Serial.println(" cm maximum. Keeping previous threshold.");
+    showScreen("Calibrate FAIL", "Target too far");
+    delay(3000);
+    showLocalSensorScreen();
+    return;
+  }
+
+  saveCalibration(measuredCm);
+  Serial.print("Calibration PASS. Target measured at ");
+  Serial.print(measuredCm);
+  Serial.print(" cm | New trigger distance: ");
   Serial.print(occupiedThresholdCm);
   Serial.println(" cm (saved to flash)");
   showScreen("Calibrate PASS",

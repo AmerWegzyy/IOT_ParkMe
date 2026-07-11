@@ -30,10 +30,16 @@ constexpr int8_t PARKME_SENSOR_CALIBRATE_PIN = 13;
 constexpr float PARKME_SENSOR_DEFAULT_BASELINE_CM = 80.0f;
 constexpr float PARKME_SENSOR_OCCUPIED_DELTA_CM = 30.0f;
 // Default occupied threshold, used until a technician calibrates the node.
-// Calibration (hold the button 4s with the spot empty) stores the free-space
-// baseline, then derives the occupied threshold as baseline - delta.
+// Calibration: place an object at the DESIRED trigger distance and hold the
+// button 4s. The measured distance + margin becomes this node's threshold,
+// clamped to [MIN_THRESHOLD, CALIBRATION_MAX_TARGET].
 constexpr float PARKME_SENSOR_OCCUPIED_THRESHOLD_CM = 20.0f;
-constexpr float PARKME_SENSOR_MIN_THRESHOLD_CM = 8.0f;
+// HC-SR04 cannot measure reliably below ~3 cm.
+constexpr float PARKME_SENSOR_MIN_THRESHOLD_CM = 3.0f;
+// Small tolerance so a car stopping a hair farther than the target still triggers.
+constexpr float PARKME_SENSOR_CALIBRATION_MARGIN_CM = 2.0f;
+// Maximum allowed trigger distance; calibration fails if the target is farther.
+constexpr float PARKME_SENSOR_CALIBRATION_MAX_TARGET_CM = 50.0f;
 constexpr float PARKME_SENSOR_MAX_RELIABLE_DISTANCE_CM = 350.0f;
 constexpr float PARKME_SENSOR_BATTERY_EMPTY_V = 3.20f;
 constexpr float PARKME_SENSOR_BATTERY_FULL_V = 4.20f;

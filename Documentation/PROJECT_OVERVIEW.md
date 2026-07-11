@@ -195,7 +195,7 @@ Envelope validation (magic + version + type) rejects foreign ESP-NOW traffic.
 ### 6.2 Sensor Node (`ParkMeSensorNode.ino`) — dual-core FreeRTOS
 
 **Core 1 (Arduino `loop()`), never blocks on network:**
-- Calibration button (dedicated push-button on GPIO 13 → GND, internal pull-up; hold 4 s while running): the technician places a target at the parked-car bumper position, the node averages 15 samples, adds `PARKME_SENSOR_CALIBRATION_MARGIN_CM` (10 cm), and stores the result in NVS as this node's occupied threshold, with PASS/FAIL feedback on the OLED (FAIL if no echo or the nearest object is beyond 150 cm). Uncalibrated nodes fall back to the compiled default (20 cm). Per-node, survives reboot, no re-flash to recalibrate.
+- Calibration button (dedicated push-button on GPIO 13 → GND, internal pull-up; hold 4 s while running): the technician places a target at the exact distance where a car should be detected (3–50 cm), the node averages 15 samples, adds `PARKME_SENSOR_CALIBRATION_MARGIN_CM` (2 cm), and stores the result in NVS as this node's occupied threshold, with PASS/FAIL feedback on the OLED (FAIL if no echo or the target is beyond 50 cm). Uncalibrated nodes fall back to the compiled default (20 cm). Per-node, survives reboot, no re-flash to recalibrate.
 - Ultrasonic sampling every 500 ms (3 samples averaged); classification: ≤ calibrated threshold ⇒ OCCUPIED, ≤ free-distance limit ⇒ FREE, else UNKNOWN (ignored).
 - ESP-NOW state send on every change (sequence increments) plus a 2 s periodic re-sync; direct peer + broadcast.
 - OLED rendering via a low-level SSD1306 driver with a built-in 5×7 font (uppercase A–Z, 0–9 only). It is the *only* code that touches I2C.
@@ -256,7 +256,7 @@ Flashing instructions: see `ESP32/hardware-upload-guide.md` (board types, FTDI w
 
 | Constant | Value | Where | Meaning |
 |---|---|---|---|
-| Occupied threshold | calibrated per node (default 20 cm) | firmware | Distance ≤ this ⇒ OCCUPIED; set by button calibration = measured car distance + 10 cm margin |
+| Occupied threshold | calibrated per node (default 20 cm) | firmware | Distance ≤ this ⇒ OCCUPIED; button calibration = measured target distance + 2 cm margin, clamped 3–50 cm |
 | Sensor sample interval | 500 ms (3×120 ms pulses) | firmware | Ultrasonic cadence |
 | Heartbeat interval | 20 s | firmware | Occupied-state confirmation to backend |
 | ESP-NOW re-sync | 2 s | firmware | Periodic state re-broadcast |
