@@ -224,6 +224,16 @@ void processSensorStateMessage(const EspNowSensorStateMessage &message,
     return;
   }
 
+  // The sensor bumps the sequence on every state transition, and the ESP-NOW
+  // mailbox holds only the newest unprocessed message — so a FREE that arrived
+  // while loop() was busy (uploading, showing a verdict) can be overwritten by
+  // the next OCCUPIED and never seen. An OCCUPIED whose sequence differs from
+  // the cycle we latched therefore means a NEW car: clear the per-cycle
+  // capture latch and any stale photo so this arrival gets photographed too.
+  if (currentCycleSequence != 0 && message.sequence != currentCycleSequence) {
+    resetOccupancyCycle("new occupancy cycle (missed FREE)");
+  }
+
   currentOccupancyActive = true;
   currentCycleSequence = message.sequence;
   memcpy(currentSensorPeerMac, sourceMac, sizeof(currentSensorPeerMac));
@@ -472,7 +482,9 @@ bool uploadPendingPhoto(String &responseBody, int &httpStatusCode) {
     size_t bytesSent = 0;
     while (bytesSent < pendingPhotoLength) {
       size_t chunkSize = pendingPhotoLength - bytesSent;
-      if (chunkSize > 4096) chunkSize = 4096;
+      // One full TLS record per write; the loop already handles short writes,
+      // so if the stack caps a write lower we just continue from there.
+      if (chunkSize > 16384) chunkSize = 16384;
       size_t written = client->write(pendingPhotoBuffer + bytesSent, chunkSize);
       if (written == 0) {
         break;
@@ -545,11 +557,12 @@ GateAction handleServerDecision(const String &responseBody) {
     case ACTION_WELCOME:
       showStatus("Access granted", message);
       pulseGateRelay();
-      delay(2500);
+      // No display on this board (status goes to serial; the driver-facing
+      // screen is the sensor's OLED, driven by the server). Blocking here
+      // only delays processing of the next ESP-NOW message.
       break;
     case ACTION_DENIED:
       showStatus("Access denied", message);
-      delay(2500);
       break;
     case ACTION_RETRY:
       showStatus("Scan again", message);

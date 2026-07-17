@@ -35,11 +35,31 @@ def extract_plate_from_ocr_text(raw_text: str) -> str:
             return digits
 
     # Pass 2: OCR sometimes renders plate separators as spaces; join digits
-    # within a single line only (never across lines).
+    # within a single line only (never across lines). Tokens that mix letters
+    # with digits (e.g. the plate's blue "IL" country band misread as "1L")
+    # are OCR noise, never plate digits, so they are dropped before joining.
     for line in raw_text.splitlines():
-        digits = "".join(ch for ch in line if ch.isdigit())
-        if is_valid_plate_number(digits):
-            return digits
+        tokens = []
+        for token in line.split():
+            if any(ch.isalpha() for ch in token):
+                continue
+            digits = "".join(ch for ch in token if ch.isdigit())
+            if digits:
+                tokens.append(digits)
+        if not tokens:
+            continue
+
+        # The "IL" band is also sometimes OCR'd as a standalone "1" to the
+        # left of the plate. A real 8-digit plate is printed 123-45-678 and
+        # never splits as "1 2345678", so when the groups after a lone
+        # leading "1" already form a valid plate, the "1" is the band.
+        remainder = "".join(tokens[1:])
+        if tokens[0] == "1" and is_valid_plate_number(remainder):
+            return remainder
+
+        joined = "".join(tokens)
+        if is_valid_plate_number(joined):
+            return joined
 
     return ""
 

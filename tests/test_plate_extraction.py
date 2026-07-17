@@ -44,6 +44,26 @@ class PlateExtractionTests(unittest.TestCase):
         self.assertEqual(extract_plate_from_ocr_text(""), "")
         self.assertEqual(extract_plate_from_ocr_text("NO PARKING"), "")
 
+    def test_il_band_misread_as_1l_token_is_dropped(self):
+        # The blue "IL" country band is often OCR'd as "1L"; its digit must
+        # not be glued onto the plate ("11234567" phantom).
+        self.assertEqual(extract_plate_from_ocr_text("1L 12 345 67"), "1234567")
+
+    def test_il_band_misread_as_lone_leading_one(self):
+        # "IL" read as a standalone "1" left of a space-separated plate.
+        self.assertEqual(extract_plate_from_ocr_text("1 12 345 67"), "1234567")
+
+    def test_il_band_lone_one_next_to_contiguous_plate(self):
+        self.assertEqual(extract_plate_from_ocr_text("1 2345678"), "2345678")
+
+    def test_genuine_eight_digit_plate_not_truncated(self):
+        # Real 8-digit plates print as 123-45-678; the leading group is never
+        # a lone "1", so the join must keep all 8 digits.
+        self.assertEqual(extract_plate_from_ocr_text("123 45 678"), "12345678")
+
+    def test_il_text_band_ignored_on_same_line(self):
+        self.assertEqual(extract_plate_from_ocr_text("IL 12 345 67"), "1234567")
+
     def test_is_valid_plate_number_bounds(self):
         self.assertTrue(is_valid_plate_number("1234567"))
         self.assertTrue(is_valid_plate_number("12345678"))
