@@ -73,7 +73,9 @@ constexpr uint8_t PARKME_GATE_LCD_ROWS = 2;
 
 constexpr uint32_t PARKME_GATE_DEBOUNCE_MS = 250;
 constexpr uint32_t PARKME_GATE_WIFI_RETRY_INTERVAL_MS = 5000;
-constexpr uint32_t PARKME_GATE_HTTP_TIMEOUT_MS = 7000;
+// The /park response includes server-side Vision OCR (up to two API calls) +
+// Firestore work; against Cloud Run this regularly exceeds 7s. Keep generous.
+constexpr uint32_t PARKME_GATE_HTTP_TIMEOUT_MS = 25000;
 constexpr uint32_t PARKME_GATE_COMMAND_POLL_INTERVAL_MS = 0;
 constexpr uint8_t PARKME_GATE_MAX_CAPTURE_RETRIES = 1;
 constexpr uint32_t PARKME_GATE_RETRY_STATUS_MS = 1200;
