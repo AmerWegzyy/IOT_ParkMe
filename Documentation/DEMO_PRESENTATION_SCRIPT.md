@@ -95,6 +95,8 @@ python -m unittest tests.test_plate_extraction tests.test_backend_parking_logic 
 **Level 3 — firmware compile-time tests:**
 > "Threshold math, battery conversion and state classification are `static_assert`s — a logic regression won't even compile." (`ESP32/ParkMeFirmwareCompileTests/`)
 
+**Level 4 — parallelism validation:** covered in the next section (it deserves its own moment).
+
 **Failure drills:** point at `TESTING_GUIDE.md` §5.
 > "We drilled the failure modes on real hardware: sensor offline, camera offline mid-capture, parking during an outage, backend restart. Every drill has an expected recovery path, and offline spots show as OFFLINE — never as falsely free."
 
@@ -113,7 +115,11 @@ Put the dashboard on the projector:
 
 Point out in the terminal log: heartbeats with battery levels, photo uploads with the OCR'd plate in the response, cars arriving/leaving on independent timers.
 
-**Option B — show the saved logs:** open the terminal output my partner captured from a previous run alongside the matching Security Log entries in the dashboard, and make the same point: parallel sessions, same pipeline, per-spot state independent.
+**Option B — show the recorded parallelism report:** open [`tests/parallel_test_results.log`](../tests/parallel_test_results.log) (produced by `tests/test_parallel_spots.py` against the live cloud backend). The headline numbers to say out loud:
+
+> "Five spots uploaded plate photos **at the exact same instant**, twice, plus a sequential baseline: **15 of 15 came back with the correct plate, zero cross-talk between spots, zero errors**. And the parallel rounds finished in 2.9 seconds versus 8.4 sequential — the backend genuinely processes spots **concurrently**, it doesn't queue them."
+
+The one-page overview of the whole test suite is [`tests/TEST_SUMMARY.md`](../tests/TEST_SUMMARY.md) — good to have open in a tab if staff want the details.
 
 *(Extra flex if asked about monitoring: `python Backend/simulate_spots.py --offline-demo A2` makes a simulated sensor die mid-run — after 120 s the dashboard flags it OFFLINE, then it recovers.)*
 

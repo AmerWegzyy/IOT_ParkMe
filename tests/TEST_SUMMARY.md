@@ -5,14 +5,14 @@
 and Google Cloud Vision OCR — the same live system the dashboard and the real ESP32
 hardware use.
 
-**Bottom line: every test suite passes.** 31/31 deterministic checks succeed, the OCR
+**Bottom line: every test suite passes.** 36/36 deterministic checks succeed, the OCR
 pipeline meets its accuracy benchmark on real photos, and the backend handles five
 parking spots uploading images at the exact same instant with zero errors and zero
 cross-spot interference.
 
 | # | Suite | What it validates | Result |
 |---|-------|-------------------|--------|
-| 1 | `test_plate_extraction.py` | License-plate parsing logic (unit) | ✅ **12/12 pass** |
+| 1 | `test_plate_extraction.py` | License-plate parsing logic (unit) | ✅ **17/17 pass** |
 | 2 | `test_backend_parking_logic.py` | Heartbeat-vs-camera race ordering (unit) | ✅ **4/4 pass** |
 | 3 | `test_lpr_pipeline.py` | End-to-end OCR on 30 real plate photos (cloud) | ✅ **27/30 exact reads (90%)** — meets the project benchmark; all 3 misses handled safely by design |
 | 4 | `test_parallel_spots.py` | 5 spots uploading images **simultaneously** (cloud) | ✅ **15/15 pass, 0 cross-talk, 0 errors** |
@@ -31,9 +31,11 @@ Israeli license plate (7–8 digits). Includes adversarial cases designed to tri
 - **Traps that must be rejected:** 10-digit phone numbers (e.g. a "054-1234567" sign
   must not become a phantom plate), short digit fragments, and digits that would only
   form a plate if wrongly concatenated across separate lines
+- **The blue "IL" country band** misread by OCR as "1L" or a standalone "1" must not
+  be glued onto the plate as a phantom leading digit
 - Boundary validation of plate length limits
 
-**Result:** ✅ **12/12 pass** (runs in under a second, fully offline)
+**Result:** ✅ **17/17 pass** (runs in under a second, fully offline)
 
 ```bash
 python3 -m unittest tests.test_plate_extraction -v
