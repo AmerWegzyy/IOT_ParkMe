@@ -10,6 +10,7 @@ One page telling you which document to open for what, in a sensible reading orde
 | 2 | [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) | **The reference** — every API endpoint, Firestore collection, timing constant, sentinel state, and component, with file paths. Look things up here. |
 | 3 | [USER_STORIES.md](USER_STORIES.md) | The requirements the project is graded against (11 user stories + extras, with acceptance criteria). |
 | 4 | [USER_STORY_IMPLEMENTATION_AUDIT.md](USER_STORY_IMPLEMENTATION_AUDIT.md) | Honest code-first audit against those requirements: what's DONE / PARTIAL / MISSING, with evidence, risks, and a prioritized fix backlog. |
+| ★ | [DEMO_PRESENTATION_SCRIPT.md](DEMO_PRESENTATION_SCRIPT.md) | **The staff demo run-of-show** — setup checklist, live scenario with speaking notes, the testing story, the parallel multi-spot simulation segment, Q&A prep, and mid-demo emergency fixes. |
 
 ## Run and test it
 
