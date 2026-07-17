@@ -465,7 +465,27 @@ bool uploadPendingPhoto(String &responseBody, int &httpStatusCode) {
     client->print("Content-Length: " + String(contentLength) + "\r\n\r\n");
     client->print(part1);
     client->print(part2);
-    client->write(pendingPhotoBuffer, pendingPhotoLength);
+
+    // WiFiClientSecure::write() sends at most one TLS record (~16 KB) per call
+    // and returns the bytes actually written, so a single write of the whole
+    // JPEG silently truncates the body over HTTPS. Send in checked chunks.
+    size_t bytesSent = 0;
+    while (bytesSent < pendingPhotoLength) {
+      size_t chunkSize = pendingPhotoLength - bytesSent;
+      if (chunkSize > 4096) chunkSize = 4096;
+      size_t written = client->write(pendingPhotoBuffer + bytesSent, chunkSize);
+      if (written == 0) {
+        break;
+      }
+      bytesSent += written;
+    }
+    if (bytesSent < pendingPhotoLength) {
+      client->stop();
+      Serial.printf("Body write failed at %u/%u bytes.\n",
+                    (unsigned)bytesSent, (unsigned)pendingPhotoLength);
+      delay(1000);
+      continue;
+    }
     client->print(closing);
 
     unsigned long waitStartedAtMs = millis();
