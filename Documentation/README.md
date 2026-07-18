@@ -11,6 +11,9 @@ One page telling you which document to open for what, in a sensible reading orde
 | 3 | [USER_STORIES.md](USER_STORIES.md) | The requirements the project is graded against (11 user stories + extras, with acceptance criteria). |
 | 4 | [USER_STORY_IMPLEMENTATION_AUDIT.md](USER_STORY_IMPLEMENTATION_AUDIT.md) | Honest code-first audit against those requirements: what's DONE / PARTIAL / MISSING, with evidence, risks, and a prioritized fix backlog. |
 | ★ | [DEMO_PRESENTATION_SCRIPT.md](DEMO_PRESENTATION_SCRIPT.md) | **The staff demo run-of-show** — setup checklist, live scenario with speaking notes, the testing story, the parallel multi-spot simulation segment, Q&A prep, and mid-demo emergency fixes. |
+| ★ | [EDGE_CASES.md](EDGE_CASES.md) | **Printable edge-case list** (print ×3 for the demo) — every failure mode the system handles, with how to demo each one live. |
+| ★ | [HARDWARE_WIRING.md](HARDWARE_WIRING.md) | Wiring/connection diagram for both boards — pin tables, power notes, ESP-NOW + cloud links. |
+| ★ | [VERSIONS.md](VERSIONS.md) | Exact software stack versions — ESP32 core/SDK, all Python packages, Firebase JS SDK, cloud services. |
 
 ## Run and test it
 
