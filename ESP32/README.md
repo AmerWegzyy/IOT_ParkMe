@@ -1,5 +1,11 @@
 ## ParkMe Arduino firmware
 
+**Wiring diagram** (all pins as configured in `SECRETS.h`):
+
+![ParkMe wiring diagram](../Documentation/images/wiring_diagram.png)
+
+Sensor node connections: HC-SR04 → VIN(5V)/GND, TRIG=GPIO5, ECHO=GPIO18 · OLED SSD1306 → 3V3/GND, SCL=GPIO22, SDA=GPIO21 (I2C 0x3C) · calibration button GPIO13→GND (internal pull-up, no resistor). Camera node needs only 5V+GND — camera and flash LED are onboard (IO0→GND only while flashing). Editable source: `../Documentation/images/wiring_diagram.svg`.
+
 This folder now contains two main Arduino deliverables:
 
 - `ParkMeSensorNode`: ultrasonic parking node that calibrates an empty-spot baseline, detects occupied/free state, reads battery level, posts telemetry to the FastAPI backend, and renders backend-driven screen messages on the same ESP32.

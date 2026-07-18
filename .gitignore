@@ -44,3 +44,6 @@ skill-creator/
 .DS_Store
 mc.json
 mcp.json
+
+# Documentation images are allowed (exception to the global *.png ignore)
+!Documentation/images/*.png
