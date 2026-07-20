@@ -1,16 +1,16 @@
 ======================================================================================
 PARKME LICENSE PLATE RECOGNITION (LPR) PIPELINE VALIDATION REPORT
 ======================================================================================
-Timestamp    : 2026-07-11 18:07:56
+Timestamp    : 2026-07-20 22:46:58
 Server URL   : https://parkme-backend-31114651685.me-west1.run.app
-Test Images  : C:\Users\georg\source\repos\IOT_ParkMe\tests\test_pics
+Test Images  : /mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/tests/test_pics
 --------------------------------------------------------------------------------------
 SUMMARY STATS:
-  Total Images Tested : 30
-  PASS Count          : 27
-  FAIL Count          : 3
+  Total Images Tested : 36
+  PASS Count          : 35
+  FAIL Count          : 1
   ERROR Count         : 0
-  Pass Rate           : 90.0%
+  Pass Rate           : 97.2%
 ======================================================================================
 
 Filename           | Expected   | Extracted  | Result   | Notes
@@ -22,25 +22,31 @@ Filename           | Expected   | Extracted  | Result   | Notes
 1777765.jpg        | 1777765    | 1777765    | [PASS]   | Exact match
 2117561.jpg        | 2117561    | 2117561    | [PASS]   | Exact match
 26205301.jpg       | 26205301   | 26205301   | [PASS]   | Exact match
+28296303.webp      | 28296303   | 28296303   | [PASS]   | Exact match
 3386623.jpg        | 3386623    | 3386623    | [PASS]   | Exact match
+40940203.jpg       | 40940203   | 40940203   | [PASS]   | Exact match
 4528139.jpg        | 4528139    | (none)     | [FAIL]   | No plate extracted by Vision API (status: manual_review)
 47909301.jpg       | 47909301   | 47909301   | [PASS]   | Exact match
 49347601.jpg       | 49347601   | 49347601   | [PASS]   | Exact match
+5340626.jpg        | 5340626    | 5340626    | [PASS]   | Exact match
 5351220.jpg        | 5351220    | 5351220    | [PASS]   | Exact match
 5727578.jpg        | 5727578    | 5727578    | [PASS]   | Exact match
 5733769.jpg        | 5733769    | 5733769    | [PASS]   | Exact match
 5757878.jpg        | 5757878    | 5757878    | [PASS]   | Exact match
 57685101.jpg       | 57685101   | 57685101   | [PASS]   | Exact match
+60830001.jpg       | 60830001   | 60830001   | [PASS]   | Exact match
+6451067.png        | 6451067    | 6451067    | [PASS]   | Exact match
 6616750.jpg        | 6616750    | 6616750    | [PASS]   | Exact match
-7023709.jpg        | 7023709    | 07378510   | [FAIL]   | Mismatch (expected 7023709, got 07378510)
 71816803.jpg       | 71816803   | 71816803   | [PASS]   | Exact match
 7544452.jpg        | 7544452    | 7544452    | [PASS]   | Exact match
 7598816.jpg        | 7598816    | 7598816    | [PASS]   | Exact match
+77864803.jpg       | 77864803   | 77864803   | [PASS]   | Exact match
 7853526.jpg        | 7853526    | 7853526    | [PASS]   | Exact match
+7954626.jpg        | 7954626    | 7954626    | [PASS]   | Exact match
+83390303.webp      | 83390303   | 83390303   | [PASS]   | Exact match
 9044970.jpg        | 9044970    | 9044970    | [PASS]   | Exact match
 9195973.jpg        | 9195973    | 9195973    | [PASS]   | Exact match
 9479056.jpg        | 9479056    | 9479056    | [PASS]   | Exact match
-9656026.jpg        | 9656026    | 19656026   | [FAIL]   | Mismatch (expected 9656026, got 19656026)
 9663369.jpg        | 9663369    | 9663369    | [PASS]   | Exact match
 9668669.webp       | 9668669    | 9668669    | [PASS]   | Exact match
 9703069.jpg        | 9703069    | 9703069    | [PASS]   | Exact match
