@@ -1113,15 +1113,44 @@ bool connectWiFi() {
   return false;
 }
 
-void maintainWiFi() {
+// Reconnect attempt for the network task (Core 0). Deliberately touches no
+// screen state — the OLED belongs to Core 1. Blocking here is fine: sensing,
+// rendering, and ESP-NOW broadcasts continue on the other core.
+void reconnectWiFiFromNetworkTask() {
   if (WiFi.status() == WL_CONNECTED) {
     return;
   }
 
   unsigned long nowMs = millis();
-  if (nowMs - lastWifiAttemptAtMs >= PARKME_SENSOR_WIFI_RETRY_INTERVAL_MS) {
-    connectWiFi();
+  if (nowMs - lastWifiAttemptAtMs < PARKME_SENSOR_WIFI_RETRY_INTERVAL_MS) {
+    return;
   }
+  lastWifiAttemptAtMs = nowMs;
+
+  Serial.println("[Network] Reconnecting WiFi...");
+  WiFi.begin(PARKME_WIFI_SSID, PARKME_WIFI_PASSWORD);
+
+  unsigned long startedAtMs = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startedAtMs < 12000) {
+    delay(400);
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    lastKnownWifiChannel = WiFi.channel();
+    Serial.print("[Network] WiFi reconnected. IP: ");
+    Serial.print(WiFi.localIP());
+    Serial.print(" channel: ");
+    Serial.println(lastKnownWifiChannel);
+    return;
+  }
+
+  // Park the radio back on the AP channel so ESP-NOW broadcasts to the
+  // camera keep going out on the channel it listens on.
+  WiFi.disconnect();
+  uint8_t pinChannel = lastKnownWifiChannel > 0 ? lastKnownWifiChannel : 1;
+  esp_wifi_set_channel(pinChannel, WIFI_SECOND_CHAN_NONE);
+  Serial.print("[Network] WiFi still down. Radio pinned to channel ");
+  Serial.println(pinChannel);
 }
 
 bool postTelemetry(SpotState state, int batteryPercent) {
@@ -1464,10 +1493,6 @@ void networkTask(void *parameter) {
   Serial.print("[Network] Task started on core ");
   Serial.println(xPortGetCoreID());
 
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(100);
-  }
-
   for (;;) {
     if (WiFi.status() != WL_CONNECTED) {
       if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
@@ -1475,6 +1500,10 @@ void networkTask(void *parameter) {
         sharedNetwork.sseConnected = false;
         xSemaphoreGive(sharedStateMutex);
       }
+      // With SDK auto-reconnect disabled (channel pinning for ESP-NOW),
+      // this task owns reconnection. Paced by the retry interval; blocks
+      // only this core.
+      reconnectWiFiFromNetworkTask();
       delay(1000);
       continue;
     }
