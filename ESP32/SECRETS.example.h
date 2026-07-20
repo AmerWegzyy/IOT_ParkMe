@@ -47,7 +47,7 @@ constexpr float PARKME_SENSOR_VOLTAGE_DIVIDER_RATIO = 2.0f;
 
 constexpr uint32_t PARKME_SENSOR_SAMPLE_INTERVAL_MS = 500;
 constexpr uint32_t PARKME_SENSOR_HEARTBEAT_INTERVAL_MS = 20000;
-constexpr uint32_t PARKME_SENSOR_WIFI_RETRY_INTERVAL_MS = 5000;
+constexpr uint32_t PARKME_SENSOR_WIFI_RETRY_INTERVAL_MS = 20000;
 constexpr uint32_t PARKME_SENSOR_HTTP_TIMEOUT_MS = 2500;
 constexpr bool PARKME_SENSOR_ALLOW_FREE_HEARTBEATS = true;
 // Set this to the camera board STA MAC address to enable direct ESP-NOW
@@ -72,7 +72,7 @@ constexpr uint8_t PARKME_GATE_LCD_COLUMNS = 16;
 constexpr uint8_t PARKME_GATE_LCD_ROWS = 2;
 
 constexpr uint32_t PARKME_GATE_DEBOUNCE_MS = 250;
-constexpr uint32_t PARKME_GATE_WIFI_RETRY_INTERVAL_MS = 5000;
+constexpr uint32_t PARKME_GATE_WIFI_RETRY_INTERVAL_MS = 20000;
 // The /park response includes server-side Vision OCR (up to two API calls) +
 // Firestore work; against Cloud Run this regularly exceeds 7s. Keep generous.
 constexpr uint32_t PARKME_GATE_HTTP_TIMEOUT_MS = 25000;

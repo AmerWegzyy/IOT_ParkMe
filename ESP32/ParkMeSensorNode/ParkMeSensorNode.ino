@@ -1,6 +1,7 @@
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <Wire.h>
@@ -34,6 +35,10 @@ unsigned long lastDisplayPollAtMs = 0;
 unsigned long activeMessageUntilAtMs = 0;
 unsigned long localCameraMessageUntilAtMs = 0;
 unsigned long lastEspNowStateSentAtMs = 0;
+// AP channel remembered from the last successful connect; the radio is
+// re-pinned to it after failed reconnects so ESP-NOW keeps working during
+// WiFi outages (both boards must share a channel for ESP-NOW delivery).
+uint8_t lastKnownWifiChannel = 0;
 
 float lastMeasuredDistanceCm = -1.0f;
 SpotState lastMeasuredState = STATE_UNKNOWN;
@@ -1084,15 +1089,26 @@ bool connectWiFi() {
 
   Serial.println();
   if (WiFi.status() == WL_CONNECTED) {
+    lastKnownWifiChannel = WiFi.channel();
     Serial.print("Connected. IP: ");
-    Serial.println(WiFi.localIP());
+    Serial.print(WiFi.localIP());
+    Serial.print(" channel: ");
+    Serial.println(lastKnownWifiChannel);
     Serial.print("MAC: ");
     Serial.println(WiFi.macAddress());
     showLocalSensorScreen();
     return true;
   }
 
-  Serial.println("WiFi connection failed.");
+  // Park the radio back on the AP's channel so ESP-NOW broadcasts to the
+  // camera stay on the channel it listens on while WiFi is down. Without
+  // this, channel scans leave the two boards on different channels during
+  // long outages and the camera never receives the occupancy triggers.
+  WiFi.disconnect();
+  uint8_t pinChannel = lastKnownWifiChannel > 0 ? lastKnownWifiChannel : 1;
+  esp_wifi_set_channel(pinChannel, WIFI_SECOND_CHAN_NONE);
+  Serial.print("WiFi connection failed. Radio pinned to channel ");
+  Serial.println(pinChannel);
   showScreen("WiFi failed", "Retrying");
   return false;
 }
@@ -1614,7 +1630,10 @@ void setup() {
   }
 
   WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);
+  // Manual reconnect only (maintainWiFi): the SDK's background auto-reconnect
+  // keeps scanning channels during outages, which moves the radio off the
+  // pinned channel and silently breaks ESP-NOW delivery to the camera.
+  WiFi.setAutoReconnect(false);
   espNowReady = initEspNow();
   connectWiFi();
 

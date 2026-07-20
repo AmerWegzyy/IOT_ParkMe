@@ -1,6 +1,7 @@
 #include "esp_camera.h"
 
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
@@ -31,6 +32,13 @@ namespace {
 
 unsigned long lastWifiAttemptAtMs = 0;
 bool espNowReady = false;
+// ESP-NOW only works when both boards' radios are on the SAME 2.4 GHz
+// channel. While associated to the AP that is guaranteed; during an outage a
+// scanning radio parks wherever its last scan left it, so the sensor's
+// triggers stop arriving. We remember the AP channel and re-pin the radio to
+// it after every failed reconnect attempt (channel 1 before the first
+// successful connect).
+uint8_t lastKnownWifiChannel = 0;
 bool currentOccupancyActive = false;
 bool currentCycleCaptureAttempted = false;
 bool currentCycleCaptureSucceeded = false;
@@ -260,16 +268,26 @@ bool connectWiFi() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
+    lastKnownWifiChannel = WiFi.channel();
     showStatus("WiFi connected", "Ready to scan");
     Serial.print("WiFi connected. IP: ");
-    Serial.println(WiFi.localIP());
+    Serial.print(WiFi.localIP());
+    Serial.print(" channel: ");
+    Serial.println(lastKnownWifiChannel);
     Serial.print("MAC: ");
     Serial.println(WiFi.macAddress());
     return true;
   }
 
+  // Stop the pending association attempt, then park the radio back on the
+  // AP's channel so ESP-NOW triggers from the sensor keep arriving while we
+  // wait for the next retry.
+  WiFi.disconnect();
+  uint8_t pinChannel = lastKnownWifiChannel > 0 ? lastKnownWifiChannel : 1;
+  esp_wifi_set_channel(pinChannel, WIFI_SECOND_CHAN_NONE);
   showStatus("WiFi failed", "Retry later");
-  Serial.println("WiFi connection failed.");
+  Serial.print("WiFi connection failed. Radio pinned to channel ");
+  Serial.println(pinChannel);
   return false;
 }
 
@@ -677,7 +695,10 @@ void setup() {
 
   Serial.println("Boot stage: WiFi init");
   WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);
+  // Manual reconnect only: the SDK's background auto-reconnect keeps
+  // scanning channels, which un-pins the radio and breaks ESP-NOW reception
+  // during outages. maintainWiFi() retries on our schedule instead.
+  WiFi.setAutoReconnect(false);
   espNowReady = initEspNow();
   connectWiFi();
   Serial.print("Gate spot: ");
