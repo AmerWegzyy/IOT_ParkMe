@@ -1,13 +1,13 @@
 ====================================================================================================
 PARKME BACKEND PARALLELISM / SIMULTANEOUS MULTI-SPOT VALIDATION REPORT
 ====================================================================================================
-Timestamp        : 2026-07-17 22:00:53
+Timestamp        : 2026-07-20 22:53:34
 Server URL       : https://parkme-backend-31114651685.me-west1.run.app
 Spots            : A1, A2, B1, B2, C2  (simultaneous uploads per round: 5)
-Rounds           : 2 parallel + 1 sequential baseline
+Rounds           : 2 parallel
 ----------------------------------------------------------------------------------------------------
 SUMMARY:
-  PASS         : 15   (spot got its own plate back)
+  PASS         : 10   (spot got its own plate back)
   CROSS_TALK   : 0   (spot got ANOTHER spot's plate — parallelism bug!)
   OCR_MISS     : 0   (no plate read — OCR noise, not a parallelism failure)
   OCR_MISREAD  : 0   (wrong plate, unrelated to other spots — OCR noise)
@@ -15,26 +15,19 @@ SUMMARY:
 
   PARALLELISM VERDICT: PASS - no cross-talk, no errors
 
-  Avg parallel round wall clock   : 2.88s for 5 simultaneous spot arrivals
-  Avg sequential round wall clock : 8.38s (baseline, one spot at a time)
-  Speedup from concurrency        : 2.9x
+  Avg parallel round wall clock   : 3.05s for 5 simultaneous spot arrivals
 ====================================================================================================
 
 Round  | Mode       | Spot | Image            | Expected   | Extracted  | Latency  | Result       | Notes
 ----------------------------------------------------------------------------------------------------------------------------------
-1      | parallel   | A1   | 12345678.webp    | 12345678   | 12345678   |   0.94s | [PASS]       | server action=DENIED status=park_recorded
-1      | parallel   | A2   | 1234590.jpg      | 1234590    | 1234590    |   0.54s | [PASS]       | server action=DENIED status=park_recorded
-1      | parallel   | B1   | 1747154.jpg      | 1747154    | 1747154    |   2.49s | [PASS]       | server action=DENIED status=park_recorded
-1      | parallel   | B2   | 1762438.jpg      | 1762438    | 1762438    |   2.49s | [PASS]       | server action=WELCOME status=park_recorded
-1      | parallel   | C2   | 1777765.jpg      | 1777765    | 1777765    |   2.49s | [PASS]       | server action=DENIED status=park_recorded
-2      | parallel   | A1   | 2117561.jpg      | 2117561    | 2117561    |   0.96s | [PASS]       | server action=DENIED status=park_recorded
-2      | parallel   | A2   | 26205301.jpg     | 26205301   | 26205301   |   2.27s | [PASS]       | server action=DENIED status=park_recorded
-2      | parallel   | B1   | 3386623.jpg      | 3386623    | 3386623    |   1.83s | [PASS]       | server action=DENIED status=park_recorded
-2      | parallel   | B2   | 47909301.jpg     | 47909301   | 47909301   |   0.48s | [PASS]       | server action=DENIED status=park_recorded
-2      | parallel   | C2   | 49347601.jpg     | 49347601   | 49347601   |   1.83s | [PASS]       | server action=DENIED status=park_recorded
-3      | sequential | A1   | 5351220.jpg      | 5351220    | 5351220    |   1.40s | [PASS]       | server action=DENIED status=park_recorded
-3      | sequential | A2   | 5727578.jpg      | 5727578    | 5727578    |   0.56s | [PASS]       | server action=DENIED status=park_recorded
-3      | sequential | B1   | 5733769.jpg      | 5733769    | 5733769    |   0.49s | [PASS]       | server action=DENIED status=park_recorded
-3      | sequential | B2   | 5757878.jpg      | 5757878    | 5757878    |   0.73s | [PASS]       | server action=DENIED status=park_recorded
-3      | sequential | C2   | 57685101.jpg     | 57685101   | 57685101   |   0.56s | [PASS]       | server action=DENIED status=park_recorded
+1      | parallel   | A1   | 12345678.webp    | 12345678   | 12345678   |   1.15s | [PASS]       | server action=DENIED status=park_recorded
+1      | parallel   | A2   | 1234590.jpg      | 1234590    | 1234590    |   1.53s | [PASS]       | server action=DENIED status=park_recorded
+1      | parallel   | B1   | 1747154.jpg      | 1747154    | 1747154    |   1.97s | [PASS]       | server action=DENIED status=park_recorded
+1      | parallel   | B2   | 1762438.jpg      | 1762438    | 1762438    |   1.14s | [PASS]       | server action=WELCOME status=park_recorded
+1      | parallel   | C2   | 1777765.jpg      | 1777765    | 1777765    |   2.72s | [PASS]       | server action=DENIED status=park_recorded
+2      | parallel   | A1   | 2117561.jpg      | 2117561    | 2117561    |   1.00s | [PASS]       | server action=DENIED status=park_recorded
+2      | parallel   | A2   | 26205301.jpg     | 26205301   | 26205301   |   2.16s | [PASS]       | server action=DENIED status=park_recorded
+2      | parallel   | B1   | 3386623.jpg      | 3386623    | 3386623    |   2.16s | [PASS]       | server action=DENIED status=park_recorded
+2      | parallel   | B2   | 47909301.jpg     | 47909301   | 47909301   |   2.16s | [PASS]       | server action=DENIED status=park_recorded
+2      | parallel   | C2   | 49347601.jpg     | 49347601   | 49347601   |   0.62s | [PASS]       | server action=DENIED status=park_recorded
 ----------------------------------------------------------------------------------------------------------------------------------

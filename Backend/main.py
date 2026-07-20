@@ -782,6 +782,8 @@ async def receive_park_event(
     active_log_doc = get_latest_active_log_for_spot(logs_ref, spot_id)
     active_log_data = active_log_doc.to_dict() if active_log_doc else {}
     active_plate = active_log_data.get("license_plate")
+    # Extracted lazily below; may be filled early when disambiguating a stale log.
+    license_plate = None
 
     if active_plate == MANUAL_ACCEPTED_PLATE:
         spot_ref.update({
@@ -832,16 +834,36 @@ async def receive_park_event(
                                    reason="already_rejected")
 
     if active_plate and active_plate != UNIDENTIFIED_PLATE:
-        return build_gate_response(
-            "DENIED" if active_log_data.get("is_violation", False) else "WELCOME",
-            "already_processed",
-            "already processed",
-            plate=active_plate,
-            is_violation=active_log_data.get("is_violation", False),
-            reason="already_processed"
+        # There is an active log with a recognized plate. Normally this is the
+        # camera re-sending the same car's photo (idempotent). But if the
+        # previous car left during a WiFi outage, its FREE heartbeat may not
+        # have reached the backend yet, so this log is stale and this photo
+        # belongs to a NEW car. Disambiguate by reading the plate: the same
+        # plate (or an unreadable one) is treated as an idempotent re-send; a
+        # different valid plate means a new car, so close the stale log and
+        # fall through to process the arrival fresh.
+        license_plate = extract_license_plate(image_bytes)
+        if not license_plate or license_plate == active_plate:
+            return build_gate_response(
+                "DENIED" if active_log_data.get("is_violation", False) else "WELCOME",
+                "already_processed",
+                "already processed",
+                plate=active_plate,
+                is_violation=active_log_data.get("is_violation", False),
+                reason="already_processed"
+            )
+        logger.warning(
+            "Spot %s: new car (plate %s) while an old log (plate %s) is still "
+            "open — closing the stale log before processing the new arrival.",
+            spot_id, license_plate, active_plate
         )
+        active_log_doc.reference.update({"exit_time": server_time})
+        active_log_doc = None
+        active_log_data = {}
+        active_plate = None
 
-    license_plate = extract_license_plate(image_bytes)
+    if license_plate is None:
+        license_plate = extract_license_plate(image_bytes)
 
     if not license_plate:
         capture_data = save_review_capture_for_spot(spot_id, image_bytes)

@@ -19,9 +19,15 @@ struct PendingTelemetry {
   uint8_t status;
   uint8_t batteryPercent;
   uint8_t valid;
+  // Set when an unsent FREE (a car leaving) was dropped from this single-slot
+  // queue because a later OCCUPIED (the next car) overwrote it during an
+  // outage. On reconnect we must deliver a FREE first so the backend closes
+  // the previous car's session; otherwise the next car's photo is attributed
+  // to the old session and discarded as "already processed".
+  uint8_t sessionEndUndelivered;
 };
 
-PendingTelemetry pendingTelemetry = {0, 100, 0};
+PendingTelemetry pendingTelemetry = {0, 100, 0, 0};
 
 float baselineDistanceCm = PARKME_SENSOR_DEFAULT_BASELINE_CM;
 float occupiedThresholdCm = PARKME_SENSOR_OCCUPIED_THRESHOLD_CM;
@@ -965,10 +971,20 @@ void persistPendingTelemetry() {
 
 void clearPendingTelemetry() {
   pendingTelemetry.valid = 0;
+  // Note: sessionEndUndelivered is intentionally NOT cleared here — a delivered
+  // OCCUPIED does not undo the fact that a car-left event still owes the backend
+  // a FREE. It is cleared only once that FREE is actually sent.
   persistPendingTelemetry();
 }
 
 void queuePendingTelemetry(SpotState state, int batteryPercent) {
+  // If we're about to overwrite an unsent FREE with an OCCUPIED, the car-left
+  // event would be lost. Remember it so the reconnect flush sends a FREE first.
+  if (pendingTelemetry.valid &&
+      static_cast<SpotState>(pendingTelemetry.status) == STATE_FREE &&
+      state == STATE_OCCUPIED) {
+    pendingTelemetry.sessionEndUndelivered = 1;
+  }
   pendingTelemetry.status = static_cast<uint8_t>(state);
   pendingTelemetry.batteryPercent =
       static_cast<uint8_t>(clampValue(batteryPercent, 0, 100));
@@ -980,8 +996,25 @@ void loadPendingTelemetry() {
   size_t loaded =
       preferences.getBytes("pending", &pendingTelemetry, sizeof(pendingTelemetry));
   if (loaded != sizeof(pendingTelemetry)) {
-    pendingTelemetry = {0, 100, 0};
+    pendingTelemetry = {0, 100, 0, 0};
   }
+}
+
+// If a car-left (FREE) was dropped from the queue by a later OCCUPIED, deliver
+// that FREE first so the backend closes the previous car's session before the
+// new car's OCCUPIED/photo arrive. Returns false if the FREE still can't be
+// sent (caller should hold off sending the OCCUPIED so ordering is preserved).
+bool deliverPendingSessionEnd(int batteryPercent) {
+  if (!pendingTelemetry.sessionEndUndelivered) {
+    return true;
+  }
+  if (postTelemetry(STATE_FREE, batteryPercent)) {
+    pendingTelemetry.sessionEndUndelivered = 0;
+    persistPendingTelemetry();
+    Serial.println("Delivered dropped car-left (FREE) before next arrival.");
+    return true;
+  }
+  return false;
 }
 
 void loadCalibration() {
@@ -1236,6 +1269,12 @@ void flushPendingTelemetry() {
     return;
   }
 
+  // Close the previous car's session first if a FREE was dropped from the
+  // queue; hold off on the pending state until that FREE is delivered.
+  if (!deliverPendingSessionEnd(pendingTelemetry.batteryPercent)) {
+    return;
+  }
+
   SpotState pendingState = static_cast<SpotState>(pendingTelemetry.status);
   if (postTelemetry(pendingState, pendingTelemetry.batteryPercent)) {
     markTelemetrySent(pendingState);
@@ -1340,7 +1379,14 @@ void processPendingTelemetryAndAcks() {
   }
 
   if (shouldSend) {
-    if (postTelemetry(stateToSend, batteryToSend)) {
+    // A fresh OCCUPIED must not jump ahead of a dropped car-left FREE, or the
+    // backend keeps the previous car's session open and rejects this car's
+    // photo. If the FREE still can't go out, queue this state and retry later.
+    bool sessionEndReady =
+        stateToSend != STATE_OCCUPIED || deliverPendingSessionEnd(batteryToSend);
+    if (!sessionEndReady) {
+      queuePendingTelemetry(stateToSend, batteryToSend);
+    } else if (postTelemetry(stateToSend, batteryToSend)) {
       if (xSemaphoreTake(sharedStateMutex, pdMS_TO_TICKS(50))) {
         sharedNetwork.lastTelemetrySentAtMs = millis();
         xSemaphoreGive(sharedStateMutex);
