@@ -3,7 +3,7 @@ PARKME LICENSE PLATE RECOGNITION (LPR) PIPELINE VALIDATION REPORT
 ======================================================================================
 Timestamp    : 2026-07-20 22:46:58
 Server URL   : https://parkme-backend-31114651685.me-west1.run.app
-Test Images  : /mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/tests/test_pics
+Test Images  : /mnt/c/Users/aamer/OneDrive/Desktop/TECHNION/SEMESTER6/IOT/parkme_project/IOT_ParkMe/Unit Tests/vision_api_tests/test_pics
 --------------------------------------------------------------------------------------
 SUMMARY STATS:
   Total Images Tested : 36
