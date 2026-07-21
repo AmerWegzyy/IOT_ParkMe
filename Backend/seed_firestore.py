@@ -107,9 +107,9 @@ def seed_vehicles(db: firestore.firestore.Client, email_to_id: dict[str, str]) -
 
 
 def seed_additional_test_users_and_vehicles(db: firestore.firestore.Client) -> None:
-    """Add up to 5 test users and vehicles idempotently based on tests/test_pics/."""
+    """Add up to 5 test users and vehicles idempotently based on Unit Tests/vision_api_tests/test_pics/."""
     print("⏳ Seeding additional test users & vehicles (idempotent) …")
-    test_pics_dir = _backend_dir.parent / "tests" / "test_pics"
+    test_pics_dir = _backend_dir.parent / "Unit Tests" / "vision_api_tests" / "test_pics"
     extracted_plates = []
     if test_pics_dir.exists():
         extracted_plates = sorted(

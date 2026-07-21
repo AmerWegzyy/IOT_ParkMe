@@ -41,8 +41,7 @@ ParkMe is an IoT Smart Campus Parking system (ICST / Technion). Each parking spo
 │   ├── ScreenProbe/          # I2C bus diagnostic sketch
 │   ├── SECRETS.example.h     # Template → copy to SECRETS.h (never commit SECRETS.h)
 │   └── hardware-upload-guide.md  # How to flash both boards
-├── Unit Tests/               # Hardware validation sketches (ultrasonic, camera, OLED)
-├── tests/                    # Python unit tests
+├── Unit Tests/               # Hardware validation sketches & Python LPR/parallelism test suites (`vision_api_tests/`)
 ├── Documentation/            # This file
 └── firebase.json             # Firebase Hosting config (public dir: Frontend)
 ```
@@ -315,8 +314,7 @@ Seeded identities: `admin@` (admin), `student@` (plate 1234567), `lecturer@` (98
 
 | Location | What it is | Status |
 |---|---|---|
-| `tests/test_backend_parking_logic.py` | Unit tests for `should_preserve_recent_active_log` / `seconds_since` (timezone handling, preserve/reject cases) | ✅ Working; run with `python -m unittest tests.test_backend_parking_logic` from repo root |
-| `tests/test_backend_database.py` | Legacy SQLite schema tests | ❌ **Broken/stale** — imports a missing `_support` module and tests the removed SQLite database |
+| `Unit Tests/vision_api_tests/test_backend_parking_logic.py` | Unit tests for `should_preserve_recent_active_log` / `seconds_since` (timezone handling, preserve/reject cases) | ✅ Working; run with `python -m unittest Unit\ Tests/vision_api_tests/test_backend_parking_logic.py` from repo root |
 | `Unit Tests/HW_Ultrasonic_Distance_Test` | HC-SR04 validation sketch (PASS/FAIL on serial) | Hardware-in-the-loop |
 | `Unit Tests/HW_ESP32CAM_Capture_Test` | Camera init + WiFi + JPEG grab validation | Hardware-in-the-loop |
 | `Unit Tests/HW_OLED_SSD1306_I2C_Test` | OLED address + WELCOME/PARKME render | Hardware-in-the-loop |

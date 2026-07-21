@@ -11,9 +11,9 @@ live to the driver's screen and to a **web dashboard** over SSE.
 
 ## Team
 
-<!-- TODO: confirm full names before submission -->
-- _(team member 1)_
-- _(team member 2)_
+- Amer Salameh
+- George Estifan
+- Amir Khalaila
 
 Part of ICST — The Interdisciplinary Center for Smart Technologies, Taub Faculty
 of Computer Science, Technion.
@@ -32,8 +32,7 @@ of Computer Science, Technion.
 - `Backend/` — FastAPI backend, Firestore seed scripts, multi-spot simulator (`simulate_spots.py`), Dockerfile, and Cloud Build deployment config
 - `Frontend/` — HTML/CSS/JS dashboard (Firebase Hosting)
 - `ESP32/` — sensor firmware (`ParkMeSensorNode/`), camera firmware (`ParkMeCameraNode/`), shared libraries, `parameters.h` (hard-coded parameter reference), and `SECRETS.example.h` (secrets template)
-- `Unit Tests/` — standalone hardware validation sketches (ultrasonic, camera, OLED)
-- `tests/` — Python unit tests + the real-image LPR pipeline and parallelism suites
+- `Unit Tests/` — standalone hardware validation sketches (`HW_*`) and Python unit/integration tests + real-image LPR pipeline (`vision_api_tests/`)
 - `Documentation/` — all project docs; start at [`Documentation/README.md`](Documentation/README.md)
 
 ## Hardware Used (per parking spot — quantities for the one built spot, C1)
@@ -73,8 +72,7 @@ google-cloud-vision (pinned versions in the doc).
 
 ## Poster
 
-<!-- TODO: add a photo of the final poster to assets/ and embed it here -->
-_(Poster photo to be added — see `assets/`.)_
+![ParkMe Project Poster](Documentation/images/PARKME_POSTER_2K26-1.png)
 
 ## Configuration files
 
@@ -85,8 +83,6 @@ _(Poster photo to be added — see `assets/`.)_
 
 Start at [`Documentation/README.md`](Documentation/README.md) — the index. Highlights:
 - [`SYSTEM_EXPLAINED.md`](Documentation/SYSTEM_EXPLAINED.md) — full technical deep dive (ESP-NOW rationale, dual-core firmware, calibration, WiFi-loss handling)
-- [`TESTING_GUIDE.md`](Documentation/TESTING_GUIDE.md) — how to test everything, incl. calibration and the multi-spot simulator
-- [`EDGE_CASES.md`](Documentation/EDGE_CASES.md) — every failure mode handled, with how to demo each
 - [`ESP32/hardware-upload-guide.md`](ESP32/hardware-upload-guide.md) — configure `SECRETS.h` and flash both boards
 
 ### Calibration (does the project need calibration?)
@@ -94,7 +90,7 @@ Start at [`Documentation/README.md`](Documentation/README.md) — the index. Hig
 Yes — the sensor's trigger distance is calibrated by demonstration: place an
 object at the desired trigger distance (3–50 cm) and hold the calibration button
 for 4 seconds. The value is stored in flash and survives reboots. Full procedure
-in [`ESP32/README.md`](ESP32/README.md) and `TESTING_GUIDE.md`.
+in [`ESP32/README.md`](ESP32/README.md).
 
 ## Security Notes
 

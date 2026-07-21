@@ -9,7 +9,7 @@ PURPOSE:
     license plate (7-8 digits), and returns the extracted plate in the JSON response.
 
 HOW IT WORKS:
-    1. Scans the target directory (`tests/test_pics/` by default) for image files (.jpg, .png, .webp).
+    1. Scans the target directory (`test_pics/` by default) for image files (.jpg, .png, .webp).
     2. Derives the expected license plate number from the filename stem (e.g., "1234590.jpg" -> "1234590").
     3. Sends each image via multipart/form-data POST request to `/api/v1/sensors/park` along with a
        seeded camera MAC address (`FF:EE:DD:CC:BB:01` by default).
@@ -18,10 +18,10 @@ HOW IT WORKS:
 
 USAGE:
     # Run against local server (http://127.0.0.1:8000) using default test pictures directory:
-    python3 tests/test_lpr_pipeline.py
+    python3 test_lpr_pipeline.py
 
     # Run against a custom server URL or custom pictures directory:
-    python3 tests/test_lpr_pipeline.py --server-url http://127.0.0.1:8000 --pics-dir tests/test_pics
+    python3 test_lpr_pipeline.py --server-url http://127.0.0.1:8000 --pics-dir test_pics
 
 INTERPRETING RESULTS:
     - [PASS]: The extracted plate exactly matches the expected plate derived from the filename.
@@ -298,8 +298,8 @@ def main():
     )
     parser.add_argument(
         "--pics-dir",
-        default="tests/test_pics",
-        help="Directory containing test license plate images (default: tests/test_pics)",
+        default=str(Path(__file__).resolve().parent / "test_pics"),
+        help="Directory containing test license plate images (default: Unit Tests/vision_api_tests/test_pics)",
     )
     parser.add_argument(
         "--camera-mac",
@@ -313,8 +313,8 @@ def main():
     )
     parser.add_argument(
         "--log-file",
-        default="tests/lpr_test_results.log",
-        help="Path where formatted results log file should be written (default: tests/lpr_test_results.log)",
+        default=str(Path(__file__).resolve().parent / "lpr_test_results.log"),
+        help="Path where formatted results log file should be written (default: Unit Tests/vision_api_tests/lpr_test_results.log)",
     )
 
     args = parser.parse_args()

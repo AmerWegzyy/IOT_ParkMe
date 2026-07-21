@@ -38,7 +38,7 @@ Israeli license plate (7–8 digits). Includes adversarial cases designed to tri
 **Result:** ✅ **17/17 pass** (runs in under a second, fully offline)
 
 ```bash
-python3 -m unittest tests.test_plate_extraction -v
+python3 -m unittest test_plate_extraction -v
 ```
 
 ## 2. Parking Logic — `test_backend_parking_logic.py`
@@ -55,7 +55,7 @@ does the backend keep the right parking session?
 **Result:** ✅ **4/4 pass**
 
 ```bash
-python3 -m unittest tests.test_backend_parking_logic -v
+python3 -m unittest test_backend_parking_logic -v
 ```
 
 ## 3. LPR Pipeline (End-to-End OCR) — `test_lpr_pipeline.py`
@@ -72,11 +72,11 @@ The 3 non-exact reads are the important part of the story: they are **known, doc
 cases** (difficult photos), and the system's designed safety net catches them — an
 unreadable plate never grants access. It instead routes to the **admin manual-review
 flow** with the evidence photo attached, where the admin's Accept/Reject decision is
-tested end-to-end elsewhere (see `Documentation/TESTING_GUIDE.md`). A recognition
+tested end-to-end in our manual review drills. A recognition
 system that fails *safe* is the correct engineering outcome for a gate-security system.
 
 ```bash
-python3 tests/test_lpr_pipeline.py --server-url https://parkme-backend-31114651685.me-west1.run.app
+python3 test_lpr_pipeline.py --server-url https://parkme-backend-31114651685.me-west1.run.app
 ```
 
 ## 4. Multi-Spot Parallelism — `test_parallel_spots.py`
@@ -103,7 +103,7 @@ correctly logged as ABORTED per the 90-second rule).
   and back to FREE in real time via SSE
 
 ```bash
-python3 tests/test_parallel_spots.py --rounds 2 --baseline
+python3 test_parallel_spots.py --rounds 2 --baseline
 ```
 
 ---
@@ -119,8 +119,7 @@ system is verified separately and documented:
 - **Hardware bring-up:** dedicated PASS/FAIL sketches for the ultrasonic sensor, OLED,
   and camera (`Unit Tests/`).
 - **End-to-end and failure-recovery drills** on the real hardware (Wi-Fi loss, offline
-  queueing, camera outage, calibration): procedures and expected timings in
-  `Documentation/TESTING_GUIDE.md`.
+  queueing, camera outage, calibration) documented across our system overview.
 
 *Latest results recorded 2026-07-17 against the live deployed backend. Every result in
 this document is reproducible with the commands shown.*

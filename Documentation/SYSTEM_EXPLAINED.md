@@ -157,14 +157,11 @@ SSE client queues and the display command store live in process memory, so `clou
 - **Why a hand-rolled OLED driver and font?** The SSD1306 libraries clashed with our pin/offset variant; 1 KB framebuffer + a 5×7 font table we control (which is also how we found and fixed the upside-down-digit glyph bug).
 - **Why digits-only plates?** Israeli plates are 7–8 digits; validating the format server-side rejects OCR noise instead of accusing innocent drivers.
 - **Why does calibration set the distance directly instead of measuring the empty spot?** First version derived `threshold = empty-baseline − 30 cm`; at short mounting distances the subtraction collapsed to the minimum floor and confused everyone. "Put the target where the car will be" is simpler to teach, works at 3–50 cm, and is what a technician actually wants.
-- **What's the weakest part?** (Be honest — examiners respect it.) Hardware endpoints trust MACs without authentication; offline/low-battery alerting is dashboard-only; incentive points are not implemented. All catalogued with fixes in `USER_STORY_IMPLEMENTATION_AUDIT.md`.
+- **What's the weakest part?** (Be honest — examiners respect it.) Hardware endpoints trust MACs without authentication; offline/low-battery alerting is dashboard-only; incentive points are not implemented.
 
 ---
 
 ## 9. Where to Go Next
 
-- **Run and test it:** `TESTING_GUIDE.md` (scenarios, failure drills, demo-day checklist)
-- **Simulate a full parking lot with one set of hardware:** `Backend/simulate_spots.py` (see TESTING_GUIDE §"Multi-spot simulation")
+- **Simulate a full parking lot with one set of hardware:** `Backend/simulate_spots.py`
 - **Every endpoint, schema, and timing:** `PROJECT_OVERVIEW.md`
-- **Deploy/operate the cloud:** `step_by_step_deployment.md`, `CLOUD_DEPLOYMENT_GUIDE.md`, `cloud_setup_complete_guide.md`
-- **Requirements & audit:** `USER_STORIES.md`, `USER_STORY_IMPLEMENTATION_AUDIT.md`

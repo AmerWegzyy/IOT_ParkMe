@@ -57,7 +57,7 @@ SEEDED_SPOTS = {
 }
 DEFAULT_SPOTS = ["A1", "A2", "B1", "B2", "C2"]
 
-TEST_PICS_DIR = Path(__file__).resolve().parent.parent / "tests" / "test_pics"
+TEST_PICS_DIR = Path(__file__).resolve().parent.parent / "Unit Tests" / "vision_api_tests" / "test_pics"
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
 

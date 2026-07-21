@@ -41,16 +41,16 @@ HOW SIMULTANEITY IS ACHIEVED:
 
 USAGE:
     # against the live cloud backend (default)
-    python tests/test_parallel_spots.py
+    python test_parallel_spots.py
 
     # against a local backend
-    python tests/test_parallel_spots.py --local
+    python test_parallel_spots.py --local
 
     # more rounds (images rotate between spots each round), custom spots
-    python tests/test_parallel_spots.py --rounds 3 --spots A1,A2,B2
+    python test_parallel_spots.py --rounds 3 --spots A1,A2,B2
 
     # also measure a sequential baseline for a wall-clock comparison
-    python tests/test_parallel_spots.py --baseline
+    python test_parallel_spots.py --baseline
 
 SAFETY:
     Uses only the seeded FAKE spots (A1, A2, B1, B2, C2) — never C1, the real
@@ -99,7 +99,7 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
 # Images the LPR suite has flagged as unreliable on record (misreads / manual
 # review). Kept out of the assignment pool so OCR noise doesn't cloud the
-# parallelism verdict; everything else in tests/test_pics/ is fair game.
+# parallelism verdict; everything else in test_pics/ is fair game.
 KNOWN_TRICKY_IMAGES = {"9656026.jpg", "4528139.jpg"}
 
 
@@ -391,8 +391,8 @@ def main() -> None:
                         help="Number of simultaneous-burst rounds; images rotate each round (default: 2)")
     parser.add_argument("--baseline", action="store_true",
                         help="Also run one sequential round for a wall-clock comparison")
-    parser.add_argument("--log-file", default="tests/parallel_test_results.log",
-                        help="Where to write the report (default: tests/parallel_test_results.log)")
+    parser.add_argument("--log-file", default=str(Path(__file__).resolve().parent / "parallel_test_results.log"),
+                        help="Where to write the report (default: Unit Tests/vision_api_tests/parallel_test_results.log)")
     args = parser.parse_args()
 
     server = (LOCAL_URL if args.local else args.server_url).rstrip("/")
