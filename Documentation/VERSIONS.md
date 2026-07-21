@@ -29,26 +29,29 @@ drivers — this is also why no Adafruit libraries are needed).
 
 ## Backend (deployed on Google Cloud Run, region `me-west1`)
 
+Exact versions from the container image built and deployed on 2026-07-20
+(Cloud Build log, revision `parkme-backend-00004-cmz`).
+
 | Item | Version |
 |---|---|
-| Python | **3.10.11** |
-| fastapi | 0.137.2 |
+| Python | **3.11** (base image `python:3.11-slim`) |
+| fastapi | 0.139.2 |
 | starlette | 1.3.1 |
-| uvicorn | 0.49.0 |
+| uvicorn | 0.51.0 |
 | pydantic | 2.13.4 (core 2.46.4) |
-| firebase-admin | 7.4.0 |
-| google-cloud-firestore | 2.27.0 |
-| google-cloud-vision | 3.14.0 |
-| google-cloud-storage | 3.12.0 |
+| firebase-admin | 7.5.0 |
+| google-cloud-firestore | 2.28.0 |
+| google-cloud-vision | 3.15.0 |
+| google-cloud-storage | 3.13.0 |
 | google-cloud-core | 2.6.0 |
 | python-dotenv | 1.2.2 |
 | python-multipart | 0.0.32 |
 | cachetools | 7.1.4 |
-| tzdata | 2026.2 |
+| tzdata | 2026.3 |
 
-`Backend/requirements.txt` intentionally uses minimum-version ranges for
+`Backend/requirements.txt` intentionally uses minimum-version ranges (`>=`) for
 installation flexibility; the table above records the exact versions actually
-installed and tested (from `pip freeze` in the project environment).
+built into the deployed container (from the Cloud Build install log).
 
 ## Frontend (Firebase Hosting)
 
